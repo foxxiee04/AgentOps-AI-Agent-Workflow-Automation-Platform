@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentOps Frontend"
+  short_description: "Next.js dashboard and builder guide"
+  default_prompt: "Use $agentops-frontend to build AgentOps web UI and workflow builder features."

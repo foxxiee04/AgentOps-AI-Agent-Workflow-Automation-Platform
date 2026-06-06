@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentOps Review"
+  short_description: "Quality security and test review"
+  default_prompt: "Use $agentops-review to review AgentOps changes for risks, tests, and consistency."

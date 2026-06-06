@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentOps Backend"
+  short_description: "NestJS modular monolith guide"
+  default_prompt: "Use $agentops-backend to implement AgentOps API modules and data flows."

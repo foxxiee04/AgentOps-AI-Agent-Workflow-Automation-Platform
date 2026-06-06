@@ -1,0 +1,26 @@
+import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
+import { AiService } from "./ai.service";
+import { TestAgentDto } from "./dto";
+
+@ApiTags("ai")
+@Controller("ai")
+export class AiController {
+  constructor(private readonly aiService: AiService) {}
+
+  @Post("test-agent")
+  testAgent(@Body() dto: TestAgentDto) {
+    return this.aiService.testAgent(dto);
+  }
+
+  @Get("tasks/:id")
+  task(@Param("id") id: string) {
+    return { id, status: "mock_completed" };
+  }
+
+  @Get("usage")
+  usage() {
+    return this.aiService.usage();
+  }
+}
+

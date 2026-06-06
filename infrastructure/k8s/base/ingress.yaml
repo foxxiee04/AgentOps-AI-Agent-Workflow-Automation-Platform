@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentops-ingress
+  namespace: agentops
+spec:
+  rules:
+    - host: agentops.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-web
+                port:
+                  number: 3000
+    - host: api.agentops.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000

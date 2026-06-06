@@ -1,0 +1,32 @@
+{
+  "name": "agentops-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Agent workflow automation platform scaffold.",
+  "packageManager": "pnpm@11.5.2",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "db:generate": "pnpm --filter @agentops/database db:generate",
+    "db:studio": "pnpm --filter @agentops/database db:studio",
+    "compose:up": "docker compose up -d",
+    "compose:down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "eslint": "^10.4.1",
+    "prettier": "^3.8.3",
+    "tsx": "^4.22.4",
+    "turbo": "^2.5.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

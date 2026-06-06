@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentOps Context"
+  short_description: "Project context and repo rules"
+  default_prompt: "Use $agentops-context to inspect AgentOps context before changing the repo."

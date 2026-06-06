@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentOps Workflow Engine"
+  short_description: "Kafka workflow execution guide"
+  default_prompt: "Use $agentops-workflow-engine to design workflow execution, retries, and events."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentOps DevOps"
+  short_description: "Docker Kubernetes Terraform guide"
+  default_prompt: "Use $agentops-devops to prepare AgentOps infrastructure, CI/CD, and deployment."

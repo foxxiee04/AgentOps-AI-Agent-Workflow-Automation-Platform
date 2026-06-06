@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum WorkflowRunStatus {
+  PENDING
+  RUNNING
+  WAITING_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowStepStatus {
+  PENDING
+  RUNNING
+  WAITING_APPROVAL
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum WorkflowNodeType {
+  TRIGGER
+  AI_AGENT
+  CONDITION
+  WEBHOOK
+  HTTP_REQUEST
+  EMAIL_MOCK
+  DELAY
+  HUMAN_APPROVAL
+  NOTIFICATION
+  END
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  passwordHash     String
+  name             String
+  avatarUrl        String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+  memberships      WorkspaceMember[]
+  workflowsCreated Workflow[]        @relation("WorkflowCreatedBy")
+  versionsCreated  WorkflowVersion[] @relation("WorkflowVersionCreatedBy")
+  auditLogs         AuditLog[]
+}
+
+model Workspace {
+  id              String            @id @default(cuid())
+  name            String
+  slug            String            @unique
+  ownerId         String
+  plan            String            @default("FREE")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members         WorkspaceMember[]
+  workflows       Workflow[]
+  workflowRuns    WorkflowRun[]
+  webhookEndpoints WebhookEndpoint[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  usageRecords    UsageRecord[]
+  apiKeys         ApiKey[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model Workflow {
+  id               String             @id @default(cuid())
+  workspaceId      String
+  name             String
+  description      String?
+  status           WorkflowStatus     @default(DRAFT)
+  currentVersionId String?
+  createdById      String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy        User               @relation("WorkflowCreatedBy", fields: [createdById], references: [id])
+  currentVersion   WorkflowVersion?   @relation("CurrentWorkflowVersion", fields: [currentVersionId], references: [id])
+  versions         WorkflowVersion[]   @relation("WorkflowVersions")
+  runs             WorkflowRun[]
+  webhookEndpoints WebhookEndpoint[]
+}
+
+model WorkflowVersion {
+  id            String        @id @default(cuid())
+  workflowId    String
+  versionNumber Int
+  definitionJson Json
+  createdById   String
+  createdAt     DateTime      @default(now())
+  workflow      Workflow      @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
+  currentFor    Workflow[]    @relation("CurrentWorkflowVersion")
+  createdBy     User          @relation("WorkflowVersionCreatedBy", fields: [createdById], references: [id])
+  runs          WorkflowRun[]
+
+  @@unique([workflowId, versionNumber])
+}
+
+model WorkflowRun {
+  id                String            @id @default(cuid())
+  workflowId        String
+  workflowVersionId String
+  workspaceId       String
+  status            WorkflowRunStatus @default(PENDING)
+  triggerType       String
+  inputJson         Json
+  outputJson        Json?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  errorMessage      String?
+  createdAt         DateTime          @default(now())
+  workflow          Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowVersion   WorkflowVersion   @relation(fields: [workflowVersionId], references: [id])
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  steps             WorkflowStepRun[]
+  aiTaskResults     AiTaskResult[]
+  toolCallResults   ToolCallResult[]
+  usageRecords      UsageRecord[]
+}
+
+model WorkflowStepRun {
+  id            String             @id @default(cuid())
+  workflowRunId String
+  nodeId        String
+  nodeType      WorkflowNodeType
+  status        WorkflowStepStatus @default(PENDING)
+  inputJson     Json?
+  outputJson    Json?
+  errorMessage  String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  retryCount    Int                @default(0)
+  workflowRun   WorkflowRun        @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, nodeId])
+}
+
+model AiAgentConfig {
+  id          String   @id @default(cuid())
+  workflowId  String
+  nodeId      String
+  configJson  Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AiTaskResult {
+  id             String      @id @default(cuid())
+  workspaceId    String
+  workflowRunId  String
+  nodeId         String
+  provider       String
+  modelName      String
+  promptJson     Json?
+  outputJson     Json?
+  inputTokens    Int         @default(0)
+  outputTokens   Int         @default(0)
+  errorMessage   String?
+  createdAt      DateTime    @default(now())
+  workflowRun    WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+}
+
+model ToolConfig {
+  id         String   @id @default(cuid())
+  workflowId String
+  nodeId     String
+  toolType   String
+  configJson Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ToolCallResult {
+  id            String      @id @default(cuid())
+  workspaceId   String
+  workflowRunId String
+  nodeId        String
+  toolType      String
+  status        String
+  inputJson     Json?
+  outputJson    Json?
+  errorMessage  String?
+  createdAt     DateTime    @default(now())
+  workflowRun   WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+}
+
+model WebhookEndpoint {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workflowId  String
+  secretHash  String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String?
+  type        String
+  title       String
+  body        String
+  status      String    @default("UNREAD")
+  metadataJson Json?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  workspaceId String
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  metadataJson Json?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor       User?     @relation(fields: [actorUserId], references: [id])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  keyHash     String
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model UsageRecord {
+  id                    String       @id @default(cuid())
+  workspaceId           String
+  workflowRunId         String?
+  aiTokensUsed          Int          @default(0)
+  workflowStepsExecuted Int          @default(0)
+  createdAt             DateTime     @default(now())
+  workspace             Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflowRun           WorkflowRun? @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
+}
+
+model BillingPlanMock {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  monthlyRunLimit Int
+  dailyAiCallLimit Int
+  createdAt       DateTime @default(now())
+}

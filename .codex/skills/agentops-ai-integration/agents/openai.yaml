@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentOps AI Integration"
+  short_description: "Structured AI agent node guide"
+  default_prompt: "Use $agentops-ai-integration to implement AI nodes with structured outputs."

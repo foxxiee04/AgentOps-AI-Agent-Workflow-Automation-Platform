@@ -1,0 +1,36 @@
+{
+  "name": "@agentops/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "pnpm --filter './packages/*' build && next dev --port 3000",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "start": "next start --port 3000",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@agentops/shared": "workspace:*",
+    "@agentops/ui": "workspace:*",
+    "@tanstack/react-query": "^5.101.0",
+    "@xyflow/react": "^12.11.0",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.40.0",
+    "lucide-react": "^1.17.0",
+    "next": "^16.2.7",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-hook-form": "^7.77.0",
+    "tailwindcss": "^4.3.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
