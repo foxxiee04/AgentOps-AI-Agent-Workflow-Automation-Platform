@@ -42,7 +42,11 @@ POST /auth/login
 POST /auth/refresh
 POST /auth/logout
 GET  /auth/me
+GET  /auth/google
+GET  /auth/google/callback
 ```
+
+`GET /auth/google` starts the Google OAuth 2.0 server flow and redirects to Google. Configure `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` before using it locally or in deployment.
 
 ## Workspaces
 
@@ -70,6 +74,8 @@ GET    /workflows/:id/runs
 GET    /workflow-runs/:id
 GET    /workflow-runs/:id/steps
 ```
+
+`GET /workflow-runs/:id/steps` returns a step timeline generated from the immutable workflow version definition attached to the run.
 
 ## AI
 
@@ -99,6 +105,22 @@ GET /dashboard/usage
 GET /dashboard/errors
 GET /dashboard/recent-activity
 ```
+
+## Frontend Integration
+
+`apps/web/src/lib/api.ts` is the web API boundary. Current pages use:
+
+- `/dashboard`: dashboard overview, workflow runs, readiness, AI providers, recent activity.
+- `/login` and `/register`: password auth through `/auth/login` and `/auth/register`.
+- `/auth/callback`: stores OAuth callback session fragments from social login.
+- `/workflows`: workflow list, publish action, run action.
+- `/workflows/:id/builder`: workflow detail for React Flow nodes and edges.
+- `/runs`: workflow run history from `/dashboard/workflow-runs`.
+- `/runs/:id`: workflow run metadata and step timeline from `/workflow-runs/:id` and `/workflow-runs/:id/steps`.
+- `/agents`: AI providers, usage, and test-agent endpoint.
+- `/settings`: readiness status and runtime boundary summary.
+
+Server pages call the API with `safeApiGet`, which returns fallback data when the API is offline so builds and demos remain usable.
 
 ## Response Rules
 

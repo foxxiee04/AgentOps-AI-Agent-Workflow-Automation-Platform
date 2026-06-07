@@ -60,6 +60,19 @@ Do not create a worker for every module. Add a worker only when the work is slow
 - `apps/tool-worker`: webhook/http/email mock execution.
 - `apps/notification-worker`: in-app notifications and mock delivery.
 
+## Frontend Contract
+
+`apps/web` is implemented as a separate Next.js deployable app. It uses `apps/web/DESIGN.md` for UI direction, keeps Vietnamese and English copy in `apps/web/src/lib/i18n.ts`, and reads backend data through `apps/web/src/lib/api.ts`.
+
+Current live integrations:
+
+- dashboard overview, runs, health, AI providers, and recent events.
+- workflow list, publish action, run action, and builder graph definition.
+- AI provider usage and test-agent execution.
+- settings readiness summary.
+
+Fallback data is allowed only to keep builds and demos resilient when the API is not running; real workflows should use the NestJS API.
+
 ## API Boundary Components
 
 The API boundary currently includes:

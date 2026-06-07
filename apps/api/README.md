@@ -57,3 +57,15 @@ src/
 - Publish Kafka events only after durable database state is created.
 - Use explicit DTO/schema validation.
 - Keep business rules in services/domain helpers, not controllers.
+
+## Frontend Consumers
+
+`apps/web` currently consumes these API surfaces:
+
+- auth login/register/me plus Google OAuth start/callback.
+- dashboard overview, workflow runs, usage, errors, and recent activity.
+- workflow list/detail, publish, run, and run step timeline.
+- health readiness for settings and dashboard dependency status.
+- AI provider status, AI usage, and test-agent execution.
+
+Keep `apps/web/src/lib/api.ts`, Postman, and `docs/api.md` synchronized when these response shapes change.

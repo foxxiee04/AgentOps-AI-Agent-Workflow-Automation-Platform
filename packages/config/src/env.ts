@@ -10,6 +10,9 @@ export const appEnvSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(8).default("replace-me-refresh"),
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   WEB_APP_URL: z.string().url().default("http://localhost:3000"),
   API_URL: z.string().url().default("http://localhost:4000")
 });

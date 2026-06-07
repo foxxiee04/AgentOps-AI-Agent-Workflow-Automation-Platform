@@ -4,18 +4,18 @@ import type { ReactNode } from "react";
 export type StatusBadgeTone = "neutral" | "success" | "warning" | "danger" | "info";
 
 const toneClass: Record<StatusBadgeTone, string> = {
-  neutral: "bg-slate-100 text-slate-700 ring-slate-200",
-  success: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  warning: "bg-amber-50 text-amber-800 ring-amber-200",
-  danger: "bg-rose-50 text-rose-700 ring-rose-200",
-  info: "bg-sky-50 text-sky-700 ring-sky-200"
+  neutral: "bg-[#fdfcfc] text-[#201d1d] ring-[#646262]",
+  success: "bg-[#f8f7f7] text-[#201d1d] ring-[#30d158]",
+  warning: "bg-[#f8f7f7] text-[#201d1d] ring-[#ff9f0a]",
+  danger: "bg-[#f8f7f7] text-[#201d1d] ring-[#ff3b30]",
+  info: "bg-[#f8f7f7] text-[#201d1d] ring-[#007aff]"
 };
 
 export function StatusBadge({ children, tone = "neutral" }: { children: ReactNode; tone?: StatusBadgeTone }) {
   return (
     <span
       className={clsx(
-        "inline-flex min-h-6 items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "inline-flex min-h-6 items-center rounded-[4px] px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
         toneClass[tone]
       )}
     >
@@ -23,4 +23,3 @@ export function StatusBadge({ children, tone = "neutral" }: { children: ReactNod
     </span>
   );
 }
-

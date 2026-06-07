@@ -35,7 +35,7 @@ The architecture is intentionally **Modular Monolith + Kafka Workers**, not full
 
 | Area | Stack |
 | --- | --- |
-| Frontend | Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, React Flow, TanStack Query, Zustand, React Hook Form, Zod |
+| Frontend | Next.js, React, TypeScript, Tailwind CSS, `apps/web/DESIGN.md` terminal-native UI rules, React Flow, Zustand, React Hook Form, Zod |
 | Backend | NestJS, TypeScript, Prisma, PostgreSQL, Redis, Kafka, JWT, Swagger/OpenAPI, Vitest |
 | AI | OpenAI Responses API path, mock provider, structured JSON output, prompt templates, JSON Schema validation, optional pgvector |
 | Infrastructure | Docker, Kubernetes, Terraform, AWS ECR, Nginx Ingress, GitHub Actions |
@@ -104,6 +104,14 @@ Add more workers only when a new domain needs different scaling, retries, securi
 ## Codex Usage
 
 Before asking Codex or another AI agent to implement features in this repo, start from [.codex/CODEX.md](.codex/CODEX.md). Root [CODEX.md](CODEX.md) is only a pointer.
+
+For UI work, also read [apps/web/DESIGN.md](apps/web/DESIGN.md). It was installed with:
+
+```bash
+npx getdesign@latest add opencode.ai
+```
+
+The current web app follows that design direction: mono typography, warm cream canvas, hairline borders, 4px-radius controls, ASCII markers, no gradients, and no card shadows. Server pages read live data from the NestJS API through `apps/web/src/lib/api.ts` and fall back to stable demo data only when the API is offline.
 
 ## API Smoke Tests
 

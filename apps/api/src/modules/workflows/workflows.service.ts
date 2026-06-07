@@ -44,6 +44,16 @@ type WorkflowRunRecord = {
   eventId?: string;
 };
 
+type WorkflowRunStepRecord = {
+  id: string;
+  workflowRunId: string;
+  nodeId: string;
+  nodeName: string;
+  nodeType: string;
+  status: "PENDING" | "RUNNING" | "WAITING_APPROVAL" | "COMPLETED" | "FAILED" | "SKIPPED";
+  message: string;
+};
+
 @Injectable()
 export class WorkflowsService {
   private readonly workflows: WorkflowRecord[] = [
@@ -192,9 +202,30 @@ export class WorkflowsService {
     return this.runs;
   }
 
+  stepsForRun(id: string): { workflowRunId: string; steps: WorkflowRunStepRecord[] } {
+    const run = this.findRun(id);
+    const version = this.versions.find((candidate) => candidate.id === run.workflowVersionId);
+    const definition = version?.definition ?? this.findOne(run.workflowId).definition;
+
+    return {
+      workflowRunId: run.id,
+      steps: definition.nodes.map((node, index) => ({
+        id: `${run.id}_${node.id}`,
+        workflowRunId: run.id,
+        nodeId: node.id,
+        nodeName: node.name,
+        nodeType: node.type,
+        status: index === 0 ? "COMPLETED" : "PENDING",
+        message:
+          index === 0
+            ? "Trigger accepted by API and workflow event published."
+            : "Waiting for workflow-worker execution in the async pipeline."
+      }))
+    };
+  }
+
   private parseDefinition(input: unknown): WorkflowDefinition {
     const definition = workflowDefinitionSchema.parse(input);
     return definition;
   }
 }
-

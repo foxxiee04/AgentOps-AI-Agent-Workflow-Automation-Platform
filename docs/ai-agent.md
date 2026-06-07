@@ -68,6 +68,8 @@ GET  /ai/usage
 
 `/ai/test-agent` previews the rendered prompt, safe input, JSON Schema validation result, and token estimate. `/ai/evaluate-agent` runs multiple deterministic test cases and returns pass rate plus mismatches.
 
+The `/agents` frontend page reads `/ai/providers` and `/ai/usage`, then posts to `/ai/test-agent` through a small browser console. Keep this UI as a testing surface for prompt/config experiments until persisted agent configuration screens are implemented.
+
 ## Safety Rules
 
 - Validate AI output against the configured schema.

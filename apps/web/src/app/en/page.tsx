@@ -1,0 +1,6 @@
+import { LandingPage } from "../../components/landing-page";
+
+export default function EnglishLandingPage() {
+  return <LandingPage locale="en" />;
+}
+

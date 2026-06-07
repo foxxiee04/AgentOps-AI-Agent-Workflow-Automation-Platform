@@ -1,59 +1,93 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Activity, Bot, GitBranch, LayoutDashboard, Settings, Workflow } from "lucide-react";
 import { clsx } from "clsx";
+import { AuthGate } from "../features/auth/auth-gate";
+import { AuthStatus } from "../features/auth/auth-status";
+import { apiUrl } from "../lib/api";
+import { appCopy, type Locale } from "../lib/i18n";
+import { LanguageSwitcher } from "./language-switcher";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/workflows", label: "Workflows", icon: Workflow },
-  { href: "/workflows/wf_lead_qualification/builder", label: "Builder", icon: GitBranch },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/settings", label: "Settings", icon: Settings }
+export type AppSection = "dashboard" | "workflows" | "runs" | "builder" | "agents" | "settings";
+
+const navItems: Array<{ href: string; key: AppSection; marker: string }> = [
+  { href: "/dashboard", key: "dashboard", marker: "[0]" },
+  { href: "/workflows", key: "workflows", marker: "[1]" },
+  { href: "/runs", key: "runs", marker: "[2]" },
+  { href: "/workflows/wf_lead_qualification/builder", key: "builder", marker: "[3]" },
+  { href: "/agents", key: "agents", marker: "[4]" },
+  { href: "/settings", key: "settings", marker: "[5]" }
 ];
 
-export function AppShell({ children, active }: { children: ReactNode; active?: string }) {
+function withLocale(href: string, locale: Locale) {
+  return `${href}?lang=${locale}`;
+}
+
+export function AppShell({ children, active, locale }: { children: ReactNode; active?: AppSection; locale: Locale }) {
+  const t = appCopy[locale];
+
   return (
-    <div className="min-h-screen bg-[#f7faf7] text-[#18201f]">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-[#dbe5df] bg-white/88 px-4 py-5 backdrop-blur lg:block">
-        <Link href="/" className="flex items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#0f9f75] text-sm font-black text-white">AO</span>
+    <div className="min-h-screen bg-[#f7f4ef] text-[#1c1917]">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-[#d8d0c7] bg-white px-4 py-5 lg:block">
+        <Link href={locale === "vi" ? "/vi" : "/en"} className="flex items-center gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-[4px] bg-[#1d1a18] text-sm font-bold text-[#ffffff]">AO</span>
           <span>
-            <span className="block text-sm font-black">AgentOps</span>
-            <span className="block text-xs text-[#64706d]">AI workflow control</span>
+            <span className="block text-sm font-bold text-[#171412]">AgentOps</span>
+            <span className="block text-xs text-[#5f5750]">AI workflow control</span>
           </span>
         </Link>
-        <nav className="mt-8 space-y-1">
+        <nav className="mt-8 space-y-1 border-t border-[#e5ded6] pt-3">
           {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = active === item.label;
+            const isActive = active === item.key;
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={withLocale(item.href, locale)}
                 className={clsx(
-                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-semibold transition",
-                  isActive ? "bg-[#e5f6ef] text-[#08785a]" : "text-[#4d5a57] hover:bg-[#eef3ef]"
+                  "flex min-h-10 items-center gap-3 rounded-[4px] px-3 text-sm font-semibold",
+                  isActive ? "bg-[#1d1a18] text-[#ffffff]" : "text-[#403a35] hover:bg-[#f2eee9]"
                 )}
               >
-                <Icon className="h-4 w-4" />
-                {item.label}
+                <span className={clsx("font-mono text-xs", isActive ? "text-[#ffffff]" : "text-[#6b625a]")}>{item.marker}</span>
+                {t.shell.nav[item.key]}
               </Link>
             );
           })}
         </nav>
       </aside>
       <main className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[#dbe5df] bg-white/86 px-5 backdrop-blur">
-          <div>
-            <p className="text-xs font-bold uppercase text-[#64706d]">Workspace</p>
-            <p className="text-sm font-black">AgentOps Demo</p>
+        <header className="sticky top-0 z-20 border-b border-[#d8d0c7] bg-white/95 backdrop-blur">
+          <div className="flex min-h-16 items-center justify-between gap-3 px-5">
+            <div>
+              <p className="text-xs font-semibold uppercase text-[#6b625a]">{t.shell.workspace}</p>
+              <p className="text-sm font-bold text-[#171412]">{t.shell.demoWorkspace}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <AuthStatus locale={locale} labels={t.shell} />
+              <div className="hidden rounded-[4px] border border-[#d5cec5] bg-white px-3 py-2 text-xs font-semibold text-[#4e4742] sm:block">
+                {t.shell.api} {apiUrl}
+              </div>
+              <LanguageSwitcher locale={locale} />
+            </div>
           </div>
-          <div className="flex items-center gap-2 rounded-md border border-[#dbe5df] bg-white px-3 py-2 text-sm font-semibold">
-            <Activity className="h-4 w-4 text-[#0f9f75]" />
-            Local MVP
-          </div>
+          <nav className="flex gap-1 overflow-x-auto border-t border-[#e5ded6] px-2 py-2 lg:hidden">
+            {navItems.map((item) => {
+              const isActive = active === item.key;
+              return (
+                <Link
+                  key={item.href}
+                  href={withLocale(item.href, locale)}
+                  className={clsx(
+                    "min-h-9 shrink-0 rounded-[4px] px-3 py-1.5 text-sm font-semibold",
+                    isActive ? "bg-[#1d1a18] text-[#ffffff]" : "text-[#403a35]"
+                  )}
+                >
+                  <span className="font-mono">{item.marker}</span> {t.shell.nav[item.key]}
+                </Link>
+              );
+            })}
+          </nav>
         </header>
-        {children}
+        <AuthGate locale={locale}>{children}</AuthGate>
       </main>
     </div>
   );

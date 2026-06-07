@@ -14,17 +14,6 @@ export class WorkflowRunsController {
 
   @Get(":id/steps")
   steps(@Param("id") id: string) {
-    const run = this.workflowsService.findRun(id);
-    return {
-      workflowRunId: run.id,
-      steps: [
-        {
-          nodeId: "trigger-1",
-          status: "PENDING",
-          message: "Step logs will be persisted by the workflow worker."
-        }
-      ]
-    };
+    return this.workflowsService.stepsForRun(id);
   }
 }
-

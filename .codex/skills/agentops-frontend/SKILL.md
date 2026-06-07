@@ -9,9 +9,10 @@ description: Guide AgentOps frontend work. Use when building or reviewing Next.j
 
 1. Read `CODEX.md`.
 2. Read `apps/web/README.md`.
-3. Read `docs/api.md` and `docs/workflow-engine.md` for product behavior.
-4. Inspect existing UI patterns before adding components.
-5. Keep feature-specific code in `apps/web/src/features` until reuse is real.
+3. Read `apps/web/DESIGN.md` before writing UI.
+4. Read `docs/api.md` and `docs/workflow-engine.md` for product behavior.
+5. Inspect existing UI patterns before adding components.
+6. Keep feature-specific code in `apps/web/src/features` until reuse is real.
 
 ## Product Screens
 
@@ -36,7 +37,7 @@ Prioritize real product surfaces:
 ## UI Rules
 
 - Keep dashboard screens dense, scannable, and operational.
+- Use `apps/web/DESIGN.md` as the visual reference, but keep readability first: sans-serif body text, mono for code/terminal/JSON, high-contrast text, cream canvas, hairline borders, ASCII markers, 4px controls, no gradients or shadows.
 - Use loading, empty, error, and disabled states.
 - Avoid marketing-only pages when the request asks for an app/tool experience.
 - Keep text responsive and avoid layout overlap on mobile and desktop.
-

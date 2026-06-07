@@ -6,9 +6,10 @@ Read this file before any coding, review, architecture, documentation, debugging
 
 1. Read `.codex/CODEX.md`.
 2. Read `README.md`.
-3. Read the relevant doc in `docs/`.
-4. Read the matching local skill in `.codex/skills/`.
-5. Inspect existing files before editing.
+3. For UI work, read `apps/web/DESIGN.md`.
+4. Read the relevant doc in `docs/`.
+5. Read the matching local skill in `.codex/skills/`.
+6. Inspect existing files before editing.
 
 ## System Shape
 
@@ -94,6 +95,8 @@ AWS:
 - Use TypeScript across apps/packages.
 - Keep shared contracts in `packages/shared` and `packages/events`.
 - Keep Prisma/database assets in `packages/database`.
+- For frontend UI, use `apps/web/DESIGN.md` as the reference. The implemented app is terminal-inspired but optimized for readability: sans-serif body text, mono for code/terminal/JSON, warm cream canvas, high-contrast text, hairline borders, 4px interactive radius, ASCII markers, no gradients or shadows.
+- Frontend pages should call the NestJS API through `apps/web/src/lib/api.ts` and use explicit fallback data only to keep builds and demos resilient when the API is offline.
 - Validate all user input and all AI output.
 - Treat workflow versions as immutable once published.
 - Treat Kafka handlers as at-least-once processors and make them idempotent.

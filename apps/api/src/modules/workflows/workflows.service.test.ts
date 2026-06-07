@@ -15,5 +15,19 @@ describe("WorkflowsService", () => {
     expect(result.event.type).toBe("workflow-triggered");
     expect(result.run.workflowVersionId).toMatch(/^wfv_/);
   });
-});
 
+  it("builds a run step timeline from the published workflow definition", () => {
+    const events = new DomainEventsService();
+    const service = new WorkflowsService(events);
+
+    const result = service.run("wf_lead_qualification", {
+      input: { leadName: "Anna" },
+      triggerType: "manual"
+    });
+    const timeline = service.stepsForRun(result.run.id);
+
+    expect(timeline.workflowRunId).toBe(result.run.id);
+    expect(timeline.steps.map((step) => step.nodeId)).toEqual(["trigger-1", "ai-1", "condition-1", "webhook-1", "end-1"]);
+    expect(timeline.steps[0]?.status).toBe("COMPLETED");
+  });
+});
