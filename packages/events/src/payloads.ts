@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { workflowDefinitionSchema } from "@agentops/shared";
+import { aiProviderSchema, workflowDefinitionSchema } from "@agentops/shared";
 
 export const workflowTriggeredPayloadSchema = z.object({
   input: z.record(z.string(), z.unknown()).default({}),
@@ -24,7 +24,16 @@ export const agentTaskCompletedPayloadSchema = z.object({
       inputTokens: z.number().int().nonnegative().default(0),
       outputTokens: z.number().int().nonnegative().default(0)
     })
-    .default({ inputTokens: 0, outputTokens: 0 })
+    .default({ inputTokens: 0, outputTokens: 0 }),
+  provider: aiProviderSchema.default("mock"),
+  modelName: z.string().min(1).default("mock-lead-scorer"),
+  latencyMs: z.number().int().nonnegative().default(0),
+  validation: z
+    .object({
+      schemaValid: z.boolean(),
+      errors: z.array(z.string()).default([])
+    })
+    .default({ schemaValid: true, errors: [] })
 });
 export type AgentTaskCompletedPayload = z.infer<typeof agentTaskCompletedPayloadSchema>;
 
@@ -42,4 +51,3 @@ export const workflowDefinitionPayloadSchema = z.object({
   definition: workflowDefinitionSchema
 });
 export type WorkflowDefinitionPayload = z.infer<typeof workflowDefinitionPayloadSchema>;
-

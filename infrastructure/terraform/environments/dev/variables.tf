@@ -31,3 +31,15 @@ variable "ssh_cidr" {
   type        = string
 }
 
+variable "repository_names" {
+  description = "ECR repositories to create for AgentOps images."
+  type        = list(string)
+  default = [
+    "api",
+    "web",
+    "workflow-worker",
+    "ai-worker",
+    "tool-worker",
+    "notification-worker"
+  ]
+}

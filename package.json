@@ -12,9 +12,18 @@
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
     "db:generate": "pnpm --filter @agentops/database db:generate",
+    "db:push": "pnpm --filter @agentops/database db:push",
     "db:studio": "pnpm --filter @agentops/database db:studio",
+    "kafka:bootstrap": "pnpm --filter @agentops/events kafka:bootstrap",
     "compose:up": "docker compose up -d",
-    "compose:down": "docker compose down"
+    "compose:down": "docker compose down",
+    "docker:build:api": "docker build -f infrastructure/docker/api.Dockerfile -t agentops/api:local .",
+    "docker:build:web": "docker build -f infrastructure/docker/web.Dockerfile -t agentops/web:local .",
+    "docker:build:workflow-worker": "docker build -f infrastructure/docker/worker.Dockerfile --build-arg WORKER_PACKAGE=@agentops/workflow-worker --build-arg WORKER_MAIN=apps/workflow-worker/dist/main.js -t agentops/workflow-worker:local .",
+    "docker:build:ai-worker": "docker build -f infrastructure/docker/worker.Dockerfile --build-arg WORKER_PACKAGE=@agentops/ai-worker --build-arg WORKER_MAIN=apps/ai-worker/dist/main.js -t agentops/ai-worker:local .",
+    "docker:build:tool-worker": "docker build -f infrastructure/docker/worker.Dockerfile --build-arg WORKER_PACKAGE=@agentops/tool-worker --build-arg WORKER_MAIN=apps/tool-worker/dist/main.js -t agentops/tool-worker:local .",
+    "docker:build:notification-worker": "docker build -f infrastructure/docker/worker.Dockerfile --build-arg WORKER_PACKAGE=@agentops/notification-worker --build-arg WORKER_MAIN=apps/notification-worker/dist/main.js -t agentops/notification-worker:local .",
+    "docker:build:apps": "pnpm docker:build:api && pnpm docker:build:web && pnpm docker:build:workflow-worker && pnpm docker:build:ai-worker && pnpm docker:build:tool-worker && pnpm docker:build:notification-worker"
   },
   "engines": {
     "node": ">=22.0.0",

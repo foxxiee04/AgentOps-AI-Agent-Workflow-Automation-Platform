@@ -7,6 +7,7 @@ terraform/
   modules/
     network/
     compute/
+    ecr/
     security/
     storage/
   environments/
@@ -24,3 +25,4 @@ AWS EC2 + k3s + Security Group + optional Elastic IP + optional S3 state bucket
 
 Keep EKS/RDS/ElastiCache as an advanced option if budget allows.
 
+The dev environment also creates ECR repositories for application and worker images, so the same image registry can be used by EC2+k3s or EKS.

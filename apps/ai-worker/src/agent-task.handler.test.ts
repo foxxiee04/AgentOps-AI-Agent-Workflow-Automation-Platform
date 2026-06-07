@@ -3,7 +3,7 @@ import { createEvent, kafkaTopics } from "@agentops/events";
 import { handleAgentTaskRequested } from "./agent-task.handler";
 
 describe("handleAgentTaskRequested", () => {
-  it("returns a structured AI completion event", () => {
+  it("returns a structured AI completion event", async () => {
     const event = createEvent({
       type: kafkaTopics.agentTaskRequested,
       workspaceId: "ws_demo",
@@ -17,9 +17,9 @@ describe("handleAgentTaskRequested", () => {
       }
     });
 
-    const completed = handleAgentTaskRequested(event);
+    const completed = await handleAgentTaskRequested(event);
     expect(completed.type).toBe(kafkaTopics.agentTaskCompleted);
     expect(completed.payload.output).toMatchObject({ leadScore: 87 });
+    expect(completed.payload.validation).toMatchObject({ schemaValid: true });
   });
 });
-

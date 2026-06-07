@@ -20,6 +20,22 @@ Kafka is used for asynchronous workflow execution. Consumers must assume at-leas
 | `workflow-failed` | Workflow Worker | API/dashboard listeners |
 | `dead-letter-events` | Any worker | Ops/debug tooling |
 
+## Local Bootstrap
+
+With Docker Compose running, create missing local topics with:
+
+```bash
+pnpm kafka:bootstrap
+```
+
+Defaults:
+
+- Broker: `localhost:9094`
+- Partitions: `3`
+- Replication factor: `1`
+
+Override with `KAFKA_BROKERS`, `KAFKA_TOPIC_PARTITIONS`, or `KAFKA_TOPIC_REPLICATION_FACTOR`.
+
 ## Event Envelope
 
 ```json
@@ -41,4 +57,3 @@ Kafka is used for asynchronous workflow execution. Consumers must assume at-leas
 - Retry failed handling up to 3 times before publishing to `dead-letter-events`.
 - Commit consumer offsets only after durable state is written.
 - Store enough event/run context to debug execution without leaking secrets.
-

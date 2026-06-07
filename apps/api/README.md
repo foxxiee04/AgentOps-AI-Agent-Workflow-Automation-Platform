@@ -12,6 +12,7 @@
 - AI task test endpoints and usage reporting.
 - Audit logs and notifications.
 - Kafka event publishing.
+- Liveness/readiness checks for API, PostgreSQL, Redis, and Kafka.
 
 ## Planned Stack
 
@@ -20,9 +21,10 @@
 - PostgreSQL
 - Redis
 - Kafka client
+- NestJS Terminus
 - JWT auth
 - Swagger/OpenAPI
-- Jest
+- Vitest
 
 ## Suggested Module Layout
 
@@ -38,7 +40,10 @@ src/
     dashboard/
     notifications/
     audit/
+    health/
   common/
+    infrastructure/
+    http/
     guards/
     decorators/
     filters/
@@ -52,4 +57,3 @@ src/
 - Publish Kafka events only after durable database state is created.
 - Use explicit DTO/schema validation.
 - Keep business rules in services/domain helpers, not controllers.
-

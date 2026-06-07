@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AiService } from "./ai.service";
-import { TestAgentDto } from "./dto";
+import { EvaluateAgentDto, TestAgentDto } from "./dto";
 
 @ApiTags("ai")
 @Controller("ai")
@@ -11,6 +11,16 @@ export class AiController {
   @Post("test-agent")
   testAgent(@Body() dto: TestAgentDto) {
     return this.aiService.testAgent(dto);
+  }
+
+  @Post("evaluate-agent")
+  evaluateAgent(@Body() dto: EvaluateAgentDto) {
+    return this.aiService.evaluateAgent(dto);
+  }
+
+  @Get("providers")
+  providers() {
+    return this.aiService.providers();
   }
 
   @Get("tasks/:id")
@@ -23,4 +33,3 @@ export class AiController {
     return this.aiService.usage();
   }
 }
-

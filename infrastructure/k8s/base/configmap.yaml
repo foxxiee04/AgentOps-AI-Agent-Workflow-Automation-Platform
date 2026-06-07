@@ -9,5 +9,6 @@ data:
   WEB_APP_URL: http://agentops.local
   API_URL: http://agentops-api:4000
   NEXT_PUBLIC_API_URL: http://api.agentops.local
+  DATABASE_URL: postgresql://agentops:agentops@postgres:5432/agentops
   REDIS_URL: redis://redis:6379
   KAFKA_BROKERS: kafka:9092

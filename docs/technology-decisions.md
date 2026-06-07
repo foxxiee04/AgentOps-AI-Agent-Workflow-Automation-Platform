@@ -16,6 +16,8 @@ This document records the current technology choices for AgentOps and notes reco
 | Event pipeline | Kafka + KafkaJS | Apache Kafka Docker image 4.3.0, KafkaJS 2.2.4 | Async workflow execution and worker coordination. |
 | Validation | Zod + class-validator | Zod 4.4.3 | Zod for shared schemas, class-validator for Nest DTOs. |
 | AI provider | OpenAI SDK first | OpenAI 6.42.0 | Structured output support and mature Node SDK. |
+| AI validation | JSON Schema + AJV | AJV 8.20.0 | Validate configurable AI node outputs before workflow continuation. |
+| API health | NestJS Terminus | 11.1.1 | Standard liveness/readiness checks for API, PostgreSQL, Redis, and Kafka. |
 | Tests | Vitest | 4.1.8 | Fast unit tests for packages, workers, and domain logic. |
 | Logging | Pino/Nest Logger | Pino 10.3.1 | Worker-friendly structured logging. |
 | Security basics | Helmet + Throttler + argon2 | current npm versions | API hardening, rate limiting, password hashing path. |
@@ -44,6 +46,7 @@ Add these when the relevant feature becomes real:
 | Sentry or similar | After public demo deployment | Error tracking for frontend and backend. |
 | `@google/generative-ai` | If Gemini is selected as second provider | Keep provider abstraction small and add Gemini only when used. |
 | pgvector | After AI memory/search scope is approved | Useful for agent memory and template retrieval, not needed in MVP. |
+| AWS EKS | When budget allows managed Kubernetes | Use after EC2+k3s demo path is stable. |
 
 ## Technologies To Avoid In MVP
 

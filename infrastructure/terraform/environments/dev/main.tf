@@ -41,3 +41,8 @@ module "compute" {
   key_name           = var.key_name
 }
 
+module "ecr" {
+  source           = "../../modules/ecr"
+  name             = var.name
+  repository_names = var.repository_names
+}

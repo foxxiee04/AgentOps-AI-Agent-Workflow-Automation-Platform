@@ -13,9 +13,22 @@ inputMapping
 outputSchema
 temperature
 maxTokens
+retryLimit
 requireHumanApproval
 savePromptAndOutput
 ```
+
+## Platform Layer
+
+The AI platform layer includes:
+
+- prompt template rendering with `{{variable}}` placeholders
+- input mapping from workflow payload paths into prompt variables
+- masking for emails, phone numbers, and secret-like keys
+- JSON Schema output validation
+- deterministic mock provider for local testing
+- OpenAI Responses provider path in the AI worker
+- prompt evaluation test cases before workflow publishing
 
 ## Example Prompt
 
@@ -27,6 +40,7 @@ Analyze the lead and return JSON with:
 - summary
 - recommendedAction
 - personalizedEmail
+- confidence
 ```
 
 ## Example Output
@@ -37,9 +51,22 @@ Analyze the lead and return JSON with:
   "category": "high-intent",
   "summary": "The lead is interested in automating sales and support workflows.",
   "recommendedAction": "Send a personalized follow-up email and create a sales task.",
-  "personalizedEmail": "Hi Anna, thanks for reaching out..."
+  "personalizedEmail": "Hi Anna, thanks for reaching out...",
+  "confidence": 0.91
 }
 ```
+
+## API Testing Endpoints
+
+```txt
+GET  /ai/providers
+POST /ai/test-agent
+POST /ai/evaluate-agent
+GET  /ai/tasks/:id
+GET  /ai/usage
+```
+
+`/ai/test-agent` previews the rendered prompt, safe input, JSON Schema validation result, and token estimate. `/ai/evaluate-agent` runs multiple deterministic test cases and returns pass rate plus mismatches.
 
 ## Safety Rules
 
@@ -50,4 +77,4 @@ Analyze the lead and return JSON with:
 - Do not include secrets, env values, private keys, or unnecessary PII in prompts.
 - Allow privacy settings to disable prompt/output storage.
 - Enforce daily AI call and token quotas by workspace.
-
+- Do real provider calls in the AI worker path, not in request/response HTTP handlers.

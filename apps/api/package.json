@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@agentops/config": "workspace:*",
+    "@agentops/database": "workspace:*",
     "@agentops/events": "workspace:*",
     "@agentops/shared": "workspace:*",
     "@nestjs/common": "^11.1.24",
@@ -22,11 +23,13 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.24",
     "@nestjs/swagger": "^11.4.4",
+    "@nestjs/terminus": "^11.1.1",
     "@nestjs/throttler": "^6.5.0",
     "argon2": "^0.44.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "helmet": "^8.2.0",
+    "ioredis": "^5.11.1",
     "kafkajs": "^2.2.4",
     "pino": "^10.3.1",
     "reflect-metadata": "^0.2.2",
@@ -34,10 +37,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^25.9.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   }
 }
-

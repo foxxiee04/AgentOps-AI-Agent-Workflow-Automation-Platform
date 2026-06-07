@@ -7,6 +7,7 @@ k8s/
   base/
   overlays/
     dev/
+    aws/
     prod/
 ```
 
@@ -24,3 +25,4 @@ k8s/
 
 Each application workload should include liveness and readiness probes.
 
+The base folder includes demo-grade PostgreSQL, Redis, and Kafka manifests for EC2+k3s. For EKS production, prefer managed AWS data services and override `DATABASE_URL`, `REDIS_URL`, and `KAFKA_BROKERS`.

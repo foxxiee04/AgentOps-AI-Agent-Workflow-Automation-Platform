@@ -16,7 +16,7 @@ New lead submitted
 -> Store run history and logs
 ```
 
-The architecture is intentionally **Modular Monolith + Kafka Workers**, not full microservices. Core business logic stays in one well-structured NestJS API, while heavy asynchronous work runs through Kafka workers.
+The architecture is intentionally **Modular Monolith + Kafka Workers**, not full microservices. Frontend and backend are already separate deployable apps (`apps/web` and `apps/api`), while core backend business logic stays in one well-structured NestJS API. Heavy asynchronous work runs through Kafka workers.
 
 ## MVP Scope
 
@@ -36,9 +36,9 @@ The architecture is intentionally **Modular Monolith + Kafka Workers**, not full
 | Area | Stack |
 | --- | --- |
 | Frontend | Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, React Flow, TanStack Query, Zustand, React Hook Form, Zod |
-| Backend | NestJS, TypeScript, Prisma, PostgreSQL, Redis, Kafka, JWT, Swagger/OpenAPI, Jest |
-| AI | OpenAI or Gemini API, structured JSON output, prompt templates, optional pgvector |
-| Infrastructure | Docker, Kubernetes, Terraform, Nginx Ingress, GitHub Actions |
+| Backend | NestJS, TypeScript, Prisma, PostgreSQL, Redis, Kafka, JWT, Swagger/OpenAPI, Vitest |
+| AI | OpenAI Responses API path, mock provider, structured JSON output, prompt templates, JSON Schema validation, optional pgvector |
+| Infrastructure | Docker, Kubernetes, Terraform, AWS ECR, Nginx Ingress, GitHub Actions |
 
 See [docs/technology-decisions.md](docs/technology-decisions.md) for current package choices, Prisma 7 notes, and recommended additions such as Playwright, OpenTelemetry, Prometheus, Testcontainers, and Sentry.
 
@@ -68,9 +68,42 @@ agents/                 Human/Codex agent role descriptions
 .codex/skills/          Project-local Codex skills
 ```
 
+## Runtime Naming
+
+Use one naming style across local Docker, Kubernetes, and AWS:
+
+| Resource | Pattern | Example |
+| --- | --- | --- |
+| Local container | `agentops-local-<service>` | `agentops-local-postgres` |
+| Local volume | `agentops_local_<service>_data` | `agentops_local_postgres_data` |
+| Local network | `agentops_local_net` | `agentops_local_net` |
+| Local app image | `agentops/<app>:local` | `agentops/api:local` |
+| AWS ECR repository | `<env-name>/<app>` | `agentops-dev/api` |
+| Kubernetes namespace | `agentops` | `agentops` |
+
+Useful commands:
+
+```bash
+pnpm compose:up
+pnpm db:push
+pnpm kafka:bootstrap
+pnpm docker:build:apps
+```
+
+## Workers And Monolith
+
+There are four workers because the MVP has four async execution domains:
+
+- `workflow-worker`: graph execution and run coordination.
+- `ai-worker`: prompt building, provider calls, structured output validation.
+- `tool-worker`: webhook/http/email mock action execution.
+- `notification-worker`: notification creation and mock delivery.
+
+Add more workers only when a new domain needs different scaling, retries, security, or runtime dependencies. The backend stays a modular monolith because auth, workspaces, workflow versions, RBAC, usage, and audit rules share the same domain model and database transactions.
+
 ## Codex Usage
 
-Before asking Codex to implement features in this repo, start from [CODEX.md](CODEX.md). It defines the project invariants, required reading order, skill map, and definition of done for future coding tasks.
+Before asking Codex or another AI agent to implement features in this repo, start from [.codex/CODEX.md](.codex/CODEX.md). Root [CODEX.md](CODEX.md) is only a pointer.
 
 ## API Smoke Tests
 

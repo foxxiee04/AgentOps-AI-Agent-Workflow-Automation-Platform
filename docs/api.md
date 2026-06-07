@@ -2,6 +2,38 @@
 
 The API is implemented in `apps/api` as a NestJS modular monolith. All workspace-scoped routes must enforce workspace membership and role permissions.
 
+## Router Layout
+
+Current MVP routes are intentionally mounted at root paths:
+
+```txt
+/health
+/auth
+/workspaces
+/workflows
+/workflow-runs
+/ai
+/webhooks
+/dashboard
+/notifications
+/audit
+```
+
+Do not introduce a global `/api/v1` prefix without updating frontend API calls, Postman, docs, and smoke tests.
+
+## Middleware And Boundary
+
+The API currently uses:
+
+- Helmet
+- CORS
+- global validation pipe
+- throttling
+- request ID middleware
+- request logging middleware
+- HTTP exception filter
+- Terminus health/readiness checks
+
 ## Auth
 
 ```txt
@@ -43,6 +75,8 @@ GET    /workflow-runs/:id/steps
 
 ```txt
 POST /ai/test-agent
+POST /ai/evaluate-agent
+GET  /ai/providers
 GET  /ai/tasks/:id
 GET  /ai/usage
 ```
@@ -72,4 +106,3 @@ GET /dashboard/recent-activity
 - Include `requestId` in error responses.
 - Validate request body, params, and query values.
 - Never expose secrets, token hashes, or provider API keys.
-

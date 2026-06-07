@@ -6,7 +6,25 @@ Deployment is planned in layers: local infrastructure, containers, Kubernetes, T
 
 - Use `docker-compose.yml` for PostgreSQL, Redis, and Kafka.
 - Add app Dockerfiles after the web/API/worker code exists.
-- Keep local ports stable: web `3000`, API `4000`, Kafka external `9094`.
+- Keep local ports stable: web `3000`, API `4000`, PostgreSQL host `55432`, Kafka external `9094`.
+
+## Naming
+
+| Resource | Pattern | Example |
+| --- | --- | --- |
+| Local container | `agentops-local-<service>` | `agentops-local-kafka` |
+| Local volume | `agentops_local_<service>_data` | `agentops_local_redis_data` |
+| Local network | `agentops_local_net` | `agentops_local_net` |
+| Local app image | `agentops/<app>:local` | `agentops/ai-worker:local` |
+| ECR repository | `<env-name>/<app>` | `agentops-dev/ai-worker` |
+
+Local infrastructure containers:
+
+```txt
+agentops-local-postgres
+agentops-local-redis
+agentops-local-kafka
+```
 
 ## Kubernetes Workloads
 
@@ -34,12 +52,14 @@ kafka
 
 ## Health Checks
 
-The API should expose:
+The API exposes:
 
 ```txt
 GET /health/live
 GET /health/ready
 ```
+
+`/health/live` reports API process liveness. `/health/ready` uses NestJS Terminus to verify PostgreSQL, Redis, and Kafka before the API is considered ready for traffic.
 
 Worker health should include process liveness and dependency readiness where practical.
 
@@ -74,4 +94,3 @@ Main branch:
 - Run Terraform plan
 - Deploy Kubernetes manifests after approval
 - Run smoke tests
-

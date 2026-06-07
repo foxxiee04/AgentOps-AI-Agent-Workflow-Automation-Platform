@@ -1,15 +1,19 @@
+name: agentops-local
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: agentops-postgres
+    container_name: agentops-local-postgres
     environment:
       POSTGRES_USER: agentops
       POSTGRES_PASSWORD: agentops
       POSTGRES_DB: agentops
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - agentops-local-postgres-data:/var/lib/postgresql/data
+    networks:
+      - agentops-local-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentops -d agentops"]
       interval: 10s
@@ -18,11 +22,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: agentops-redis
+    container_name: agentops-local-redis
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - agentops-local-redis-data:/data
+    networks:
+      - agentops-local-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -31,7 +37,7 @@ services:
 
   kafka:
     image: apache/kafka:4.3.0
-    container_name: agentops-kafka
+    container_name: agentops-local-kafka
     environment:
       CLUSTER_ID: agentops-local-kraft-1
       KAFKA_NODE_ID: 1
@@ -50,7 +56,9 @@ services:
     ports:
       - "9094:9094"
     volumes:
-      - kafka-data:/var/lib/kafka/data
+      - agentops-local-kafka-data:/var/lib/kafka/data
+    networks:
+      - agentops-local-net
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
       interval: 10s
@@ -58,6 +66,13 @@ services:
       retries: 10
 
 volumes:
-  postgres-data:
-  redis-data:
-  kafka-data:
+  agentops-local-postgres-data:
+    name: agentops_local_postgres_data
+  agentops-local-redis-data:
+    name: agentops_local_redis_data
+  agentops-local-kafka-data:
+    name: agentops_local_kafka_data
+
+networks:
+  agentops-local-net:
+    name: agentops_local_net

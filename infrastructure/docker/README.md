@@ -4,14 +4,26 @@ This folder will hold app Dockerfiles and containerization notes once source app
 
 ## Planned Images
 
-- `agentops-web`
-- `agentops-api`
-- `agentops-workflow-worker`
-- `agentops-ai-worker`
-- `agentops-tool-worker`
-- `agentops-notification-worker`
+- `agentops/web:local`
+- `agentops/api:local`
+- `agentops/workflow-worker:local`
+- `agentops/ai-worker:local`
+- `agentops/tool-worker:local`
+- `agentops/notification-worker:local`
 
 Local dependencies are already represented in the root `docker-compose.yml`.
+
+## Naming Convention
+
+Use these names consistently:
+
+| Resource | Pattern | Example |
+| --- | --- | --- |
+| Local container | `agentops-local-<service>` | `agentops-local-postgres` |
+| Local volume | `agentops_local_<service>_data` | `agentops_local_kafka_data` |
+| Local network | `agentops_local_net` | `agentops_local_net` |
+| Local app image | `agentops/<app>:local` | `agentops/api:local` |
+| AWS ECR repository | `<env-name>/<app>` | `agentops-dev/api` |
 
 ## Dockerfiles
 
@@ -22,7 +34,8 @@ Local dependencies are already represented in the root `docker-compose.yml`.
 Example:
 
 ```txt
-docker build -f infrastructure/docker/api.Dockerfile -t agentops-api .
-docker build -f infrastructure/docker/web.Dockerfile -t agentops-web .
-docker build -f infrastructure/docker/worker.Dockerfile --build-arg WORKER_PACKAGE=@agentops/ai-worker --build-arg WORKER_MAIN=apps/ai-worker/dist/main.js -t agentops-ai-worker .
+pnpm docker:build:api
+pnpm docker:build:web
+pnpm docker:build:ai-worker
+pnpm docker:build:apps
 ```

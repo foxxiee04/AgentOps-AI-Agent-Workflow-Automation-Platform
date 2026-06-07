@@ -1,23 +1,29 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
+import { parseAppEnv } from "@agentops/config";
+import { DomainEventsModule } from "./common/domain-events/domain-events.module";
+import { InfrastructureModule } from "./common/infrastructure/infrastructure.module";
+import { RequestLoggingMiddleware } from "./common/http/request-logging.middleware";
+import { RequestIdMiddleware } from "./common/http/request-id.middleware";
 import { AiModule } from "./modules/ai/ai.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
-import { HealthController } from "./modules/health.controller";
+import { HealthModule } from "./modules/health/health.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { WebhooksModule } from "./modules/webhooks/webhooks.module";
 import { WorkflowRunsModule } from "./modules/workflow-runs/workflow-runs.module";
 import { WorkflowsModule } from "./modules/workflows/workflows.module";
 import { WorkspacesModule } from "./modules/workspaces/workspaces.module";
-import { DomainEventsModule } from "./common/domain-events/domain-events.module";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: parseAppEnv }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+    InfrastructureModule,
     DomainEventsModule,
+    HealthModule,
     AuthModule,
     WorkspacesModule,
     WorkflowsModule,
@@ -27,8 +33,10 @@ import { DomainEventsModule } from "./common/domain-events/domain-events.module"
     DashboardModule,
     NotificationsModule,
     AuditModule
-  ],
-  controllers: [HealthController]
+  ]
 })
-export class AppModule {}
-
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestIdMiddleware, RequestLoggingMiddleware).forRoutes("*");
+  }
+}

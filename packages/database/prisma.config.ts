@@ -7,7 +7,6 @@ export default defineConfig({
     path: "prisma/migrations"
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? "postgresql://agentops:agentops@localhost:5432/agentops"
+    url: process.env.DATABASE_URL ?? "postgresql://agentops:agentops@localhost:55432/agentops"
   }
 });
-

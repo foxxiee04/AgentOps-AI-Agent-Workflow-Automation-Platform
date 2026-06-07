@@ -43,7 +43,7 @@
                   "  pm.response.to.have.status(200);",
                   "  const json = pm.response.json();",
                   "  pm.expect(json.status).to.eql('ok');",
-                  "  pm.expect(json.check).to.eql('live');",
+                  "  pm.expect(json.info.api.status).to.eql('up');",
                   "});"
                 ]
               }
@@ -71,7 +71,9 @@
                   "  pm.response.to.have.status(200);",
                   "  const json = pm.response.json();",
                   "  pm.expect(json.status).to.eql('ok');",
-                  "  pm.expect(json.dependencies).to.be.an('array');",
+                  "  pm.expect(json.info.postgres.status).to.eql('up');",
+                  "  pm.expect(json.info.redis.status).to.eql('up');",
+                  "  pm.expect(json.info.kafka.status).to.eql('up');",
                   "});"
                 ]
               }
@@ -572,6 +574,33 @@
       "name": "AI",
       "item": [
         {
+          "name": "Providers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ai/providers",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "providers"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('AI providers returns mock provider', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.providers[0].id).to.eql('mock');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Test Agent",
           "request": {
             "method": "POST",
@@ -602,6 +631,44 @@
                   "  const json = pm.response.json();",
                   "  pm.expect(json.result.leadScore).to.be.a('number');",
                   "  pm.expect(json.result.personalizedEmail).to.be.a('string');",
+                  "  pm.expect(json.validation.schemaValid).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Evaluate Agent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"modelProvider\": \"mock\",\n    \"userPromptTemplate\": \"Analyze this lead: {{message}}\"\n  },\n  \"testCases\": [\n    {\n      \"id\": \"urgent-lead\",\n      \"input\": {\n        \"message\": \"We need urgent sales automation.\"\n      },\n      \"expected\": {\n        \"category\": \"high-intent\"\n      }\n    },\n    {\n      \"id\": \"general-lead\",\n      \"input\": {\n        \"message\": \"Just browsing.\"\n      },\n      \"expected\": {\n        \"category\": \"high-intent\"\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/evaluate-agent",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "evaluate-agent"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('AI evaluation returns pass rate', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.totalCases).to.eql(2);",
+                  "  pm.expect(json.passRate).to.be.a('number');",
                   "});"
                 ]
               }

@@ -23,7 +23,7 @@ async function main() {
       }
 
       const event = eventEnvelopeSchema.parse(JSON.parse(message.value.toString()));
-      const completed = handleAgentTaskRequested(event);
+      const completed = await handleAgentTaskRequested(event);
       logger.info({ workflowRunId: completed.workflowRunId, eventId: completed.eventId }, "AI task completed");
     }
   });
@@ -35,4 +35,3 @@ if (require.main === module) {
     process.exit(1);
   });
 }
-
