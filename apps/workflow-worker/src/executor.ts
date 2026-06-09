@@ -2,6 +2,7 @@ import {
   createEvent,
   eventEnvelopeSchema,
   kafkaTopics,
+  traceContextFromEvent,
   workflowTriggeredPayloadSchema,
   type EventEnvelope
 } from "@agentops/events";
@@ -48,6 +49,7 @@ export function handleWorkflowTriggered(rawEvent: unknown): WorkflowExecutionPla
         workspaceId: event.workspaceId,
         workflowId: event.workflowId,
         workflowRunId: event.workflowRunId,
+        ...traceContextFromEvent(event),
         payload: { nodeId: node.id, nodeType: node.type }
       })
     );
@@ -64,6 +66,7 @@ export function handleWorkflowTriggered(rawEvent: unknown): WorkflowExecutionPla
           workspaceId: event.workspaceId,
           workflowId: event.workflowId,
           workflowRunId: event.workflowRunId,
+          ...traceContextFromEvent(event),
           payload: { completedAt: new Date().toISOString() }
         })
       );
@@ -89,7 +92,7 @@ export function handleWorkflowTriggered(rawEvent: unknown): WorkflowExecutionPla
 }
 
 function buildTaskRequest(
-  event: Pick<EventEnvelope, "workspaceId" | "workflowId" | "workflowRunId">,
+  event: Pick<EventEnvelope, "eventId" | "workspaceId" | "workflowId" | "workflowRunId" | "requestId" | "traceId">,
   node: WorkflowNode,
   input: Record<string, unknown>
 ): EventEnvelope | null {
@@ -99,6 +102,7 @@ function buildTaskRequest(
       workspaceId: event.workspaceId,
       workflowId: event.workflowId,
       workflowRunId: event.workflowRunId,
+      ...traceContextFromEvent(event),
       payload: {
         nodeId: node.id,
         taskId: `aitask_${event.workflowRunId}_${node.id}`,
@@ -114,6 +118,7 @@ function buildTaskRequest(
       workspaceId: event.workspaceId,
       workflowId: event.workflowId,
       workflowRunId: event.workflowRunId,
+      ...traceContextFromEvent(event),
       payload: {
         nodeId: node.id,
         toolCallId: `tool_${event.workflowRunId}_${node.id}`,
@@ -138,6 +143,7 @@ function failPlan(event: EventEnvelope, message: string): WorkflowExecutionPlan 
         workspaceId: event.workspaceId,
         workflowId: event.workflowId,
         workflowRunId: event.workflowRunId,
+        ...traceContextFromEvent(event),
         payload: { message }
       })
     ],

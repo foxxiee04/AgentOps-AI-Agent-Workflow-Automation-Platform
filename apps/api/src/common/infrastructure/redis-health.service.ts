@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
@@ -6,7 +6,7 @@ import Redis from "ioredis";
 export class RedisHealthService implements OnModuleDestroy {
   private client: Redis | undefined;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
 
   async ping() {
     const client = await this.getClient();

@@ -56,6 +56,8 @@ services:
     ports:
       - "9094:9094"
     volumes:
+      - agentops-local-kafka-secrets:/etc/kafka/secrets
+      - agentops-local-kafka-shared-config:/mnt/shared/config
       - agentops-local-kafka-data:/var/lib/kafka/data
     networks:
       - agentops-local-net
@@ -65,6 +67,75 @@ services:
       timeout: 10s
       retries: 10
 
+  prometheus:
+    image: prom/prometheus:v3.8.0
+    container_name: agentops-local-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/rules:/etc/prometheus/rules:ro
+      - agentops-local-prometheus-data:/prometheus
+    depends_on:
+      alertmanager:
+        condition: service_started
+    networks:
+      - agentops-local-net
+
+  tempo:
+    image: grafana/tempo:2.9.0
+    container_name: agentops-local-tempo
+    command:
+      - "-config.file=/etc/tempo/tempo.yml"
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./infrastructure/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - agentops-local-tempo-data:/var/tempo
+    networks:
+      - agentops-local-net
+
+  alertmanager:
+    image: prom/alertmanager:v0.29.0
+    container_name: agentops-local-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infrastructure/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - agentops-local-alertmanager-data:/alertmanager
+    networks:
+      - agentops-local-net
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    container_name: agentops-local-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: agentops
+      GF_SECURITY_ADMIN_PASSWORD: agentops
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - agentops-local-grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks:
+      - agentops-local-net
+
 volumes:
   agentops-local-postgres-data:
     name: agentops_local_postgres_data
@@ -72,6 +143,18 @@ volumes:
     name: agentops_local_redis_data
   agentops-local-kafka-data:
     name: agentops_local_kafka_data
+  agentops-local-kafka-secrets:
+    name: agentops_local_kafka_secrets
+  agentops-local-kafka-shared-config:
+    name: agentops_local_kafka_shared_config
+  agentops-local-prometheus-data:
+    name: agentops_local_prometheus_data
+  agentops-local-alertmanager-data:
+    name: agentops_local_alertmanager_data
+  agentops-local-grafana-data:
+    name: agentops_local_grafana_data
+  agentops-local-tempo-data:
+    name: agentops_local_tempo_data
 
 networks:
   agentops-local-net:

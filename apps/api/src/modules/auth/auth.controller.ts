@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Query, Res } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Inject, Post, Query, Res } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { AuthService } from "./auth.service";
@@ -7,7 +7,7 @@ import { LoginDto, RegisterDto } from "./dto";
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post("register")
   register(@Body() dto: RegisterDto) {

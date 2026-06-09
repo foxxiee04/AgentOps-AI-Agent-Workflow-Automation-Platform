@@ -29,6 +29,7 @@ The architecture is intentionally **Modular Monolith + Kafka Workers**, not full
 - AI worker with structured JSON output validation
 - PostgreSQL persistence and Redis status/cache
 - Docker Compose for local infrastructure
+- Prometheus, Alertmanager, Grafana, and Tempo for local API/worker monitoring and traces
 - Kubernetes manifests, Terraform layout, and GitHub Actions plan
 
 ## Tech Stack
@@ -38,7 +39,7 @@ The architecture is intentionally **Modular Monolith + Kafka Workers**, not full
 | Frontend | Next.js, React, TypeScript, Tailwind CSS, `apps/web/DESIGN.md` terminal-native UI rules, React Flow, Zustand, React Hook Form, Zod |
 | Backend | NestJS, TypeScript, Prisma, PostgreSQL, Redis, Kafka, JWT, Swagger/OpenAPI, Vitest |
 | AI | OpenAI Responses API path, mock provider, structured JSON output, prompt templates, JSON Schema validation, optional pgvector |
-| Infrastructure | Docker, Kubernetes, Terraform, AWS ECR, Nginx Ingress, GitHub Actions |
+| Infrastructure | Docker, Kubernetes, Terraform, AWS ECR, Nginx Ingress, GitHub Actions, Prometheus, Alertmanager, Grafana, Tempo, OpenTelemetry |
 
 See [docs/technology-decisions.md](docs/technology-decisions.md) for current package choices, Prisma 7 notes, and recommended additions such as Playwright, OpenTelemetry, Prometheus, Testcontainers, and Sentry.
 
@@ -58,6 +59,7 @@ packages/
   config/               Shared TypeScript, lint, env, and runtime config
   database/             Prisma schema, migrations, seed plan
   events/               Kafka event contracts and topic helpers
+  observability/        Prometheus metric helpers and trace correlation utilities
 infrastructure/
   docker/               Local container notes and Dockerfile plan
   k8s/                  Kubernetes manifests and environment overlays

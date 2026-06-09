@@ -1,24 +1,24 @@
-import { Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { NotificationsService } from "./notifications.service";
 
 @ApiTags("notifications")
 @Controller("notifications")
 export class NotificationsController {
+  constructor(@Inject(NotificationsService) private readonly notificationsService: NotificationsService) {}
+
   @Get()
   findAll() {
-    return [
-      {
-        id: "notif_demo",
-        title: "Workflow ready",
-        body: "Your Lead qualification workflow is ready to publish.",
-        status: "UNREAD"
-      }
-    ];
+    return this.notificationsService.findAll();
   }
 
   @Post("mark-all-read")
   markAllRead() {
-    return { success: true };
+    return this.notificationsService.markAllRead();
+  }
+
+  @Post("alertmanager")
+  alertmanager(@Body() payload: Record<string, unknown>) {
+    return this.notificationsService.ingestAlertmanagerWebhook(payload);
   }
 }
-

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "pnpm --filter './packages/*' build && next dev --port 3000",
+    "dev": "next dev --port 3000",
     "lint": "tsc -p tsconfig.json --noEmit",
     "start": "next start --port 3000",
     "test": "vitest run --passWithNoTests",

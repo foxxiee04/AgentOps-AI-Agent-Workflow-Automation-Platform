@@ -12,6 +12,7 @@ This folder is the project knowledge base. Read the relevant document before imp
 - `ai-agent.md`: AI Agent node behavior, prompts, schemas, and safety.
 - `security.md`: auth, authorization, API, webhook, and AI security.
 - `deployment.md`: Docker, Kubernetes, Terraform, and CI/CD plan.
+- `local-runbook.md`: local setup, Docker/app start commands, test commands, and smoke test cases.
 - `aws-kubernetes-deployment.md`: AWS EC2+k3s/EKS deployment path and runtime order.
 - `technology-decisions.md`: confirmed stack, version notes, and recommended additions.
 - `product-direction.md`: outside product signals and backlog direction for run history, approvals, and AI observability.

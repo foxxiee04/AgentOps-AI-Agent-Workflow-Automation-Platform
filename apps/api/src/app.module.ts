@@ -11,6 +11,7 @@ import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { HealthModule } from "./modules/health/health.module";
+import { MetricsModule } from "./modules/metrics/metrics.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { WebhooksModule } from "./modules/webhooks/webhooks.module";
 import { WorkflowRunsModule } from "./modules/workflow-runs/workflow-runs.module";
@@ -24,6 +25,7 @@ import { WorkspacesModule } from "./modules/workspaces/workspaces.module";
     InfrastructureModule,
     DomainEventsModule,
     HealthModule,
+    MetricsModule,
     AuthModule,
     WorkspacesModule,
     WorkflowsModule,

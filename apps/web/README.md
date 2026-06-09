@@ -39,7 +39,7 @@ The web app now renders real product surfaces and calls the NestJS API through `
 | `/runs` | `GET /dashboard/workflow-runs`, links each run to its timeline detail. |
 | `/runs/:id` | `GET /workflow-runs/:id`, `GET /workflow-runs/:id/steps`, displays run metadata, input payload, and step timeline. |
 | `/agents` | `GET /ai/providers`, `GET /ai/usage`, `POST /ai/test-agent`. |
-| `/settings` | `GET /health/ready` and runtime configuration summary. |
+| `/settings` | `GET /health/ready`, `GET /dashboard/readiness`, and runtime configuration summary. |
 
 Server pages use typed fallback data so `next build` still succeeds when the API is offline. Live local demos should start the API on `NEXT_PUBLIC_API_URL` or `http://localhost:4000`.
 

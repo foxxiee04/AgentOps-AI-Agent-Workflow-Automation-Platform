@@ -17,6 +17,7 @@ Current MVP routes are intentionally mounted at root paths:
 /dashboard
 /notifications
 /audit
+/metrics
 ```
 
 Do not introduce a global `/api/v1` prefix without updating frontend API calls, Postman, docs, and smoke tests.
@@ -30,6 +31,7 @@ The API currently uses:
 - global validation pipe
 - throttling
 - request ID middleware
+- trace context propagation through `traceparent`
 - request logging middleware
 - HTTP exception filter
 - Terminus health/readiness checks
@@ -104,7 +106,36 @@ GET /dashboard/workflow-runs
 GET /dashboard/usage
 GET /dashboard/errors
 GET /dashboard/recent-activity
+GET /dashboard/readiness
 ```
+
+`GET /dashboard/readiness` returns an operational checklist for the demo workspace, including workflow publishing, event pipeline activity, AI provider configuration, OpenTelemetry export, and production-secret readiness. Non-ready items include a concrete `action` so the frontend can display the next configuration step.
+
+## Notifications And Alert Bot
+
+```txt
+GET  /notifications
+POST /notifications/mark-all-read
+POST /notifications/alertmanager
+```
+
+`POST /notifications/alertmanager` accepts Alertmanager webhook payloads, creates in-app alert notifications, increments `agentops_alertmanager_notifications_total`, and optionally forwards a generic bot payload to `ALERT_BOT_WEBHOOK_URL`.
+
+## Metrics
+
+```txt
+GET /metrics
+```
+
+Exports Prometheus text-format metrics for:
+
+- API process uptime and resident memory.
+- HTTP request totals and duration histograms.
+- Workflow run creation totals.
+- Kafka consumer lag by `group_id`, `topic`, and `partition`.
+- Alertmanager webhook notifications received by the alert bot.
+
+The request boundary accepts or creates W3C `traceparent`, sets `x-request-id`, starts an OpenTelemetry HTTP server span when OTel is enabled, and attaches `requestId`/`traceId`/`traceparent` to domain events so API logs, Kafka events, worker spans, and workflow run logs can be correlated.
 
 ## Frontend Integration
 
@@ -118,7 +149,7 @@ GET /dashboard/recent-activity
 - `/runs`: workflow run history from `/dashboard/workflow-runs`.
 - `/runs/:id`: workflow run metadata and step timeline from `/workflow-runs/:id` and `/workflow-runs/:id/steps`.
 - `/agents`: AI providers, usage, and test-agent endpoint.
-- `/settings`: readiness status and runtime boundary summary.
+- `/settings`: dependency readiness, operational readiness checklist, and runtime boundary summary.
 
 Server pages call the API with `safeApiGet`, which returns fallback data when the API is offline so builds and demos remain usable.
 

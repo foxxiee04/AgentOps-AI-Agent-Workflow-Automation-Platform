@@ -5,7 +5,8 @@
   "description": "AI Agent workflow automation platform scaffold.",
   "packageManager": "pnpm@11.5.2",
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "pnpm build:packages && turbo run dev --concurrency=13",
+    "build:packages": "pnpm --filter @agentops/config --filter @agentops/database --filter @agentops/events --filter @agentops/observability --filter @agentops/shared --filter @agentops/ui build",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
+    "@vscode/ripgrep": "^1.18.0",
     "eslint": "^10.4.1",
     "prettier": "^3.8.3",
     "tsx": "^4.22.4",

@@ -3,6 +3,7 @@ import {
   createEvent,
   eventEnvelopeSchema,
   kafkaTopics,
+  traceContextFromEvent,
   type EventEnvelope
 } from "@agentops/events";
 import { executeAgentTask } from "./ai-task.executor";
@@ -20,6 +21,7 @@ export async function handleAgentTaskRequested(rawEvent: unknown): Promise<Event
     workspaceId: event.workspaceId,
     workflowId: event.workflowId,
     workflowRunId: event.workflowRunId,
+    ...traceContextFromEvent(event),
     payload: {
       nodeId: payload.nodeId,
       taskId: payload.taskId,

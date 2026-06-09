@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createPrismaClient, PrismaClient } from "@agentops/database";
 
@@ -6,7 +6,7 @@ import { createPrismaClient, PrismaClient } from "@agentops/database";
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
   readonly client: PrismaClient;
 
-  constructor(config: ConfigService) {
+  constructor(@Inject(ConfigService) config: ConfigService) {
     this.client = createPrismaClient(config.get<string>("DATABASE_URL"));
   }
 

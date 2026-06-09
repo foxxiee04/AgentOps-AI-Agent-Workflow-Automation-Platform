@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { parseKafkaBrokers } from "@agentops/config";
 import { Admin, Kafka, logLevel } from "kafkajs";
@@ -8,17 +8,41 @@ export class KafkaAdminService implements OnModuleDestroy {
   private admin: Admin | undefined;
   private connected = false;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
 
   async ping() {
-    const admin = this.getAdmin();
-
-    if (!this.connected) {
-      await admin.connect();
-      this.connected = true;
-    }
+    const admin = await this.getConnectedAdmin();
 
     await admin.fetchTopicMetadata();
+  }
+
+  async consumerLag(groupId: string, topic: string) {
+    const admin = await this.getConnectedAdmin();
+    const topicOffsets = (await admin.fetchTopicOffsets(topic)) as Array<{
+      partition: number;
+      offset?: string;
+      high?: string;
+    }>;
+    const groupOffsetTopics = (await admin.fetchOffsets({ groupId, topics: [topic] })) as Array<{
+      topic: string;
+      partitions: Array<{ partition: number; offset?: string }>;
+    }>;
+    const groupOffsets = groupOffsetTopics.find((candidate) => candidate.topic === topic)?.partitions ?? [];
+
+    return topicOffsets.map((topicOffset) => {
+      const groupOffset = groupOffsets.find((candidate) => candidate.partition === topicOffset.partition);
+      const latestOffset = Number(topicOffset.high ?? topicOffset.offset ?? 0);
+      const committedOffset = Number(groupOffset?.offset === "-1" ? 0 : groupOffset?.offset ?? 0);
+
+      return {
+        groupId,
+        topic,
+        partition: topicOffset.partition,
+        latestOffset,
+        committedOffset,
+        lag: Math.max(latestOffset - committedOffset, 0)
+      };
+    });
   }
 
   async onModuleDestroy() {
@@ -43,5 +67,16 @@ export class KafkaAdminService implements OnModuleDestroy {
     }
 
     return this.admin;
+  }
+
+  private async getConnectedAdmin() {
+    const admin = this.getAdmin();
+
+    if (!this.connected) {
+      await admin.connect();
+      this.connected = true;
+    }
+
+    return admin;
   }
 }

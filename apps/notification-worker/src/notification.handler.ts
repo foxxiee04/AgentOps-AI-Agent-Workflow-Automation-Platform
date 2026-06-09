@@ -1,4 +1,4 @@
-import { createEvent, eventEnvelopeSchema, kafkaTopics, type EventEnvelope } from "@agentops/events";
+import { createEvent, eventEnvelopeSchema, kafkaTopics, traceContextFromEvent, type EventEnvelope } from "@agentops/events";
 
 export function handleNotificationRequested(rawEvent: unknown): EventEnvelope {
   const event = eventEnvelopeSchema.parse(rawEvent);
@@ -10,6 +10,7 @@ export function handleNotificationRequested(rawEvent: unknown): EventEnvelope {
     workspaceId: event.workspaceId,
     workflowId: event.workflowId,
     workflowRunId: event.workflowRunId,
+    ...traceContextFromEvent(event),
     payload: {
       notificationId: `notif_${event.eventId}`,
       title,
@@ -18,4 +19,3 @@ export function handleNotificationRequested(rawEvent: unknown): EventEnvelope {
     }
   });
 }
-

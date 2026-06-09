@@ -6,6 +6,10 @@ export type CreateEventInput<TPayload extends Record<string, unknown>> = {
   workspaceId: string;
   workflowRunId: string;
   workflowId?: string;
+  requestId?: string;
+  traceId?: string;
+  traceparent?: string;
+  parentEventId?: string;
   payload: TPayload;
 };
 
@@ -19,7 +23,21 @@ export function createEvent<TPayload extends Record<string, unknown>>(
     workspaceId: input.workspaceId,
     workflowId: input.workflowId,
     workflowRunId: input.workflowRunId,
+    requestId: input.requestId,
+    traceId: input.traceId,
+    traceparent: input.traceparent,
+    parentEventId: input.parentEventId,
     payload: input.payload
   };
 }
 
+export function traceContextFromEvent(
+  event: Pick<EventEnvelope, "eventId" | "requestId" | "traceId" | "traceparent">
+): Pick<CreateEventInput<Record<string, unknown>>, "requestId" | "traceId" | "traceparent" | "parentEventId"> {
+  return {
+    requestId: event.requestId,
+    traceId: event.traceId,
+    traceparent: event.traceparent,
+    parentEventId: event.eventId
+  };
+}

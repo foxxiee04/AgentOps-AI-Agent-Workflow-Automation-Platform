@@ -1,6 +1,14 @@
 import { AppShell } from "../../components/app-shell";
-import { StatusPill } from "../../components/status-pill";
-import { apiUrl, fallbackHealth, safeApiGet, type HealthReady } from "../../lib/api";
+import { StatusPill, type StatusPillTone } from "../../components/status-pill";
+import {
+  apiUrl,
+  fallbackHealth,
+  fallbackReadiness,
+  safeApiGet,
+  type DashboardReadiness,
+  type HealthReady,
+  type ReadinessStatus
+} from "../../lib/api";
 import { appCopy, resolveLocale, type LocaleSearchParams } from "../../lib/i18n";
 
 const runtimeRows = {
@@ -22,10 +30,20 @@ const runtimeRows = {
   ]
 };
 
+const readinessTone: Record<ReadinessStatus, StatusPillTone> = {
+  ready: "success",
+  warning: "warning",
+  blocked: "danger",
+  planned: "info"
+};
+
 export default async function SettingsPage({ searchParams }: { searchParams?: LocaleSearchParams }) {
   const locale = await resolveLocale(searchParams);
   const t = appCopy[locale];
-  const health = await safeApiGet<HealthReady>("/health/ready", fallbackHealth);
+  const [health, readiness] = await Promise.all([
+    safeApiGet<HealthReady>("/health/ready", fallbackHealth),
+    safeApiGet<DashboardReadiness>("/dashboard/readiness", fallbackReadiness)
+  ]);
   const dependencyRows = Object.entries(health.data.details ?? health.data.info ?? health.data.error ?? {
     api: { status: health.data.status }
   });
@@ -71,6 +89,33 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="border border-[#ded7cf] bg-white">
+          <div className="border-b border-[#ded7cf] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-bold text-[#171412]">[+] {t.settings.readiness}</h2>
+              <div className="flex flex-wrap gap-2">
+                {(["ready", "warning", "blocked", "planned"] as const).map((status) => (
+                  <StatusPill key={status} tone={readinessTone[status]}>
+                    {status}: {readiness.data.summary[status]}
+                  </StatusPill>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="divide-y divide-[#eee7df] text-sm">
+            {readiness.data.items.map((item) => (
+              <div key={item.id} className="grid gap-3 px-4 py-3 lg:grid-cols-[190px_110px_1fr]">
+                <span className="font-medium text-[#171412]">{item.label}</span>
+                <StatusPill tone={readinessTone[item.status]}>{item.status}</StatusPill>
+                <div>
+                  <p className="text-[#3b332e]">{item.summary}</p>
+                  <p className="mt-1 text-[#5f5750]">[ ] {item.action}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 

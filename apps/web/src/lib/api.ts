@@ -18,6 +18,22 @@ export type DashboardOverview = {
   aiTokensUsed: number;
 };
 
+export type ReadinessStatus = "ready" | "warning" | "blocked" | "planned";
+
+export type DashboardReadiness = {
+  generatedAt: string;
+  workspaceId: string;
+  summary: Record<ReadinessStatus, number>;
+  items: Array<{
+    id: string;
+    label: string;
+    status: ReadinessStatus;
+    summary: string;
+    action: string;
+  }>;
+  nextActions: string[];
+};
+
 export type WorkflowView = {
   id: string;
   workspaceId: string;
@@ -158,6 +174,60 @@ export const fallbackOverview: DashboardOverview = {
   runsToday: 0,
   failedRuns: 0,
   aiTokensUsed: 0
+};
+
+export const fallbackReadiness: DashboardReadiness = {
+  generatedAt: "2026-06-07T00:00:00.000Z",
+  workspaceId: "ws_demo",
+  summary: {
+    ready: 1,
+    warning: 4,
+    blocked: 0,
+    planned: 0
+  },
+  items: [
+    {
+      id: "workflow-publishing",
+      label: "Workflow publishing",
+      status: "warning",
+      summary: "No active workflow is available for live demo runs yet.",
+      action: "Publish the lead qualification workflow and run it once from the Workflows screen."
+    },
+    {
+      id: "event-pipeline",
+      label: "Event pipeline",
+      status: "warning",
+      summary: "No recent domain events have been recorded in memory.",
+      action: "Trigger a workflow run to verify Kafka event publishing and worker logs."
+    },
+    {
+      id: "ai-provider",
+      label: "AI provider",
+      status: "warning",
+      summary: "Only the mock AI provider is ready; real provider execution is not configured.",
+      action: "Set OPENAI_API_KEY or GEMINI_API_KEY when moving beyond mock lead scoring."
+    },
+    {
+      id: "observability",
+      label: "Observability",
+      status: "warning",
+      summary: "OpenTelemetry export is disabled.",
+      action: "Set OTEL_ENABLED=true and OTEL_EXPORTER_OTLP_TRACES_ENDPOINT for local Tempo traces."
+    },
+    {
+      id: "production-secrets",
+      label: "Production secrets",
+      status: "ready",
+      summary: "Fallback mode cannot inspect local JWT secrets.",
+      action: "Start the API to inspect runtime secret readiness."
+    }
+  ],
+  nextActions: [
+    "Publish the lead qualification workflow and run it once from the Workflows screen.",
+    "Trigger a workflow run to verify Kafka event publishing and worker logs.",
+    "Set OPENAI_API_KEY or GEMINI_API_KEY when moving beyond mock lead scoring.",
+    "Set OTEL_ENABLED=true and OTEL_EXPORTER_OTLP_TRACES_ENDPOINT for local Tempo traces."
+  ]
 };
 
 export const fallbackRuns: WorkflowRunView[] = [

@@ -45,6 +45,10 @@ Override with `KAFKA_BROKERS`, `KAFKA_TOPIC_PARTITIONS`, or `KAFKA_TOPIC_REPLICA
   "workspaceId": "ws_001",
   "workflowId": "wf_001",
   "workflowRunId": "run_001",
+  "requestId": "req_123",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "parentEventId": "evt_parent",
   "timestamp": "2026-06-06T10:00:00Z",
   "payload": {}
 }
@@ -53,7 +57,19 @@ Override with `KAFKA_BROKERS`, `KAFKA_TOPIC_PARTITIONS`, or `KAFKA_TOPIC_REPLICA
 ## Constraints
 
 - Every event must include `eventId`, `type`, `workspaceId`, `workflowRunId`, and `timestamp`.
+- Propagate `requestId`, `traceId`, `traceparent`, and `parentEventId` when an event is caused by another HTTP request or Kafka event.
 - Use `workflowRunId` plus node/task identifiers for idempotency.
 - Retry failed handling up to 3 times before publishing to `dead-letter-events`.
 - Commit consumer offsets only after durable state is written.
 - Store enough event/run context to debug execution without leaking secrets.
+
+## Observability
+
+The API exports Kafka consumer lag on `GET /metrics` as `agentops_kafka_consumer_lag{group_id,topic,partition}` for the main worker consumer groups:
+
+- `agentops.workflow-worker` on `workflow-triggered`.
+- `agentops.ai-worker` on `agent-task-requested`.
+- `agentops.tool-worker` on `tool-call-requested`.
+- `agentops.notification-worker` on `notification-requested`.
+
+Each worker also exposes Prometheus metrics on its local metrics port and creates an OpenTelemetry consumer span around each Kafka message when OTel is enabled. Use `eventId`, `workflowRunId`, `requestId`, `traceId`, and `traceparent` together when debugging a workflow across API logs, Kafka messages, worker logs, and Tempo traces.

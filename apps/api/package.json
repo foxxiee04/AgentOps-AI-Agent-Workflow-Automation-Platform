@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "pnpm --filter './packages/*' build && tsx watch src/main.ts",
+    "dev": "tsx watch src/main.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
     "test": "vitest run",
@@ -15,6 +15,7 @@
     "@agentops/config": "workspace:*",
     "@agentops/database": "workspace:*",
     "@agentops/events": "workspace:*",
+    "@agentops/observability": "workspace:*",
     "@agentops/shared": "workspace:*",
     "@nestjs/common": "^11.1.24",
     "@nestjs/config": "^4.0.4",

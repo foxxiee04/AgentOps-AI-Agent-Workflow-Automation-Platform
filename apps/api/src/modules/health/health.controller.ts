@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Inject } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import {
   HealthCheck,
@@ -15,10 +15,10 @@ import { RedisHealthService } from "../../common/infrastructure/redis-health.ser
 @Controller("health")
 export class HealthController {
   constructor(
-    private readonly health: HealthCheckService,
-    private readonly prisma: PrismaService,
-    private readonly redis: RedisHealthService,
-    private readonly kafka: KafkaAdminService
+    @Inject(HealthCheckService) private readonly health: HealthCheckService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(RedisHealthService) private readonly redis: RedisHealthService,
+    @Inject(KafkaAdminService) private readonly kafka: KafkaAdminService
   ) {}
 
   @Get("live")

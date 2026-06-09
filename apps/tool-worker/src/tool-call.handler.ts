@@ -2,6 +2,7 @@ import {
   createEvent,
   eventEnvelopeSchema,
   kafkaTopics,
+  traceContextFromEvent,
   toolCallRequestedPayloadSchema,
   type EventEnvelope
 } from "@agentops/events";
@@ -19,6 +20,7 @@ export function handleToolCallRequested(rawEvent: unknown): EventEnvelope {
     workspaceId: event.workspaceId,
     workflowId: event.workflowId,
     workflowRunId: event.workflowRunId,
+    ...traceContextFromEvent(event),
     payload: {
       nodeId: payload.nodeId,
       toolCallId: payload.toolCallId,
@@ -38,7 +40,7 @@ function createFailure(event: EventEnvelope, nodeId: string, message: string): E
     workspaceId: event.workspaceId,
     workflowId: event.workflowId,
     workflowRunId: event.workflowRunId,
+    ...traceContextFromEvent(event),
     payload: { nodeId, message }
   });
 }
-

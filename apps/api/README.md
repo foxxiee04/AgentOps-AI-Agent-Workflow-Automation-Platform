@@ -11,6 +11,7 @@
 - Dashboard metrics.
 - AI task test endpoints and usage reporting.
 - Audit logs and notifications.
+- Prometheus metrics and Alertmanager webhook ingestion.
 - Kafka event publishing.
 - Liveness/readiness checks for API, PostgreSQL, Redis, and Kafka.
 
@@ -64,6 +65,9 @@ src/
 
 - auth login/register/me plus Google OAuth start/callback.
 - dashboard overview, workflow runs, usage, errors, and recent activity.
+- operational readiness checklist for workflow, event, AI provider, observability, and production secret configuration.
+- notifications and alert bot webhook ingestion.
+- Prometheus `/metrics` for local observability.
 - workflow list/detail, publish, run, and run step timeline.
 - health readiness for settings and dashboard dependency status.
 - AI provider status, AI usage, and test-agent execution.

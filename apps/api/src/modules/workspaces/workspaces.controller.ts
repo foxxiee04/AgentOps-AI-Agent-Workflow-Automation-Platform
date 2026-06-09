@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { WorkspaceRoleGuard } from "../../common/rbac/workspace-role.guard";
 import { WorkspaceRoles } from "../../common/rbac/workspace-role.decorator";
@@ -9,7 +9,7 @@ import { WorkspacesService } from "./workspaces.service";
 @UseGuards(WorkspaceRoleGuard)
 @Controller("workspaces")
 export class WorkspacesController {
-  constructor(private readonly workspacesService: WorkspacesService) {}
+  constructor(@Inject(WorkspacesService) private readonly workspacesService: WorkspacesService) {}
 
   @Get()
   findAll() {
@@ -49,4 +49,3 @@ export class WorkspacesController {
     return this.workspacesService.updateMemberRole(id, memberId, dto);
   }
 }
-

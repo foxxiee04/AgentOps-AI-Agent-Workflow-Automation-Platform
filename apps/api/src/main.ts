@@ -3,10 +3,12 @@ import helmet from "helmet";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { startOpenTelemetry } from "@agentops/observability";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/http/http-exception.filter";
 
 async function bootstrap() {
+  startOpenTelemetry({ serviceName: "agentops-api", serviceVersion: "0.1.0" });
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const port = Number(process.env.PORT ?? 4000);
 

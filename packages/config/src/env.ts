@@ -13,6 +13,11 @@ export const appEnvSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
+  ALERT_BOT_WEBHOOK_URL: z.string().url().optional(),
+  OTEL_ENABLED: z.enum(["true", "false"]).optional(),
+  OTEL_DEPLOYMENT_ENVIRONMENT: z.string().min(1).optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: z.string().url().optional(),
   WEB_APP_URL: z.string().url().default("http://localhost:3000"),
   API_URL: z.string().url().default("http://localhost:4000")
 });

@@ -1,11 +1,11 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import { CanActivate, ExecutionContext, Inject, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { hasRoleAtLeast, workspaceRoleSchema, type WorkspaceRole } from "@agentops/shared";
 import { WORKSPACE_ROLES_KEY } from "./workspace-role.decorator";
 
 @Injectable()
 export class WorkspaceRoleGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<WorkspaceRole[]>(WORKSPACE_ROLES_KEY, [
@@ -24,4 +24,3 @@ export class WorkspaceRoleGuard implements CanActivate {
     return requiredRoles.some((required) => hasRoleAtLeast(role, required));
   }
 }
-

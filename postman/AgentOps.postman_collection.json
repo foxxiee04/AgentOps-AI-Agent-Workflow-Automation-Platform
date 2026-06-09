@@ -892,6 +892,36 @@
               }
             }
           ]
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/readiness",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "readiness"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Dashboard readiness returns operational checklist', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.workspaceId).to.eql(pm.environment.get('workspaceId'));",
+                  "  pm.expect(json.summary.ready).to.be.a('number');",
+                  "  pm.expect(json.items).to.be.an('array');",
+                  "  pm.expect(json.nextActions).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

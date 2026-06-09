@@ -20,6 +20,7 @@ This document records the current technology choices for AgentOps and notes reco
 | AI provider | OpenAI SDK first | OpenAI 6.42.0 | Structured output support and mature Node SDK. |
 | AI validation | JSON Schema + AJV | AJV 8.20.0 | Validate configurable AI node outputs before workflow continuation. |
 | API health | NestJS Terminus | 11.1.1 | Standard liveness/readiness checks for API, PostgreSQL, Redis, and Kafka. |
+| Local observability | Prometheus + Alertmanager + Grafana + Tempo + OpenTelemetry | Prometheus 3.8.0, Alertmanager 0.29.0, Grafana 13.2.2, Tempo 2.9.0 | Local metrics, alert routing, dashboard provisioning, and opt-in trace collection for API/workers. |
 | Tests | Vitest | 4.1.8 | Fast unit tests for packages, workers, and domain logic. |
 | Logging | Pino/Nest Logger | Pino 10.3.1 | Worker-friendly structured logging. |
 | Security basics | Helmet + Throttler + argon2 | current npm versions | API hardening, rate limiting, password hashing path. |
@@ -42,8 +43,8 @@ Add these when the relevant feature becomes real:
 | Technology | When To Add | Why |
 | --- | --- | --- |
 | Playwright | After core UI flows exist | End-to-end tests for auth, builder, publish, and run history. |
-| OpenTelemetry | When API/workers are wired to Kafka/DB | Correlation across HTTP requests, Kafka events, and workflow runs. |
-| Prometheus client | When Kubernetes deploy starts | Export metrics such as runs, failures, step duration, token usage. |
+| OpenTelemetry auto-instrumentation | When dependency-level spans are needed | The repo already has manual API/worker spans and OTLP export; add auto-instrumentation later for PostgreSQL, Redis, KafkaJS internals, and outbound HTTP. |
+| Prometheus client | When Kubernetes deploy starts | The repo has dependency-free Prometheus text metrics; add a client library only if exemplars, default runtime collectors, or richer registry support are needed. |
 | Testcontainers | When integration tests need real PostgreSQL/Kafka | Reliable local integration tests without hand-managed services. |
 | Sentry or similar | After public demo deployment | Error tracking for frontend and backend. |
 | `@google/generative-ai` | If Gemini is selected as second provider | Keep provider abstraction small and add Gemini only when used. |

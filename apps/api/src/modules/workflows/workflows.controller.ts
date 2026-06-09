@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { WorkspaceRoleGuard } from "../../common/rbac/workspace-role.guard";
 import { WorkspaceRoles } from "../../common/rbac/workspace-role.decorator";
@@ -9,7 +9,7 @@ import { WorkflowsService } from "./workflows.service";
 @UseGuards(WorkspaceRoleGuard)
 @Controller("workflows")
 export class WorkflowsController {
-  constructor(private readonly workflowsService: WorkflowsService) {}
+  constructor(@Inject(WorkflowsService) private readonly workflowsService: WorkflowsService) {}
 
   @Get()
   findAll(@Query("workspaceId") workspaceId?: string) {
@@ -56,4 +56,3 @@ export class WorkflowsController {
     return this.workflowsService.runsForWorkflow(id);
   }
 }
-

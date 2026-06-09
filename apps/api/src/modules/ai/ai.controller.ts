@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AiService } from "./ai.service";
 import { EvaluateAgentDto, TestAgentDto } from "./dto";
@@ -6,7 +6,7 @@ import { EvaluateAgentDto, TestAgentDto } from "./dto";
 @ApiTags("ai")
 @Controller("ai")
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(@Inject(AiService) private readonly aiService: AiService) {}
 
   @Post("test-agent")
   testAgent(@Body() dto: TestAgentDto) {

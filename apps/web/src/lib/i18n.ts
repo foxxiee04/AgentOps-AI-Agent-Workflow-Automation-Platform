@@ -226,6 +226,7 @@ export const appCopy = {
       dataSource: "Nguồn dữ liệu",
       security: "Lớp bảo mật",
       dependencies: "Phụ thuộc",
+      readiness: "Readiness vận hành",
       runtime: "Quyết định runtime"
     },
     builder: {
@@ -375,6 +376,7 @@ export const appCopy = {
       dataSource: "Data source",
       security: "Security layer",
       dependencies: "Dependencies",
+      readiness: "Operational readiness",
       runtime: "Runtime decisions"
     },
     builder: {

@@ -1,47 +1,39 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Inject } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import { DomainEventsService } from "../../common/domain-events/domain-events.service";
-import { WorkflowsService } from "../workflows/workflows.service";
+import { DashboardService } from "./dashboard.service";
 
 @ApiTags("dashboard")
 @Controller("dashboard")
 export class DashboardController {
-  constructor(
-    private readonly workflowsService: WorkflowsService,
-    private readonly eventsService: DomainEventsService
-  ) {}
+  constructor(@Inject(DashboardService) private readonly dashboardService: DashboardService) {}
 
   @Get("overview")
   overview() {
-    const workflows = this.workflowsService.findAll("ws_demo");
-    const runs = this.workflowsService.listRuns();
-    return {
-      activeWorkflows: workflows.filter((workflow) => workflow.status === "ACTIVE").length,
-      totalWorkflows: workflows.length,
-      runsToday: runs.length,
-      failedRuns: runs.filter((run) => run.status === "FAILED").length,
-      aiTokensUsed: 0
-    };
+    return this.dashboardService.overview();
   }
 
   @Get("workflow-runs")
   workflowRuns() {
-    return this.workflowsService.listRuns();
+    return this.dashboardService.workflowRuns();
   }
 
   @Get("usage")
   usage() {
-    return { aiTokensUsed: 0, workflowStepsExecuted: 0, plan: "FREE" };
+    return this.dashboardService.usage();
   }
 
   @Get("errors")
   errors() {
-    return [];
+    return this.dashboardService.errors();
   }
 
   @Get("recent-activity")
   recentActivity() {
-    return this.eventsService.listRecent();
+    return this.dashboardService.recentActivity();
+  }
+
+  @Get("readiness")
+  readiness() {
+    return this.dashboardService.readiness();
   }
 }
-

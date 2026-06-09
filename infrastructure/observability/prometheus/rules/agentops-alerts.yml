@@ -1,0 +1,107 @@
+groups:
+  - name: agentops-api
+    rules:
+      - alert: AgentOpsApiDown
+        expr: up{job="agentops-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: AgentOps API is down
+          description: Prometheus cannot scrape the AgentOps API /metrics endpoint for more than 1 minute.
+
+      - alert: AgentOpsApiHighErrorRate
+        expr: |
+          (
+            sum(rate(agentops_http_requests_total{job="agentops-api",status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(agentops_http_requests_total{job="agentops-api"}[5m])), 1)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: AgentOps API 5xx rate is above 5%
+          description: More than 5% of API requests have returned 5xx responses over the last 5 minutes.
+
+      - alert: AgentOpsApiHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(agentops_http_request_duration_seconds_bucket{job="agentops-api"}[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: AgentOps API p95 latency is high
+          description: API p95 latency is above 1 second for more than 5 minutes.
+
+      - alert: AgentOpsApiProcessMemoryHigh
+        expr: agentops_api_process_resident_memory_bytes{job="agentops-api"} > 400000000
+        for: 10m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: AgentOps API memory usage is high
+          description: API resident memory is above 400 MB for more than 10 minutes.
+
+  - name: agentops-alert-bot
+    rules:
+      - alert: AgentOpsAlertBotInactive
+        expr: absent(agentops_alertmanager_notifications_total{job="agentops-api"})
+        for: 10m
+        labels:
+          severity: info
+          service: alert-bot
+        annotations:
+          summary: AgentOps alert bot has not received alerts yet
+          description: The alert bot metric is absent. Trigger a test alert or verify /notifications/alertmanager is reachable.
+
+  - name: agentops-workers
+    rules:
+      - alert: AgentOpsWorkerDown
+        expr: up{job="agentops-workers"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: AgentOps worker metrics endpoint is down
+          description: Prometheus cannot scrape worker metrics for {{ $labels.service }} for more than 2 minutes.
+
+      - alert: AgentOpsWorkerErrors
+        expr: sum(rate(agentops_worker_errors_total[5m])) by (worker) > 0
+        for: 2m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: AgentOps worker is reporting errors
+          description: Worker {{ $labels.worker }} has recorded Kafka processing errors in the last 5 minutes.
+
+      - alert: AgentOpsWorkerNoMessages
+        expr: time() - agentops_worker_last_message_timestamp_seconds > 900
+        for: 5m
+        labels:
+          severity: info
+          component: worker
+        annotations:
+          summary: AgentOps worker has not consumed messages recently
+          description: Worker {{ $labels.worker }} has not consumed messages from {{ $labels.topic }} for more than 15 minutes.
+
+  - name: agentops-kafka
+    rules:
+      - alert: AgentOpsKafkaConsumerLagHigh
+        expr: sum(agentops_kafka_consumer_lag) by (group_id, topic) > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: AgentOps Kafka consumer lag is high
+          description: Consumer group {{ $labels.group_id }} has more than 100 pending messages on topic {{ $labels.topic }}.

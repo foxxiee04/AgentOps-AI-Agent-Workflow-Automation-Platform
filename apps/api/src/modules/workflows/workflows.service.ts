@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
   sampleLeadWorkflowDefinition,
@@ -9,6 +9,7 @@ import {
 } from "@agentops/shared";
 import { kafkaTopics } from "@agentops/events";
 import { DomainEventsService } from "../../common/domain-events/domain-events.service";
+import { workflowRunsTotal } from "../../common/metrics/api-metrics";
 import type { CreateWorkflowDto, RunWorkflowDto, UpdateWorkflowDto } from "./dto";
 
 type WorkflowRecord = {
@@ -72,7 +73,7 @@ export class WorkflowsService {
   private readonly versions: WorkflowVersionRecord[] = [];
   private readonly runs: WorkflowRunRecord[] = [];
 
-  constructor(private readonly events: DomainEventsService) {}
+  constructor(@Inject(DomainEventsService) private readonly events: DomainEventsService) {}
 
   findAll(workspaceId?: string) {
     return workspaceId ? this.workflows.filter((workflow) => workflow.workspaceId === workspaceId) : this.workflows;
@@ -182,6 +183,11 @@ export class WorkflowsService {
 
     run.eventId = event.eventId;
     this.runs.push(run);
+    workflowRunsTotal.inc({
+      workspace_id: run.workspaceId,
+      workflow_id: run.workflowId,
+      trigger_type: run.triggerType
+    });
     return { run, event };
   }
 
