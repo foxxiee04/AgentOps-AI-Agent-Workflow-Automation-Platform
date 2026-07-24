@@ -34,7 +34,7 @@ export default async function RunsPage({ searchParams }: { searchParams?: Locale
             <p className="text-sm font-semibold uppercase text-[#6b625a]">{t.runs.eyebrow}</p>
             <h1 className="mt-1 text-3xl font-bold leading-tight text-[#171412]">{t.runs.title}</h1>
           </div>
-          <Link href={`/workflows/wf_lead_qualification/builder?lang=${locale}`} className="rounded-[4px] bg-[#1d1a18] px-4 py-2 text-sm font-semibold text-[#ffffff]">
+          <Link href={`/workflows/wf_lead_qualification/builder?lang=${locale}`} className="rounded-[8px] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">
             {t.runs.openBuilder}
           </Link>
         </div>
@@ -45,7 +45,7 @@ export default async function RunsPage({ searchParams }: { searchParams?: Locale
           </div>
         ) : null}
 
-        <section className="border border-[#ded7cf] bg-white">
+        <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
               <thead className="text-xs uppercase text-[#6b625a]">

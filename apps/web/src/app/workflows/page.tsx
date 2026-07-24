@@ -25,7 +25,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
             <p className="text-sm font-semibold uppercase text-[#6b625a]">{t.workflows.eyebrow}</p>
             <h1 className="mt-1 text-3xl font-bold leading-tight text-[#171412]">{t.workflows.title}</h1>
           </div>
-          <Link href={`/workflows/wf_lead_qualification/builder?lang=${locale}`} className="rounded-[4px] bg-[#1d1a18] px-4 py-2 text-sm font-semibold text-[#ffffff]">
+          <Link href={`/workflows/wf_lead_qualification/builder?lang=${locale}`} className="rounded-[8px] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">
             {t.workflows.newWorkflow}
           </Link>
         </div>
@@ -36,7 +36,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
           </div>
         ) : null}
 
-        <div className="divide-y divide-[#eee7df] border border-[#ded7cf] bg-white">
+        <div className="divide-y divide-[#eef2f8] rounded-[8px] border border-[var(--hairline)] bg-white">
           {workflows.data.map((workflow) => (
             <article key={workflow.id} className="bg-white px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -56,7 +56,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
                 <div className="flex flex-wrap gap-2">
                   <Link
                     href={`/workflows/${workflow.id}/builder?lang=${locale}`}
-                    className="inline-flex min-h-9 items-center rounded-[4px] border border-[#8f8379] bg-white px-3 text-sm font-semibold text-[#1c1917]"
+                    className="inline-flex min-h-9 items-center rounded-[8px] border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink)]"
                   >
                     {t.common.builder}
                   </Link>

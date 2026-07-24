@@ -1,0 +1,168 @@
+name: agentops-local
+
+x-api-build: &api-build
+  context: .
+  dockerfile: infrastructure/docker/api.Dockerfile
+
+x-web-build: &web-build
+  context: .
+  dockerfile: infrastructure/docker/web.Dockerfile
+  args:
+    NEXT_PUBLIC_API_URL: http://localhost:4000
+
+x-worker-env: &worker-env
+  NODE_ENV: production
+  KAFKA_BROKERS: kafka:9092
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
+
+x-api-env: &api-env
+  NODE_ENV: production
+  PORT: "4000"
+  DATABASE_URL: postgresql://agentops:agentops@postgres:5432/agentops
+  REDIS_URL: redis://redis:6379
+  KAFKA_BROKERS: kafka:9092
+  JWT_ACCESS_SECRET: local-docker-access-secret
+  JWT_REFRESH_SECRET: local-docker-refresh-secret
+  WEB_APP_URL: http://localhost:3000
+  API_URL: http://localhost:4000
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
+
+services:
+  setup:
+    image: agentops/api:local
+    build: *api-build
+    container_name: agentops-local-setup
+    command: sh -c "pnpm db:push && pnpm kafka:bootstrap"
+    environment: *api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - agentops-local-net
+
+  api:
+    image: agentops/api:local
+    build: *api-build
+    container_name: agentops-local-api
+    environment: *api-env
+    ports:
+      - "4000:4000"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - agentops-local-net
+
+  web:
+    image: agentops/web:local
+    build: *web-build
+    container_name: agentops-local-web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      API_INTERNAL_URL: http://api:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - agentops-local-net
+
+  workflow-worker:
+    image: agentops/workflow-worker:local
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+      args:
+        WORKER_PACKAGE: "@agentops/workflow-worker"
+        WORKER_MAIN: apps/workflow-worker/dist/main.js
+    container_name: agentops-local-workflow-worker
+    environment:
+      <<: *worker-env
+      WORKFLOW_WORKER_METRICS_PORT: "4101"
+    ports:
+      - "4101:4101"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    networks:
+      - agentops-local-net
+
+  ai-worker:
+    image: agentops/ai-worker:local
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+      args:
+        WORKER_PACKAGE: "@agentops/ai-worker"
+        WORKER_MAIN: apps/ai-worker/dist/main.js
+    container_name: agentops-local-ai-worker
+    environment:
+      <<: *worker-env
+      AI_WORKER_METRICS_PORT: "4102"
+    ports:
+      - "4102:4102"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    networks:
+      - agentops-local-net
+
+  tool-worker:
+    image: agentops/tool-worker:local
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+      args:
+        WORKER_PACKAGE: "@agentops/tool-worker"
+        WORKER_MAIN: apps/tool-worker/dist/main.js
+    container_name: agentops-local-tool-worker
+    environment:
+      <<: *worker-env
+      TOOL_WORKER_METRICS_PORT: "4103"
+    ports:
+      - "4103:4103"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    networks:
+      - agentops-local-net
+
+  notification-worker:
+    image: agentops/notification-worker:local
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+      args:
+        WORKER_PACKAGE: "@agentops/notification-worker"
+        WORKER_MAIN: apps/notification-worker/dist/main.js
+    container_name: agentops-local-notification-worker
+    environment:
+      <<: *worker-env
+      NOTIFICATION_WORKER_METRICS_PORT: "4104"
+    ports:
+      - "4104:4104"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    networks:
+      - agentops-local-net

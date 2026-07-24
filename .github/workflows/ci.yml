@@ -6,25 +6,32 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.2
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: "22"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 11.5.2
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck
@@ -35,3 +42,22 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Validate Docker Compose
+        run: pnpm compose:apps:config
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build API image
+        run: docker build -f infrastructure/docker/api.Dockerfile -t agentops/api:ci .
+
+      - name: Build Web image
+        run: docker build -f infrastructure/docker/web.Dockerfile -t agentops/web:ci .
+
+      - name: Build Workflow Worker image
+        run: docker build -f infrastructure/docker/worker.Dockerfile --build-arg WORKER_PACKAGE=@agentops/workflow-worker --build-arg WORKER_MAIN=apps/workflow-worker/dist/main.js -t agentops/workflow-worker:ci .

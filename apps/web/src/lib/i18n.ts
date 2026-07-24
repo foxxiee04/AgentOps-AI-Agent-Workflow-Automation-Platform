@@ -30,7 +30,14 @@ export const landingCopy = {
       "Thiết kế, chạy và giám sát quy trình AI với workflow builder, backend NestJS, Kafka workers, PostgreSQL, Redis và hạ tầng sẵn sàng triển khai AWS/Kubernetes.",
     primaryCta: "Mở bảng điều khiển",
     secondaryCta: "Xem workflow mẫu",
+    workflowPreviewLabel: "Workflow runtime",
+    workflowPreviewStatus: "Đã sẵn sàng local",
     terminalTitle: "Luồng demo lead qualification",
+    problemLabel: "Áp dụng vào bài toán",
+    problemTitle: "Từ yêu cầu rời rạc thành quy trình có thể đo lường",
+    problemBody:
+      "AgentOps phù hợp với các quy trình cần AI đọc dữ liệu, ra quyết định có cấu trúc, gọi công cụ bên ngoài và lưu lại lịch sử vận hành để đội sản phẩm, sales hoặc support theo dõi.",
+    stackLabel: "Kiến trúc sản phẩm",
     productSection: "Bề mặt sản phẩm",
     stats: [
       ["4", "workers bất đồng bộ"],
@@ -45,6 +52,12 @@ export const landingCopy = {
       ["Điều hành SaaS", "Workspace, RBAC, audit, readiness, usage và guardrails cho prompt."],
       ["Sẵn sàng cloud", "Docker, Kubernetes, Terraform, ECR naming và health checks."]
     ],
+    useCases: [
+      ["Chấm điểm lead", "AI đọc form, tính intent, chọn nhánh và tạo follow-up."],
+      ["Support triage", "Phân loại ticket, đề xuất câu trả lời và chuyển đội phụ trách."],
+      ["Ops monitoring", "Theo dõi run, event, token usage và readiness hạ tầng."]
+    ],
+    flowSignals: ["PostgreSQL persisted", "Kafka event", "Worker-ready"],
     terminalLines: [
       "$ agentops run wf_lead_qualification --trigger manual",
       "> publish workflow-triggered to Kafka",
@@ -71,7 +84,14 @@ export const landingCopy = {
       "Design, run, and monitor AI workflows with a visual builder, NestJS backend, Kafka workers, PostgreSQL, Redis, and AWS/Kubernetes-ready infrastructure.",
     primaryCta: "Open dashboard",
     secondaryCta: "View sample workflow",
+    workflowPreviewLabel: "Workflow runtime",
+    workflowPreviewStatus: "Local stack ready",
     terminalTitle: "Lead qualification demo flow",
+    problemLabel: "Applied use cases",
+    problemTitle: "Turn scattered requests into measurable operations",
+    problemBody:
+      "AgentOps fits workflows where AI reads data, makes structured decisions, calls external tools, and stores run history so product, sales, or support teams can inspect what happened.",
+    stackLabel: "Product architecture",
     productSection: "Product surface",
     stats: [
       ["4", "async workers"],
@@ -86,6 +106,12 @@ export const landingCopy = {
       ["SaaS operations", "Workspace, RBAC, audit, readiness, usage, and prompt guardrails."],
       ["Cloud ready", "Docker, Kubernetes, Terraform, ECR naming, and health checks."]
     ],
+    useCases: [
+      ["Lead scoring", "AI reads a form, scores intent, branches, and creates follow-up."],
+      ["Support triage", "Classify tickets, suggest a response, and route ownership."],
+      ["Ops monitoring", "Track runs, events, token usage, and infrastructure readiness."]
+    ],
+    flowSignals: ["PostgreSQL persisted", "Kafka event", "Worker-ready"],
     terminalLines: [
       "$ agentops run wf_lead_qualification --trigger manual",
       "> publish workflow-triggered to Kafka",

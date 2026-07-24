@@ -31,10 +31,10 @@ export function AuthCallback({ locale, labels }: { locale: Locale; labels: AppCo
   }, [labels.error, locale, router]);
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#fbfaf7] px-4 text-[#1c1917]">
-      <section className="w-full max-w-lg border border-[#ded7cf] bg-white">
-        <div className="border-b border-[#ded7cf] px-4 py-3">
-          <h1 className="text-base font-bold text-[#171412]">[+] {labels.callbackTitle}</h1>
+    <main className="grid min-h-screen place-items-center bg-[var(--canvas)] px-4 text-[var(--ink)]">
+      <section className="w-full max-w-lg rounded-[8px] border border-[var(--hairline)] bg-white">
+        <div className="border-b border-[var(--hairline)] px-4 py-3">
+          <h1 className="text-base font-bold text-[var(--ink-deep)]">[+] {labels.callbackTitle}</h1>
         </div>
         <div className="space-y-3 p-4 text-sm text-[#403a35]">
           <p>{labels.callbackBody}</p>

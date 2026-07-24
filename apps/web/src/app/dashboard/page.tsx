@@ -52,7 +52,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
             <p className="text-sm font-semibold uppercase text-[#6b625a]">{t.dashboard.eyebrow}</p>
             <h1 className="mt-1 text-3xl font-bold leading-tight text-[#171412]">{t.dashboard.title}</h1>
           </div>
-          <Link href={`/workflows/wf_lead_qualification/builder?lang=${locale}`} className="rounded-[4px] bg-[#1d1a18] px-4 py-2 text-sm font-semibold text-[#ffffff]">
+          <Link href={`/workflows/wf_lead_qualification/builder?lang=${locale}`} className="rounded-[8px] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">
             {t.common.openBuilder}
           </Link>
         </div>
@@ -71,7 +71,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="border border-[#ded7cf] bg-white">
+          <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
             <div className="border-b border-[#ded7cf] px-4 py-3">
               <h2 className="text-base font-bold text-[#171412]">[+] {t.dashboard.recentRuns}</h2>
             </div>
@@ -120,7 +120,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
           </div>
 
           <div className="space-y-6">
-            <div className="border border-[#ded7cf] bg-white">
+            <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
               <div className="border-b border-[#ded7cf] px-4 py-3">
                 <h2 className="text-base font-bold text-[#171412]">[+] {t.dashboard.dependencies}</h2>
               </div>
@@ -134,7 +134,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
               </div>
             </div>
 
-            <div className="border border-[#ded7cf] bg-white">
+            <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
               <div className="border-b border-[#ded7cf] px-4 py-3">
                 <h2 className="text-base font-bold text-[#171412]">[+] {t.dashboard.providers}</h2>
               </div>
@@ -155,7 +155,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
           </div>
         </section>
 
-        <section className="border border-[#ded7cf] bg-white">
+        <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
           <div className="border-b border-[#ded7cf] px-4 py-3">
             <h2 className="text-base font-bold text-[#171412]">[+] {t.dashboard.eventStream}</h2>
           </div>

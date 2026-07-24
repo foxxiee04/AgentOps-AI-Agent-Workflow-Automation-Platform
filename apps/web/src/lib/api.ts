@@ -1,6 +1,7 @@
 import type { WorkflowDefinition, WorkflowNodeType, WorkflowRunStatus, WorkflowStatus, WorkflowStepStatus } from "@agentops/shared";
 
 export const apiUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+const serverApiUrl = (process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
 
 export type ApiDataSource = "api" | "fallback";
 
@@ -301,7 +302,7 @@ export const fallbackAiUsage: AiUsage = {
 };
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetch(`${serverApiUrl}${path}`, {
     cache: "no-store"
   });
 

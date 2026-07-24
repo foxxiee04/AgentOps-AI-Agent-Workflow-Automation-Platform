@@ -33,8 +33,8 @@ export default async function AgentsPage({ searchParams }: { searchParams?: Loca
           <MetricCard label={t.agents.tokens} value={usage.data.tokensUsedToday} detail={usage.data.workspaceId} />
         </section>
 
-        <section className="border border-[#ded7cf] bg-white">
-          <div className="border-b border-[#ded7cf] px-4 py-3">
+        <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
+          <div className="border-b border-[var(--hairline)] px-4 py-3">
             <h2 className="text-base font-bold text-[#171412]">[+] {t.agents.providers}</h2>
           </div>
           <div className="divide-y divide-[#eee7df]">

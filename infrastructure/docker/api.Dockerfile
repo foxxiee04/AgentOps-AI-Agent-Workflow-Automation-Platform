@@ -5,19 +5,25 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/workflow-worker/package.json apps/workflow-worker/package.json
+COPY apps/ai-worker/package.json apps/ai-worker/package.json
+COPY apps/tool-worker/package.json apps/tool-worker/package.json
+COPY apps/notification-worker/package.json apps/notification-worker/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/events/package.json packages/events/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/database/package.json packages/database/package.json
+COPY packages/observability/package.json packages/observability/package.json
+COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS builder
 COPY . .
-RUN pnpm --filter @agentops/api build
+RUN pnpm --filter @agentops/api... build
 
 FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=builder /app /app
 EXPOSE 4000
 CMD ["node", "apps/api/dist/main.js"]
-

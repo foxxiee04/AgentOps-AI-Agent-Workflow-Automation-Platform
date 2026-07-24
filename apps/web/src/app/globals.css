@@ -6,23 +6,24 @@
 
 :root {
   color-scheme: light;
-  --canvas: #fbfaf7;
-  --ink: #1c1917;
-  --ink-deep: #171412;
-  --charcoal: #2f2a26;
-  --body: #403a35;
-  --mute: #5f5750;
-  --ash: #9a9898;
-  --surface-soft: #f7f4ef;
-  --surface-card: #f2eee9;
-  --surface-dark: #171412;
-  --surface-dark-elevated: #24201d;
-  --hairline: #ded7cf;
-  --hairline-strong: #8f8379;
-  --accent: #2563eb;
-  --warning: #ff9f0a;
-  --danger: #ff3b30;
-  --success: #30d158;
+  --canvas: #f6f7fb;
+  --ink: #172033;
+  --ink-deep: #0f172a;
+  --charcoal: #253047;
+  --body: #3c465d;
+  --mute: #667085;
+  --ash: #98a2b3;
+  --surface-soft: #eef2f8;
+  --surface-card: #ffffff;
+  --surface-dark: #13213f;
+  --surface-dark-elevated: #1e315c;
+  --hairline: #d8deea;
+  --hairline-strong: #aab4c6;
+  --accent: #2457d6;
+  --accent-soft: #e9efff;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --success: #15803d;
 }
 
 * {
@@ -38,6 +39,11 @@ body {
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.5;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink-deep);
 }
 
 pre,

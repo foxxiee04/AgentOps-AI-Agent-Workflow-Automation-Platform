@@ -59,7 +59,7 @@ export function RunWorkflowButton({
     return (
       <Link
         href={`/runs/${state.message}?lang=${locale}`}
-        className="inline-flex min-h-9 items-center rounded-[4px] bg-[#1d1a18] px-3 text-sm font-semibold text-[#ffffff]"
+        className="inline-flex min-h-9 items-center rounded-[8px] bg-[var(--accent)] px-3 text-sm font-semibold text-white"
       >
         {copy.run} {state.message.slice(0, 12)}
       </Link>
@@ -71,7 +71,7 @@ export function RunWorkflowButton({
       type="button"
       onClick={runWorkflow}
       disabled={state.status === "loading"}
-      className="min-h-9 rounded-[4px] bg-[#1d1a18] px-3 text-sm font-semibold text-[#ffffff] disabled:bg-[#f2eee9] disabled:text-[#9a9898]"
+      className="min-h-9 rounded-[8px] bg-[var(--accent)] px-3 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
       title={state.status === "error" ? state.message : undefined}
     >
       {state.status === "loading" ? copy.running : copy.run}
@@ -98,7 +98,7 @@ export function PublishWorkflowButton({ workflowId, labels = defaultLabels }: { 
       type="button"
       onClick={publishWorkflow}
       disabled={state.status === "loading"}
-      className="min-h-9 rounded-[4px] border border-[#8f8379] bg-white px-3 text-sm font-semibold text-[#1c1917] disabled:border-[#ded7cf] disabled:bg-[#f2eee9] disabled:text-[#9a9898]"
+      className="min-h-9 rounded-[8px] border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink)] disabled:border-[var(--hairline)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
       title={state.status === "error" ? state.message : undefined}
     >
       {state.status === "loading" ? copy.publishing : state.status === "success" ? copy.published : copy.publish}

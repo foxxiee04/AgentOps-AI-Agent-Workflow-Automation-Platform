@@ -67,12 +67,12 @@ export default async function RunDetailPage({
             <p className="mt-1 break-all font-mono text-sm text-[#5f5750]">{run.data.id}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href={`/runs?lang=${locale}`} className="inline-flex min-h-9 items-center rounded-[4px] border border-[#8f8379] bg-white px-3 text-sm font-semibold text-[#1c1917]">
+            <Link href={`/runs?lang=${locale}`} className="inline-flex min-h-9 items-center rounded-[8px] border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink)]">
               {t.runs.backToRuns}
             </Link>
             <Link
               href={`/workflows/${run.data.workflowId}/builder?lang=${locale}`}
-              className="inline-flex min-h-9 items-center rounded-[4px] bg-[#1d1a18] px-3 text-sm font-semibold text-[#ffffff]"
+              className="inline-flex min-h-9 items-center rounded-[8px] bg-[var(--accent)] px-3 text-sm font-semibold text-white"
             >
               {t.runs.openBuilder}
             </Link>
@@ -92,7 +92,7 @@ export default async function RunDetailPage({
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1fr_360px]">
-          <div className="border border-[#ded7cf] bg-white">
+          <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ded7cf] px-4 py-3">
               <h2 className="text-base font-bold text-[#171412]">[+] {t.runs.steps}</h2>
               <StatusPill tone={runStatusTone[run.data.status]}>{run.data.status}</StatusPill>
@@ -116,7 +116,7 @@ export default async function RunDetailPage({
           </div>
 
           <aside className="space-y-6">
-            <div className="border border-[#ded7cf] bg-white">
+            <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
               <div className="border-b border-[#ded7cf] px-4 py-3">
                 <h2 className="text-base font-bold text-[#171412]">[+] {t.runs.workflow}</h2>
               </div>
@@ -130,7 +130,7 @@ export default async function RunDetailPage({
               </div>
             </div>
 
-            <div className="border border-[#ded7cf] bg-white">
+            <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
               <div className="border-b border-[#ded7cf] px-4 py-3">
                 <h2 className="text-base font-bold text-[#171412]">[+] {t.runs.input}</h2>
               </div>

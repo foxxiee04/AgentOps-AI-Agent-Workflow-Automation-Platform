@@ -55,61 +55,61 @@ export function AuthForm({ mode, locale, labels }: { mode: AuthFormMode; locale:
     <div className="mx-auto grid min-h-screen max-w-6xl content-center gap-8 px-4 py-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
       <section>
         <Link href={locale === "vi" ? "/vi" : "/en"} className="inline-flex items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-[4px] bg-[#1d1a18] text-sm font-bold text-[#ffffff]">AO</span>
-          <span className="font-semibold text-[#171412]">AgentOps</span>
+          <span className="grid h-9 w-9 place-items-center rounded-[8px] bg-[var(--accent)] text-sm font-bold text-white">AO</span>
+          <span className="font-semibold text-[var(--ink-deep)]">AgentOps</span>
         </Link>
-        <p className="mt-10 text-sm font-semibold uppercase text-[#6b625a]">
+        <p className="mt-10 text-sm font-semibold uppercase text-[var(--mute)]">
           {mode === "login" ? labels.loginEyebrow : labels.registerEyebrow}
         </p>
-        <h1 className="mt-2 max-w-xl text-4xl font-bold leading-tight text-[#171412]">
+        <h1 className="mt-2 max-w-xl text-4xl font-bold leading-tight text-[var(--ink-deep)]">
           {mode === "login" ? labels.loginTitle : labels.registerTitle}
         </h1>
-        <div className="mt-8 border border-[#171412] bg-[#171412] p-4 font-mono text-sm leading-6 text-[#fdfaf6]">
-          <p>$ agentops auth session --workspace ws_demo</p>
-          <p>&gt; workspace role: OWNER</p>
-          <p>&gt; routes: dashboard workflows runs agents settings</p>
+        <div className="mt-8 rounded-[8px] border border-[var(--hairline)] bg-white p-4 text-sm leading-6 text-[var(--body)]">
+          <p className="font-semibold text-[var(--ink-deep)]">AgentOps workspace session</p>
+          <p className="mt-2">[ok] workspace role: OWNER</p>
+          <p>[ok] routes: dashboard, workflows, runs, agents, settings</p>
           <p>[ok] guarded app surface ready</p>
         </div>
       </section>
 
-      <section className="border border-[#ded7cf] bg-white">
-        <div className="border-b border-[#ded7cf] px-4 py-3">
-          <h2 className="text-base font-bold text-[#171412]">[+] {mode === "login" ? labels.submitLogin : labels.submitRegister}</h2>
+      <section className="rounded-[12px] border border-[var(--hairline)] bg-white">
+        <div className="border-b border-[var(--hairline)] px-4 py-3">
+          <h2 className="text-base font-bold text-[var(--ink-deep)]">[+] {mode === "login" ? labels.submitLogin : labels.submitRegister}</h2>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4 p-4">
           {mode === "register" ? (
-            <label className="block text-sm font-semibold text-[#403a35]">
+            <label className="block text-sm font-semibold text-[var(--body)]">
               {labels.name}
               <input
                 name="name"
                 required
                 minLength={2}
-                className="mt-2 h-11 w-full rounded-[4px] border border-[#d5cec5] bg-[#fbfaf7] px-3 text-[#171412]"
+                className="mt-2 h-11 w-full rounded-[8px] border border-[var(--hairline)] bg-[#fbfcff] px-3 text-[var(--ink-deep)]"
                 autoComplete="name"
               />
             </label>
           ) : null}
 
-          <label className="block text-sm font-semibold text-[#403a35]">
+          <label className="block text-sm font-semibold text-[var(--body)]">
             {labels.email}
             <input
               name="email"
               required
               type="email"
-              className="mt-2 h-11 w-full rounded-[4px] border border-[#d5cec5] bg-[#fbfaf7] px-3 text-[#171412]"
+              className="mt-2 h-11 w-full rounded-[8px] border border-[var(--hairline)] bg-[#fbfcff] px-3 text-[var(--ink-deep)]"
               autoComplete="email"
             />
           </label>
 
-          <label className="block text-sm font-semibold text-[#403a35]">
+          <label className="block text-sm font-semibold text-[var(--body)]">
             {labels.password}
             <input
               name="password"
               required
               type="password"
               minLength={8}
-              className="mt-2 h-11 w-full rounded-[4px] border border-[#d5cec5] bg-[#fbfaf7] px-3 text-[#171412]"
+              className="mt-2 h-11 w-full rounded-[8px] border border-[var(--hairline)] bg-[#fbfcff] px-3 text-[var(--ink-deep)]"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
           </label>
@@ -119,22 +119,22 @@ export function AuthForm({ mode, locale, labels }: { mode: AuthFormMode; locale:
           <button
             type="submit"
             disabled={isSubmitting}
-            className="min-h-11 w-full rounded-[4px] bg-[#1d1a18] px-4 text-sm font-semibold text-[#ffffff] disabled:bg-[#f2eee9] disabled:text-[#9a9898]"
+            className="min-h-11 w-full rounded-[8px] bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
           >
             {isSubmitting ? labels.submitting : mode === "login" ? labels.submitLogin : labels.submitRegister}
           </button>
 
           <a
             href={googleAuthHref(nextPath)}
-            className="flex min-h-11 w-full items-center justify-center rounded-[4px] border border-[#8f8379] bg-white px-4 text-sm font-semibold text-[#1c1917]"
+            className="flex min-h-11 w-full items-center justify-center rounded-[8px] border border-[var(--hairline-strong)] bg-white px-4 text-sm font-semibold text-[var(--ink)]"
           >
             {labels.google}
           </a>
         </form>
 
-        <div className="border-t border-[#ded7cf] px-4 py-3 text-sm text-[#5f5750]">
+        <div className="border-t border-[var(--hairline)] px-4 py-3 text-sm text-[var(--mute)]">
           {mode === "login" ? labels.noAccount : labels.hasAccount}{" "}
-          <Link href={otherHref} className="font-semibold text-[#171412] underline decoration-[#8f8379] underline-offset-4">
+          <Link href={otherHref} className="font-semibold text-[var(--ink-deep)] underline decoration-[var(--hairline-strong)] underline-offset-4">
             {mode === "login" ? labels.createAccount : labels.backToLogin}
           </Link>
         </div>

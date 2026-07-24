@@ -57,8 +57,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
         </div>
 
         <section className="grid gap-6 xl:grid-cols-2">
-          <div className="border border-[#ded7cf] bg-white">
-            <div className="border-b border-[#ded7cf] px-4 py-3">
+          <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
+            <div className="border-b border-[var(--hairline)] px-4 py-3">
               <h2 className="text-base font-bold text-[#171412]">[+] {t.settings.apiBoundary}</h2>
             </div>
             <div className="divide-y divide-[#eee7df] text-sm">
@@ -77,8 +77,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
             </div>
           </div>
 
-          <div className="border border-[#ded7cf] bg-white">
-            <div className="border-b border-[#ded7cf] px-4 py-3">
+          <div className="rounded-[8px] border border-[var(--hairline)] bg-white">
+            <div className="border-b border-[var(--hairline)] px-4 py-3">
               <h2 className="text-base font-bold text-[#171412]">[+] {t.settings.dependencies}</h2>
             </div>
             <div className="divide-y divide-[#eee7df]">
@@ -92,8 +92,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
           </div>
         </section>
 
-        <section className="border border-[#ded7cf] bg-white">
-          <div className="border-b border-[#ded7cf] px-4 py-3">
+        <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
+          <div className="border-b border-[var(--hairline)] px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-base font-bold text-[#171412]">[+] {t.settings.readiness}</h2>
               <div className="flex flex-wrap gap-2">
@@ -119,8 +119,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
           </div>
         </section>
 
-        <section className="border border-[#ded7cf] bg-white">
-          <div className="border-b border-[#ded7cf] px-4 py-3">
+        <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
+          <div className="border-b border-[var(--hairline)] px-4 py-3">
             <h2 className="text-base font-bold text-[#171412]">[+] {t.settings.runtime}</h2>
           </div>
           <div className="divide-y divide-[#eee7df] text-sm">

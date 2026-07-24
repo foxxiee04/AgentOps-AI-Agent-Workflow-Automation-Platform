@@ -16,14 +16,14 @@ export function LanguageSwitcher({ locale }: { locale: Locale }) {
   }
 
   return (
-    <div className="inline-flex rounded-[4px] border border-[#d5cec5] bg-white p-0.5 text-xs font-semibold text-[#4e4742]">
+    <div className="inline-flex rounded-[8px] border border-[var(--hairline)] bg-white p-0.5 text-xs font-semibold text-[var(--body)]">
       {(["vi", "en"] as const).map((item) => (
         <Link
           key={item}
           href={hrefFor(item)}
           className={clsx(
-            "min-h-8 rounded-[3px] px-2.5 py-1.5",
-            locale === item ? "bg-[#1d1a18] text-[#ffffff]" : "text-[#5f5750] hover:bg-[#f2eee9]"
+            "min-h-8 rounded-[7px] px-2.5 py-1.5",
+            locale === item ? "bg-[var(--accent-soft)] text-[#17337a]" : "text-[var(--mute)] hover:bg-[#f8faff]"
           )}
         >
           {item.toUpperCase()}

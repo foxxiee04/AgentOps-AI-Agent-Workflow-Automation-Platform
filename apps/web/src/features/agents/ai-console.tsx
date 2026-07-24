@@ -61,25 +61,25 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
 
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-      <section className="border border-[#ded7cf] bg-white">
-        <div className="border-b border-[#ded7cf] px-4 py-3">
-          <h2 className="text-base font-bold text-[#171412]">[+] {copy.consoleTitle}</h2>
+      <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
+        <div className="border-b border-[var(--hairline)] px-4 py-3">
+          <h2 className="text-base font-bold text-[var(--ink-deep)]">[+] {copy.consoleTitle}</h2>
         </div>
         <div className="space-y-3 p-4">
-          <label className="block text-sm font-semibold text-[#5f5750]" htmlFor="ai-input">
+          <label className="block text-sm font-semibold text-[var(--mute)]" htmlFor="ai-input">
             {copy.inputJson}
           </label>
           <textarea
             id="ai-input"
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            className="min-h-56 w-full rounded-[4px] border border-[#d8d0c7] bg-[#fbfaf7] p-3 font-mono text-sm text-[#171412] outline-none focus:border-[#2563eb] focus:bg-white"
+            className="min-h-56 w-full rounded-[8px] border border-[var(--hairline)] bg-[#fbfcff] p-3 font-mono text-sm text-[var(--ink-deep)] outline-none focus:border-[var(--accent)] focus:bg-white"
           />
           <button
             type="button"
             onClick={testAgent}
             disabled={isLoading}
-            className="min-h-9 rounded-[4px] bg-[#1d1a18] px-4 text-sm font-semibold text-[#ffffff] disabled:bg-[#f2eee9] disabled:text-[#9a9898]"
+            className="min-h-9 rounded-[8px] bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
           >
             {isLoading ? copy.testing : copy.testAgent}
           </button>
@@ -87,9 +87,9 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
         </div>
       </section>
 
-      <section className="border border-[#ded7cf] bg-white">
-        <div className="border-b border-[#ded7cf] px-4 py-3">
-          <h2 className="text-base font-bold text-[#171412]">[+] {copy.outputTitle}</h2>
+      <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
+        <div className="border-b border-[var(--hairline)] px-4 py-3">
+          <h2 className="text-base font-bold text-[var(--ink-deep)]">[+] {copy.outputTitle}</h2>
         </div>
         <div className="p-4">
           {result ? (

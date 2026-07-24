@@ -140,9 +140,9 @@ export function WorkflowBuilder({
   const selectedDefinitionNode = workflow.definition.nodes.find((node) => node.id === selectedNodeId);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
-      <section className="overflow-hidden border border-[#ded7cf] bg-white">
-        <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[#ded7cf] px-4 py-3">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="overflow-hidden rounded-[8px] border border-[var(--hairline)] bg-white">
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] px-4 py-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base font-bold text-[#171412]">{workflow.name}</h1>
@@ -152,14 +152,14 @@ export function WorkflowBuilder({
             <p className="mt-1 text-sm text-[#5f5750]">{workflow.description}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-[4px] border border-[#646262] bg-[#fdfcfc]">
+            <div className="flex rounded-[8px] border border-[var(--hairline-strong)] bg-white p-0.5">
               {(["design", "run-preview"] as const).map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => setMode(item)}
-                  className={`min-h-9 px-3 text-sm font-medium ${
-                    mode === item ? "bg-[#1d1a18] text-[#ffffff]" : "text-[#5f5750]"
+                  className={`min-h-9 rounded-[7px] px-3 text-sm font-medium ${
+                    mode === item ? "bg-[var(--accent-soft)] text-[#17337a]" : "text-[var(--mute)]"
                   }`}
                 >
                   {item === "design" ? copy.builder.design : copy.builder.run}
@@ -181,13 +181,13 @@ export function WorkflowBuilder({
           >
             <Background color="#c7bdb3" />
             <Controls />
-            <MiniMap nodeColor="#1d1a18" maskColor="rgba(251,250,247,0.72)" />
+            <MiniMap nodeColor="#2457d6" maskColor="rgba(246,247,251,0.72)" />
           </ReactFlow>
         </div>
       </section>
 
-      <aside className="border border-[#ded7cf] bg-white">
-        <div className="border-b border-[#ded7cf] px-4 py-3">
+      <aside className="rounded-[8px] border border-[var(--hairline)] bg-white">
+        <div className="border-b border-[var(--hairline)] px-4 py-3">
           <p className="text-xs font-semibold uppercase text-[#6b625a]">{copy.builder.inspector}</p>
           <h2 className="mt-1 text-lg font-bold text-[#171412]">{selectedDefinitionNode ? selectedDefinitionNode.name : copy.builder.workflow}</h2>
         </div>
