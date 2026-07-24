@@ -1,14 +1,12 @@
 # Local Runbook
 
-File này dùng để chạy AgentOps trên máy local và test nhanh các chức năng chính.
-
-Các lệnh bên dưới dùng PowerShell tại thư mục gốc repo:
+File này là bản chạy local ngắn gọn cho AgentOps. Dùng PowerShell tại thư mục gốc repo:
 
 ```powershell
 cd "E:\AgentOps — AI Agent Workflow Automation Platform"
 ```
 
-## 1. Yêu cầu máy
+## 1. Chạy lần đầu
 
 Kiểm tra toolchain:
 
@@ -18,62 +16,63 @@ pnpm --version
 docker --version
 ```
 
-Phiên bản khuyến nghị:
+Yêu cầu khuyến nghị:
 
-| Tool | Version |
-| --- | --- |
-| Node.js | `>=22.0.0` |
-| pnpm | `>=11.0.0` |
-| Docker | Docker Desktop hoặc Docker Engine |
+| Tool    | Version                           |
+| ------- | --------------------------------- |
+| Node.js | `>=22.0.0`                        |
+| pnpm    | `>=11.0.0`                        |
+| Docker  | Docker Desktop hoặc Docker Engine |
 
-## 2. Cấu hình môi trường
-
-Tạo file `.env` từ template:
+Cài dependency và tạo env local:
 
 ```powershell
+pnpm install
 Copy-Item .env.example .env
 ```
 
-Các biến quan trọng:
+Nếu file `.env` đã tồn tại thì bỏ qua lệnh `Copy-Item`.
 
-| Biến | Công dụng | Local default |
-| --- | --- | --- |
-| `DATABASE_URL` | Kết nối PostgreSQL | `postgresql://agentops:agentops@localhost:55432/agentops` |
-| `REDIS_URL` | Kết nối Redis | `redis://localhost:6379` |
-| `KAFKA_BROKERS` | Broker Kafka cho API/worker | `localhost:9094` |
-| `WEB_APP_URL` | URL frontend | `http://localhost:3000` |
-| `API_URL` | URL backend API | `http://localhost:4000` |
-| `NEXT_PUBLIC_API_URL` | API URL cho Next.js client | `http://localhost:4000` |
-| `OPENAI_API_KEY` | Optional, dùng khi test AI provider thật | rỗng |
-| `GEMINI_API_KEY` | Optional, dùng khi test Gemini provider | rỗng |
+## 2. Start Docker Desktop trước
 
-Nếu không có AI key, hệ thống vẫn test được bằng mock/local flow.
+Trước khi chạy bất kỳ lệnh Docker nào, mở Docker Desktop và đợi trạng thái `Running`.
 
-## 3. Start Docker infrastructure
+Kiểm tra Docker daemon:
 
-Chạy toàn bộ local infrastructure:
+```powershell
+docker info
+```
+
+Nếu gặp lỗi kiểu này:
+
+```txt
+open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified
+```
+
+thì Docker Desktop chưa chạy, Linux engine chưa sẵn sàng, hoặc Docker Desktop đang lỗi. Cách xử lý nhanh:
+
+```powershell
+# 1. Mở Docker Desktop bằng Start Menu
+# 2. Đợi Docker báo Running
+docker info
+```
+
+Lỗi `unable to get image 'grafana/grafana:12.2.0'` kèm pipe `dockerDesktopLinuxEngine` không phải lỗi Grafana. Đây là lỗi Docker daemon chưa chạy.
+
+## 3. Start hạ tầng local
+
+Chạy PostgreSQL, Redis, Kafka, Prometheus, Grafana, Alertmanager, Tempo và chuẩn bị database/Kafka topics:
+
+```powershell
+pnpm local:up
+```
+
+Lệnh trên tương đương:
 
 ```powershell
 pnpm compose:up
+pnpm local:setup
 ```
-
-Lệnh này tương đương:
-
-```powershell
-docker compose up -d
-```
-
-Các service được bật:
-
-| Service | URL/Port | Công dụng |
-| --- | --- | --- |
-| PostgreSQL | `localhost:55432` | Database chính |
-| Redis | `localhost:6379` | Cache/status/rate-limit |
-| Kafka | `localhost:9094` | Event queue cho workflow/worker |
-| Prometheus | `http://localhost:9090` | Metrics |
-| Grafana | `http://localhost:3001` | Dashboard, login `agentops` / `agentops` |
-| Alertmanager | `http://localhost:9093` | Alert routing |
-| Tempo | `http://localhost:3200` | Trace backend |
 
 Kiểm tra container:
 
@@ -81,160 +80,91 @@ Kiểm tra container:
 docker compose ps
 ```
 
-Nếu chỉ muốn chạy phần bắt buộc cho app, dùng:
+Nếu chỉ muốn bật hạ tầng bắt buộc cho app:
 
 ```powershell
 docker compose up -d postgres redis kafka
+pnpm local:setup
 ```
 
-## 4. Sync database và Kafka topics
+## 4. Start hệ thống
 
-Đẩy Prisma schema vào PostgreSQL local:
-
-```powershell
-pnpm db:push
-```
-
-Tạo Kafka topics nếu thiếu:
-
-```powershell
-pnpm kafka:bootstrap
-```
-
-Kết quả Kafka bootstrap mong muốn:
-
-```txt
-totalConfigured: 13
-```
-
-## 5. Start backend, frontend, workers
-
-Trước khi start dev stack, kiểm tra các port app có đang bị process cũ giữ không:
-
-```powershell
-Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-  Where-Object { $_.LocalPort -in 3000,4000,4101,4102,4103,4104 }
-```
-
-Nếu command trên có kết quả, nghĩa là app hoặc worker đang chạy rồi. Không chạy thêm dev stack thứ hai trên cùng port; mở URL để test luôn hoặc stop terminal cũ bằng `Ctrl+C`.
-
-### Cách 1: chạy toàn bộ dev stack
-
-Do repo có nhiều persistent dev tasks, dùng concurrency rõ ràng:
+Chạy toàn bộ app ở chế độ dev:
 
 ```powershell
 pnpm dev
 ```
 
-Lệnh này chạy:
+Lệnh này chạy frontend, backend, workers và các package shared ở watch mode.
 
-| Package | Vai trò |
-| --- | --- |
-| `@agentops/web` | Frontend Next.js tại `http://localhost:3000` |
-| `@agentops/api` | Backend NestJS tại `http://localhost:4000` |
-| `@agentops/workflow-worker` | Consume `workflow-triggered` |
-| `@agentops/ai-worker` | Consume `agent-task-requested` |
-| `@agentops/tool-worker` | Consume `tool-call-requested` |
-| `@agentops/notification-worker` | Consume `notification-requested` |
-| `packages/*` | Shared packages ở watch mode |
+URL chính:
 
-### Cách 2: chạy từng phần
+| Mục         | URL                                  |
+| ----------- | ------------------------------------ |
+| Web app     | `http://localhost:3000`              |
+| API Swagger | `http://localhost:4000/docs`         |
+| API live    | `http://localhost:4000/health/live`  |
+| API ready   | `http://localhost:4000/health/ready` |
+| Grafana     | `http://localhost:3001`              |
+| Prometheus  | `http://localhost:9090`              |
 
-Nếu chạy từng phần thay vì `pnpm dev`, build shared packages một lần trước:
+## 5. Start từng phần
 
-```powershell
-pnpm build:packages
-```
+Mỗi lệnh dưới đây chạy ở một terminal riêng. Trước đó cần chạy `pnpm local:up` ít nhất một lần.
 
-Backend API:
+Backend:
 
 ```powershell
-pnpm --filter @agentops/api dev
+pnpm dev:api
 ```
 
-Frontend web:
+Frontend:
 
 ```powershell
-pnpm --filter @agentops/web dev
+pnpm dev:web
 ```
 
-Workflow worker:
+Workers:
+
+```powershell
+pnpm dev:workers
+```
+
+Nếu cần chạy worker riêng:
 
 ```powershell
 pnpm --filter @agentops/workflow-worker dev
-```
-
-AI worker:
-
-```powershell
 pnpm --filter @agentops/ai-worker dev
-```
-
-Tool worker:
-
-```powershell
 pnpm --filter @agentops/tool-worker dev
-```
-
-Notification worker:
-
-```powershell
 pnpm --filter @agentops/notification-worker dev
 ```
 
-## 6. URL để test thủ công
+## 6. Test commands
 
-| Mục | URL |
-| --- | --- |
-| Web app | `http://localhost:3000` |
-| API Swagger | `http://localhost:4000/docs` |
-| API liveness | `http://localhost:4000/health/live` |
-| API readiness | `http://localhost:4000/health/ready` |
-| API metrics | `http://localhost:4000/metrics` |
-| Workflow worker metrics | `http://localhost:4101/metrics` |
-| AI worker metrics | `http://localhost:4102/metrics` |
-| Tool worker metrics | `http://localhost:4103/metrics` |
-| Notification worker metrics | `http://localhost:4104/metrics` |
-| Grafana | `http://localhost:3001` |
-| Prometheus | `http://localhost:9090` |
-
-## 7. Test commands
-
-Chạy typecheck toàn repo:
+Kiểm tra type:
 
 ```powershell
 pnpm typecheck
 ```
 
-Chạy unit tests toàn repo:
+Chạy toàn bộ unit tests:
 
 ```powershell
 pnpm test
 ```
 
-Build toàn repo:
+Chạy test theo nhóm:
 
 ```powershell
-pnpm build
-```
-
-Chạy test cho từng package:
-
-```powershell
-pnpm --filter @agentops/api test
-pnpm --filter @agentops/web test
-pnpm --filter @agentops/events test
-pnpm --filter @agentops/config test
-pnpm --filter @agentops/workflow-worker test
-pnpm --filter @agentops/ai-worker test
-pnpm --filter @agentops/tool-worker test
-pnpm --filter @agentops/notification-worker test
+pnpm test:api
+pnpm test:web
+pnpm test:workers
 ```
 
 Chạy Playwright e2e cho frontend:
 
 ```powershell
-pnpm --filter @agentops/web test:e2e
+pnpm test:e2e
 ```
 
 Nếu Playwright chưa có browser binary:
@@ -243,26 +173,18 @@ Nếu Playwright chưa có browser binary:
 pnpm exec playwright install
 ```
 
-## 8. Smoke test cases
+## 7. Smoke test nhanh
 
-### TC-01: Docker services chạy đủ
-
-Command:
+### TC-01: Docker chạy được
 
 ```powershell
+docker info
 docker compose ps
 ```
 
-Expected:
-
-```txt
-postgres, redis, kafka healthy
-prometheus, grafana, alertmanager, tempo up
-```
+Expected: không còn lỗi pipe `dockerDesktopLinuxEngine`; `postgres`, `redis`, `kafka` healthy hoặc running.
 
 ### TC-02: API live
-
-Command:
 
 ```powershell
 Invoke-RestMethod http://localhost:4000/health/live
@@ -276,36 +198,15 @@ Expected:
 }
 ```
 
-### TC-03: API ready với PostgreSQL, Redis, Kafka
-
-Command:
+### TC-03: API ready
 
 ```powershell
 Invoke-RestMethod http://localhost:4000/health/ready
 ```
 
-Expected:
-
-```json
-{
-  "status": "ok",
-  "details": {
-    "postgres": {
-      "status": "up"
-    },
-    "redis": {
-      "status": "up"
-    },
-    "kafka": {
-      "status": "up"
-    }
-  }
-}
-```
+Expected: `postgres`, `redis`, `kafka` đều `up`.
 
 ### TC-04: Frontend load được
-
-Command:
 
 ```powershell
 (Invoke-WebRequest -UseBasicParsing http://localhost:3000).StatusCode
@@ -317,9 +218,7 @@ Expected:
 200
 ```
 
-### TC-05: Register user mock
-
-Command:
+### TC-05: Register user local
 
 ```powershell
 $body = @{
@@ -337,15 +236,9 @@ $session = Invoke-RestMethod `
 $session
 ```
 
-Expected:
+Expected: response có `user`, `accessToken`, `refreshToken`.
 
-```txt
-response có user, accessToken, refreshToken
-```
-
-### TC-06: Lấy current user từ token
-
-Command:
+### TC-06: Lấy current user
 
 ```powershell
 Invoke-RestMethod `
@@ -353,50 +246,24 @@ Invoke-RestMethod `
   -Headers @{ Authorization = "Bearer $($session.accessToken)" }
 ```
 
-Expected:
-
-```txt
-email = demo+local@agentops.local
-name = Local Demo
-```
+Expected: email là `demo+local@agentops.local`.
 
 ### TC-07: List workflows
-
-Command:
 
 ```powershell
 Invoke-RestMethod http://localhost:4000/workflows
 ```
 
-Expected:
+Expected: có workflow demo `wf_lead_qualification`.
 
-```txt
-có workflow demo wf_lead_qualification
-```
-
-### TC-08: Publish workflow demo
-
-Command:
+### TC-08: Publish và run workflow demo
 
 ```powershell
 Invoke-RestMethod `
   -Method Post `
   -Uri http://localhost:4000/workflows/wf_lead_qualification/publish `
   -Headers @{ "x-workspace-role" = "ADMIN" }
-```
 
-Expected:
-
-```txt
-workflow.status = ACTIVE
-version.versionNumber >= 1
-```
-
-### TC-09: Run workflow demo
-
-Command:
-
-```powershell
 $runBody = @{
   triggerType = "manual"
   input = @{
@@ -419,60 +286,9 @@ $runResult = Invoke-RestMethod `
 $runResult
 ```
 
-Expected:
+Expected: `run.status = PENDING` và event type là `workflow-triggered`.
 
-```txt
-run.status = PENDING
-event.type = workflow-triggered
-event.workflowRunId = run.id
-```
-
-### TC-10: Xem run steps
-
-Command:
-
-```powershell
-Invoke-RestMethod "http://localhost:4000/workflow-runs/$($runResult.run.id)/steps"
-```
-
-Expected:
-
-```txt
-steps có danh sách node của workflow
-node đầu tiên COMPLETED hoặc workflow trigger accepted
-```
-
-### TC-11: Test AI agent mock
-
-Command:
-
-```powershell
-$aiBody = @{
-  modelProvider = "mock"
-  input = @{
-    lead = "Founder dang tim automation cho CRM"
-  }
-  config = @{
-    task = "score-lead"
-  }
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:4000/ai/test-agent `
-  -ContentType "application/json" `
-  -Body $aiBody
-```
-
-Expected:
-
-```txt
-response có output mock/structured result
-```
-
-### TC-12: Metrics endpoints
-
-Command:
+### TC-09: Metrics
 
 ```powershell
 (Invoke-WebRequest -UseBasicParsing http://localhost:4000/metrics).StatusCode
@@ -482,30 +298,11 @@ Command:
 (Invoke-WebRequest -UseBasicParsing http://localhost:4104/metrics).StatusCode
 ```
 
-Expected:
+Expected: tất cả trả `200` khi backend và workers đang chạy.
 
-```txt
-tất cả trả 200
-```
+## 8. Stop hệ thống
 
-### TC-13: Grafana và Prometheus
-
-Command:
-
-```powershell
-(Invoke-WebRequest -UseBasicParsing http://localhost:3001).StatusCode
-(Invoke-WebRequest -UseBasicParsing http://localhost:9090).StatusCode
-```
-
-Expected:
-
-```txt
-tất cả trả 200
-```
-
-## 9. Stop hệ thống
-
-Stop dev process bằng `Ctrl+C` trong terminal đang chạy `turbo`.
+Stop dev process bằng `Ctrl+C` trong terminal đang chạy `pnpm dev`, `pnpm dev:api`, `pnpm dev:web`, hoặc `pnpm dev:workers`.
 
 Stop Docker containers nhưng giữ data volumes:
 
@@ -513,42 +310,24 @@ Stop Docker containers nhưng giữ data volumes:
 pnpm compose:down
 ```
 
-Xóa cả containers và local volumes của AgentOps:
+Reset sạch local data:
 
 ```powershell
 docker compose down -v
 ```
 
-Chỉ dùng `down -v` khi muốn reset sạch PostgreSQL, Kafka, Redis, Grafana, Prometheus local data.
+Chỉ dùng `down -v` khi muốn xóa PostgreSQL, Kafka, Redis, Grafana, Prometheus local data.
 
-## 10. Troubleshooting nhanh
+## 9. Troubleshooting nhanh
 
-Nếu cần chạy Turbo trực tiếp, dùng:
-
-```powershell
-pnpm exec turbo run dev --concurrency=13
-```
-
-Nếu Next.js báo `EADDRINUSE: address already in use :::3000`, nghĩa là frontend đang chạy sẵn trên port `3000`. Kiểm tra process giữ port:
+Kiểm tra port app đang bị chiếm:
 
 ```powershell
 Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-  Where-Object { $_.LocalPort -eq 3000 } |
-  Select-Object LocalAddress,LocalPort,OwningProcess
+  Where-Object { $_.LocalPort -in 3000,4000,4101,4102,4103,4104 }
 ```
 
-Nếu đó là terminal dev cũ, stop terminal đó bằng `Ctrl+C`. Nếu là process nền bị kẹt trong repo này, dừng các Node dev process của AgentOps:
-
-```powershell
-$procs = Get-CimInstance Win32_Process |
-  Where-Object {
-    $_.Name -eq "node.exe" -and
-    $_.CommandLine -like "*AgentOps*Workflow*Automation*Platform*"
-  }
-
-$procs | Select-Object ProcessId,Name,CommandLine
-$procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-```
+Nếu port đã có process cũ, stop terminal dev cũ bằng `Ctrl+C`.
 
 Nếu API readiness báo Kafka down:
 
@@ -564,17 +343,9 @@ docker compose ps postgres
 pnpm db:push
 ```
 
-Nếu port bị chiếm:
-
-```powershell
-Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 3000,4000,4101,4102,4103,4104 }
-```
-
-Nếu muốn xem log Docker:
+Xem log Docker:
 
 ```powershell
 docker compose logs -f postgres redis kafka
 docker compose logs -f prometheus grafana tempo alertmanager
 ```
-
-Nếu muốn xem log dev app khi chạy bằng terminal, đọc trực tiếp terminal đang chạy `turbo`.
