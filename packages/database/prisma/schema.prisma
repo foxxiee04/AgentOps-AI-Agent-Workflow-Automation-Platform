@@ -64,7 +64,18 @@ model User {
   memberships      WorkspaceMember[]
   workflowsCreated Workflow[]        @relation("WorkflowCreatedBy")
   versionsCreated  WorkflowVersion[] @relation("WorkflowVersionCreatedBy")
+  refreshTokens     AuthRefreshToken[]
   auditLogs         AuditLog[]
+}
+
+model AuthRefreshToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Workspace {
@@ -105,6 +116,7 @@ model Workflow {
   description      String?
   status           WorkflowStatus     @default(DRAFT)
   currentVersionId String?
+  definitionJson   Json
   createdById      String
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -140,6 +152,7 @@ model WorkflowRun {
   triggerType       String
   inputJson         Json
   outputJson        Json?
+  triggerEventId    String?
   startedAt         DateTime?
   finishedAt        DateTime?
   errorMessage      String?
@@ -284,4 +297,24 @@ model BillingPlanMock {
   monthlyRunLimit Int
   dailyAiCallLimit Int
   createdAt       DateTime @default(now())
+}
+
+model DomainEvent {
+  id               String    @id
+  type             String
+  workspaceId      String
+  workflowId       String?
+  workflowRunId    String
+  requestId        String?
+  traceId          String?
+  traceparent      String?
+  parentEventId    String?
+  payloadJson      Json
+  kafkaPublishedAt DateTime?
+  kafkaError       String?
+  createdAt        DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([workflowRunId, createdAt])
+  @@index([type, createdAt])
 }

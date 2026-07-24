@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import {
   aiAgentNodeConfigSchema,
   buildAiPrompt,
@@ -10,15 +10,24 @@ import {
   type AiAgentNodeConfig,
   type JsonSchema
 } from "@agentops/shared";
+import { DemoDataService, demoWorkspaceId } from "../../common/infrastructure/demo-data.service";
+import { PrismaService } from "../../common/infrastructure/prisma.service";
 import type { EvaluateAgentDto, TestAgentDto } from "./dto";
 
 @Injectable()
 export class AiService {
-  testAgent(dto: TestAgentDto) {
-    return this.runMockAgent(dto.input, this.resolveConfig(dto.config, dto.modelProvider));
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(DemoDataService) private readonly demoData: DemoDataService
+  ) {}
+
+  async testAgent(dto: TestAgentDto) {
+    const result = this.runMockAgent(dto.input, this.resolveConfig(dto.config, dto.modelProvider));
+    await this.recordUsage(result.tokenUsage.inputTokens + result.tokenUsage.outputTokens);
+    return result;
   }
 
-  evaluateAgent(dto: EvaluateAgentDto) {
+  async evaluateAgent(dto: EvaluateAgentDto) {
     const config = this.resolveConfig(dto.config);
     const results = dto.testCases.map((testCase) => {
       const execution = this.runMockAgent(testCase.input, config);
@@ -74,13 +83,24 @@ export class AiService {
     };
   }
 
-  usage() {
+  async usage() {
+    await this.demoData.ensureDemoWorkspace();
+    const records = await this.prisma.client.usageRecord.findMany({
+      where: {
+        workspaceId: demoWorkspaceId,
+        createdAt: {
+          gte: this.startOfUtcDay()
+        }
+      }
+    });
+    const tokensUsedToday = records.reduce((sum, record) => sum + record.aiTokensUsed, 0);
+
     return {
-      workspaceId: "ws_demo",
+      workspaceId: demoWorkspaceId,
       dailyAiCallLimit: 100,
-      aiCallsToday: 1,
-      tokensUsedToday: 0,
-      notes: "MVP mock usage. Persist real usage per workspace when AI worker writes AiTaskResult records."
+      aiCallsToday: records.filter((record) => record.aiTokensUsed > 0).length,
+      tokensUsedToday,
+      notes: "Usage is persisted in PostgreSQL for API-side AI test runs; worker provider usage can write the same table next."
     };
   }
 
@@ -135,5 +155,21 @@ export class AiService {
       return 87;
     }
     return 62;
+  }
+
+  private async recordUsage(aiTokensUsed: number) {
+    await this.demoData.ensureDemoWorkspace();
+    await this.prisma.client.usageRecord.create({
+      data: {
+        workspaceId: demoWorkspaceId,
+        aiTokensUsed,
+        workflowStepsExecuted: 0
+      }
+    });
+  }
+
+  private startOfUtcDay() {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   }
 }

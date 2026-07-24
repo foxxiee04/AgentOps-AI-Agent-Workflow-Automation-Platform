@@ -1,5 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { DomainEventsService } from "../../common/domain-events/domain-events.service";
+import { DemoDataService, demoWorkspaceId } from "../../common/infrastructure/demo-data.service";
+import { PrismaService } from "../../common/infrastructure/prisma.service";
 import { WorkflowsService } from "../workflows/workflows.service";
 
 export type ReadinessStatus = "ready" | "warning" | "blocked" | "planned";
@@ -16,41 +18,46 @@ export type ReadinessItem = {
 export class DashboardService {
   constructor(
     @Inject(WorkflowsService) private readonly workflowsService: WorkflowsService,
-    @Inject(DomainEventsService) private readonly eventsService: DomainEventsService
+    @Inject(DomainEventsService) private readonly eventsService: DomainEventsService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(DemoDataService) private readonly demoData: DemoDataService
   ) {}
 
-  overview() {
-    const workflows = this.workflowsService.findAll("ws_demo");
-    const runs = this.workflowsService.listRuns();
+  async overview() {
+    const workflows = await this.workflowsService.findAll("ws_demo");
+    const runs = await this.workflowsService.listRuns();
+    const usage = await this.usageSnapshot();
     return {
       activeWorkflows: workflows.filter((workflow) => workflow.status === "ACTIVE").length,
       totalWorkflows: workflows.length,
       runsToday: runs.length,
       failedRuns: runs.filter((run) => run.status === "FAILED").length,
-      aiTokensUsed: 0
+      aiTokensUsed: usage.aiTokensUsed
     };
   }
 
-  workflowRuns() {
+  async workflowRuns() {
     return this.workflowsService.listRuns();
   }
 
-  usage() {
-    return { aiTokensUsed: 0, workflowStepsExecuted: 0, plan: "FREE" };
+  async usage() {
+    const usage = await this.usageSnapshot();
+    const workspace = await this.prisma.client.workspace.findUnique({ where: { id: demoWorkspaceId } });
+    return { ...usage, plan: workspace?.plan ?? "FREE" };
   }
 
-  errors() {
+  async errors() {
     return [];
   }
 
-  recentActivity() {
+  async recentActivity() {
     return this.eventsService.listRecent();
   }
 
-  readiness() {
-    const workflows = this.workflowsService.findAll("ws_demo");
+  async readiness() {
+    const workflows = await this.workflowsService.findAll("ws_demo");
     const activeWorkflows = workflows.filter((workflow) => workflow.status === "ACTIVE").length;
-    const events = this.eventsService.listRecent();
+    const events = await this.eventsService.listRecent();
     const openAiConfigured = Boolean(process.env.OPENAI_API_KEY);
     const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
     const otelEnabled = process.env.OTEL_ENABLED === "true";
@@ -141,5 +148,27 @@ export class DashboardService {
 
   private hasWeakSecret(value: string | undefined) {
     return !value || value.startsWith("replace-me") || value.length < 16;
+  }
+
+  private async usageSnapshot() {
+    await this.demoData.ensureDemoWorkspace();
+    const records = await this.prisma.client.usageRecord.findMany({
+      where: {
+        workspaceId: demoWorkspaceId,
+        createdAt: {
+          gte: this.startOfUtcDay()
+        }
+      }
+    });
+
+    return {
+      aiTokensUsed: records.reduce((sum, record) => sum + record.aiTokensUsed, 0),
+      workflowStepsExecuted: records.reduce((sum, record) => sum + record.workflowStepsExecuted, 0)
+    };
+  }
+
+  private startOfUtcDay() {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   }
 }

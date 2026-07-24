@@ -22,3 +22,8 @@ export class LoginDto {
   password!: string;
 }
 
+export class RefreshTokenDto {
+  @IsString()
+  @MinLength(16)
+  refreshToken!: string;
+}

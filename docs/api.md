@@ -50,6 +50,8 @@ GET  /auth/google/callback
 
 `GET /auth/google` starts the Google OAuth 2.0 server flow and redirects to Google. Configure `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` before using it locally or in deployment.
 
+Password auth now stores users in PostgreSQL, hashes passwords with argon2, signs access tokens as JWTs, and stores refresh tokens as hashes for rotation/revocation. Local demo logins under `@agentops.local` may be auto-created for smoke tests.
+
 ## Workspaces
 
 ```txt
@@ -78,6 +80,8 @@ GET    /workflow-runs/:id/steps
 ```
 
 `GET /workflow-runs/:id/steps` returns a step timeline generated from the immutable workflow version definition attached to the run.
+
+Workflow publish/run APIs are durable-first: the API writes workflow versions, runs, and initial step rows to PostgreSQL before publishing the `workflow-triggered` event. The event is stored in `domain_events`, then sent to Kafka using the event type as the topic.
 
 ## AI
 
@@ -110,6 +114,8 @@ GET /dashboard/readiness
 ```
 
 `GET /dashboard/readiness` returns an operational checklist for the demo workspace, including workflow publishing, event pipeline activity, AI provider configuration, OpenTelemetry export, and production-secret readiness. Non-ready items include a concrete `action` so the frontend can display the next configuration step.
+
+Dashboard overview, run lists, usage metrics, recent activity, and readiness now read persisted workflow/run/event/usage state instead of process-local memory.
 
 ## Notifications And Alert Bot
 

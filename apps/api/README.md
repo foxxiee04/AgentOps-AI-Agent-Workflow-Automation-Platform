@@ -15,6 +15,16 @@
 - Kafka event publishing.
 - Liveness/readiness checks for API, PostgreSQL, Redis, and Kafka.
 
+## Current Persistence Path
+
+- Auth users and refresh tokens are stored in PostgreSQL; access tokens are JWTs.
+- Demo workspace/workflow records are seeded idempotently when API surfaces need them.
+- Workflow drafts store `definitionJson`; publishing copies that graph into immutable `workflow_versions`.
+- Workflow runs create durable run and initial step rows before the API sends `workflow-triggered` to Kafka.
+- API domain events are stored in `domain_events` with Kafka publish status for recent activity and debugging.
+- `/ai/test-agent` records API-side token usage in `usage_records`; worker-side provider usage should write the same table next.
+- Dashboard overview and usage metrics read `workflow_runs`, `domain_events`, and `usage_records`.
+
 ## Planned Stack
 
 - NestJS

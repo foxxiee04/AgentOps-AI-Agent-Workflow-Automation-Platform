@@ -1,10 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AiService } from "./ai.service";
 
 describe("AiService", () => {
-  it("returns prompt preview, schema validation, and token usage for test agent", () => {
-    const service = new AiService();
-    const result = service.testAgent({
+  it("returns prompt preview, schema validation, and persisted token usage for test agent", async () => {
+    const usageRecords: Array<{ workspaceId: string; aiTokensUsed: number; workflowStepsExecuted: number; createdAt: Date }> = [];
+    const service = new AiService(
+      {
+        client: {
+          usageRecord: {
+            create: vi.fn(async ({ data }) => {
+              usageRecords.push({ ...data, createdAt: new Date() });
+              return usageRecords.at(-1);
+            }),
+            findMany: vi.fn(async () => usageRecords)
+          }
+        }
+      } as never,
+      { ensureDemoWorkspace: vi.fn(async () => undefined) } as never
+    );
+
+    const result = await service.testAgent({
       input: {
         lead: {
           name: "Anna",
@@ -26,11 +41,16 @@ describe("AiService", () => {
     expect(result.promptPreview.user).toBe("Lead Anna says We need urgent sales automation.");
     expect(result.validation.schemaValid).toBe(true);
     expect(result.tokenUsage.inputTokens).toBeGreaterThan(0);
+    expect(usageRecords).toHaveLength(1);
+
+    const usage = await service.usage();
+    expect(usage.aiCallsToday).toBe(1);
+    expect(usage.tokensUsedToday).toBe(result.tokenUsage.inputTokens + result.tokenUsage.outputTokens);
   });
 
-  it("evaluates prompt cases and returns a pass rate", () => {
-    const service = new AiService();
-    const result = service.evaluateAgent({
+  it("evaluates prompt cases and returns a pass rate", async () => {
+    const service = new AiService({} as never, { ensureDemoWorkspace: vi.fn(async () => undefined) } as never);
+    const result = await service.evaluateAgent({
       testCases: [
         {
           id: "urgent-lead",

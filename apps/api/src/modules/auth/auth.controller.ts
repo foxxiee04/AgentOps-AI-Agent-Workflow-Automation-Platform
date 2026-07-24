@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, Inject, Post, Query, Res } from "@nestj
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { AuthService } from "./auth.service";
-import { LoginDto, RegisterDto } from "./dto";
+import { LoginDto, RefreshTokenDto, RegisterDto } from "./dto";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -20,13 +20,13 @@ export class AuthController {
   }
 
   @Post("refresh")
-  refresh() {
-    return { accessToken: "mock_access_refreshed" };
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto);
   }
 
   @Post("logout")
-  logout() {
-    return { success: true };
+  logout(@Body() dto?: Partial<RefreshTokenDto>) {
+    return this.authService.logout(dto);
   }
 
   @Get("me")

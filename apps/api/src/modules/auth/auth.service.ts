@@ -1,6 +1,18 @@
-import { BadRequestException, Injectable, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import type { LoginDto, RegisterDto } from "./dto";
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
+import * as argon2 from "argon2";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { DemoDataService, demoWorkspaceId } from "../../common/infrastructure/demo-data.service";
+import { PrismaService } from "../../common/infrastructure/prisma.service";
+import type { LoginDto, RefreshTokenDto, RegisterDto } from "./dto";
 
 type AuthUser = {
   id: string;
@@ -44,44 +56,124 @@ type OAuthState = {
   exp: number;
 };
 
+type AccessTokenClaims = {
+  sub: string;
+  email: string;
+  type: "access";
+};
+
+type UserRecord = {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+  passwordHash: string;
+  createdAt: Date;
+};
+
 @Injectable()
 export class AuthService {
-  private readonly sessions = new Map<string, AuthSession>();
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(DemoDataService) private readonly demoData: DemoDataService,
+    @Inject(JwtService) private readonly jwt: JwtService,
+    @Inject(ConfigService) private readonly config: ConfigService
+  ) {}
 
-  register(dto: RegisterDto) {
-    const user = {
-      id: `user_${randomUUID()}`,
-      email: dto.email,
-      name: dto.name,
-      provider: "password" as const,
-      createdAt: new Date().toISOString()
-    };
+  async register(dto: RegisterDto) {
+    const email = this.normalizeEmail(dto.email);
+    const existing = await this.prisma.client.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException("A user with this email already exists");
+    }
+
+    const passwordHash = await argon2.hash(dto.password);
+    const user = await this.prisma.client.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          id: `user_${randomUUID()}`,
+          email,
+          name: dto.name,
+          passwordHash
+        }
+      });
+      const workspace = await tx.workspace.create({
+        data: {
+          id: `ws_${randomUUID()}`,
+          name: `${dto.name}'s workspace`,
+          slug: this.workspaceSlug(dto.name),
+          ownerId: createdUser.id,
+          plan: "FREE"
+        }
+      });
+      await tx.workspaceMember.create({
+        data: {
+          id: `wsm_${randomUUID()}`,
+          workspaceId: workspace.id,
+          userId: createdUser.id,
+          role: "OWNER"
+        }
+      });
+
+      return createdUser;
+    });
 
     return this.issueSession(user);
   }
 
-  login(dto: LoginDto) {
-    const userId = `user_${Buffer.from(dto.email).toString("base64url").slice(0, 12)}`;
-    return this.issueSession({
-      id: userId,
-      email: dto.email,
-      name: dto.email.split("@")[0],
-      provider: "password"
-    });
+  async login(dto: LoginDto) {
+    const email = this.normalizeEmail(dto.email);
+    const user = (await this.prisma.client.user.findUnique({ where: { email } })) ?? (await this.createLocalDemoUser(dto));
+    if (!user || !(await this.verifyPassword(user, dto.password))) {
+      throw new UnauthorizedException("Invalid email or password");
+    }
+
+    return this.issueSession(user);
   }
 
-  me(authorization?: string) {
-    const token = authorization?.replace(/^Bearer\s+/i, "");
-    const session = token ? this.sessions.get(token) : undefined;
+  async refresh(dto: RefreshTokenDto) {
+    const tokenHash = this.hashRefreshToken(dto.refreshToken);
+    const storedToken = await this.prisma.client.authRefreshToken.findUnique({
+      where: { tokenHash },
+      include: { user: true }
+    });
 
-    return (
-      session?.user ?? {
-        id: "user_demo",
-        email: "demo@agentops.local",
-        name: "Demo Operator",
-        provider: "password" as const
-      }
-    );
+    if (!storedToken || storedToken.revokedAt || storedToken.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException("Refresh token is invalid or expired");
+    }
+
+    await this.prisma.client.authRefreshToken.update({
+      where: { id: storedToken.id },
+      data: { revokedAt: new Date() }
+    });
+
+    return this.issueSession(storedToken.user);
+  }
+
+  async logout(dto?: Partial<RefreshTokenDto>) {
+    if (dto?.refreshToken) {
+      await this.prisma.client.authRefreshToken.updateMany({
+        where: { tokenHash: this.hashRefreshToken(dto.refreshToken), revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+    }
+
+    return { success: true };
+  }
+
+  async me(authorization?: string) {
+    const token = authorization?.replace(/^Bearer\s+/i, "");
+    if (!token) {
+      throw new UnauthorizedException("Missing bearer token");
+    }
+
+    const claims = await this.verifyAccessToken(token);
+    const user = await this.prisma.client.user.findUnique({ where: { id: claims.sub } });
+    if (!user) {
+      throw new UnauthorizedException("User no longer exists");
+    }
+
+    return this.toAuthUser(user);
   }
 
   googleAuthorizationUrl(redirectTo?: string) {
@@ -116,13 +208,21 @@ export class AuthService {
     }
 
     const claims = this.decodeGoogleIdToken(tokenResponse.id_token, config.clientId);
-    const session = this.issueSession({
-      id: `user_google_${claims.sub}`,
-      email: claims.email,
-      name: claims.name ?? claims.email.split("@")[0],
-      avatarUrl: claims.picture,
-      provider: "google"
+    const user = await this.prisma.client.user.upsert({
+      where: { email: this.normalizeEmail(claims.email) },
+      update: {
+        name: claims.name ?? claims.email.split("@")[0],
+        avatarUrl: claims.picture
+      },
+      create: {
+        id: `user_google_${claims.sub}`,
+        email: this.normalizeEmail(claims.email),
+        name: claims.name ?? claims.email.split("@")[0],
+        avatarUrl: claims.picture,
+        passwordHash: "google-oauth-password-disabled"
+      }
     });
+    const session = await this.issueSession(user, "google");
 
     return {
       redirectTo: parsedState.redirectTo,
@@ -148,22 +248,128 @@ export class AuthService {
     return url.toString();
   }
 
-  private issueSession(user: AuthUser): AuthSession {
-    const session = {
-      user: {
-        ...user
+  private async createLocalDemoUser(dto: LoginDto): Promise<UserRecord | undefined> {
+    const email = this.normalizeEmail(dto.email);
+    if (!email.endsWith("@agentops.local")) {
+      return undefined;
+    }
+
+    await this.demoData.ensureDemoWorkspace();
+    const user = await this.prisma.client.user.create({
+      data: {
+        id: `user_${Buffer.from(email).toString("base64url").slice(0, 12)}`,
+        email,
+        name: email.split("@")[0],
+        passwordHash: await argon2.hash(dto.password)
+      }
+    });
+    await this.prisma.client.workspaceMember.upsert({
+      where: {
+        workspaceId_userId: {
+          workspaceId: demoWorkspaceId,
+          userId: user.id
+        }
       },
-      accessToken: `mock_access_${user.id}_${randomUUID()}`,
-      refreshToken: `mock_refresh_${user.id}_${randomUUID()}`
+      update: {},
+      create: {
+        id: `wsm_${randomUUID()}`,
+        workspaceId: demoWorkspaceId,
+        userId: user.id,
+        role: "OWNER"
+      }
+    });
+
+    return user;
+  }
+
+  private async verifyPassword(user: UserRecord, password: string) {
+    if (user.passwordHash.endsWith("password-disabled")) {
+      return false;
+    }
+
+    return argon2.verify(user.passwordHash, password);
+  }
+
+  private async issueSession(user: Omit<UserRecord, "passwordHash">, provider: "password" | "google" = "password"): Promise<AuthSession> {
+    const accessToken = await this.jwt.signAsync(
+      {
+        sub: user.id,
+        email: user.email,
+        type: "access"
+      } satisfies AccessTokenClaims,
+      {
+        secret: this.accessSecret(),
+        expiresIn: "15m"
+      }
+    );
+    const refreshToken = `rfr_${randomUUID()}_${randomUUID()}`;
+    await this.prisma.client.authRefreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashRefreshToken(refreshToken),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000)
+      }
+    });
+
+    return {
+      user: {
+        ...this.toAuthUser(user),
+        provider
+      },
+      accessToken,
+      refreshToken
     };
-    this.sessions.set(session.accessToken, session);
-    return session;
+  }
+
+  private async verifyAccessToken(token: string) {
+    try {
+      const claims = await this.jwt.verifyAsync<AccessTokenClaims>(token, { secret: this.accessSecret() });
+      if (claims.type !== "access") {
+        throw new UnauthorizedException("Invalid token type");
+      }
+
+      return claims;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException("Access token is invalid or expired");
+    }
+  }
+
+  private toAuthUser(user: Omit<UserRecord, "passwordHash">): AuthUser {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl ?? undefined,
+      createdAt: user.createdAt.toISOString()
+    };
+  }
+
+  private hashRefreshToken(token: string) {
+    return createHash("sha256").update(`${this.refreshSecret()}:${token}`).digest("hex");
+  }
+
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
+  private workspaceSlug(name: string) {
+    return `${name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40)}-${randomUUID().slice(0, 8)}`;
   }
 
   private googleConfig() {
-    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI ?? `${process.env.API_URL ?? "http://localhost:4000"}/auth/google/callback`;
+    const clientId = this.config.get<string>("GOOGLE_OAUTH_CLIENT_ID");
+    const clientSecret = this.config.get<string>("GOOGLE_OAUTH_CLIENT_SECRET");
+    const redirectUri =
+      this.config.get<string>("GOOGLE_OAUTH_REDIRECT_URI") ??
+      `${this.config.get<string>("API_URL") ?? "http://localhost:4000"}/auth/google/callback`;
 
     if (!clientId || !clientSecret) {
       throw new ServiceUnavailableException("Google OAuth is not configured");
@@ -173,7 +379,15 @@ export class AuthService {
   }
 
   private webAppUrl() {
-    return process.env.WEB_APP_URL ?? "http://localhost:3000";
+    return this.config.get<string>("WEB_APP_URL") ?? "http://localhost:3000";
+  }
+
+  private accessSecret() {
+    return this.config.get<string>("JWT_ACCESS_SECRET") ?? process.env.JWT_ACCESS_SECRET ?? "replace-me-access";
+  }
+
+  private refreshSecret() {
+    return this.config.get<string>("JWT_REFRESH_SECRET") ?? process.env.JWT_REFRESH_SECRET ?? "replace-me-refresh";
   }
 
   private safeRedirectPath(input?: string) {
@@ -186,7 +400,7 @@ export class AuthService {
 
   private signState(payload: OAuthState) {
     const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
-    const signature = createHmac("sha256", this.stateSecret()).update(encodedPayload).digest("base64url");
+    const signature = createHmac("sha256", this.accessSecret()).update(encodedPayload).digest("base64url");
     return `${encodedPayload}.${signature}`;
   }
 
@@ -196,7 +410,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid OAuth state");
     }
 
-    const expected = createHmac("sha256", this.stateSecret()).update(encodedPayload).digest("base64url");
+    const expected = createHmac("sha256", this.accessSecret()).update(encodedPayload).digest("base64url");
     if (!this.safeEqual(signature, expected)) {
       throw new UnauthorizedException("Invalid OAuth state signature");
     }
@@ -211,10 +425,6 @@ export class AuthService {
       redirectTo: this.safeRedirectPath(payload.redirectTo),
       exp: payload.exp
     };
-  }
-
-  private stateSecret() {
-    return process.env.JWT_ACCESS_SECRET ?? "replace-me-access";
   }
 
   private safeEqual(a: string, b: string) {

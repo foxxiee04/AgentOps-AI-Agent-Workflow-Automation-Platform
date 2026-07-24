@@ -1,7 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "./generated/prisma/client";
+import { Prisma, PrismaClient } from "./generated/prisma/client";
 
-export { PrismaClient };
+export { Prisma, PrismaClient };
 
 export function createPrismaClient(databaseUrl = process.env.DATABASE_URL) {
   if (!databaseUrl) {
