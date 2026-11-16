@@ -1,22 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-
-test("user can exercise the main AgentOps workflow through the UI", async ({ page, request }) => {
+/**
+ * Main lead flow through the UI against the real local stack (API + 4 workers + Postgres + Kafka):
+ * log in -> create a workflow from the lead template -> publish -> run -> approve the email -> run completes
+ * and a sales task appears. Requires WORKFLOW_AUTO_APPROVE=false (the default).
+ */
+test("lead flow: login, create, publish, run, approve, task created", async ({ page }) => {
+  test.setTimeout(180_000);
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Nền tảng tự động hóa workflow bằng AI Agent" })).toBeVisible();
-  await page.goto("/vi");
-  await expect(page.getByRole("heading", { name: "Nền tảng tự động hóa workflow bằng AI Agent" })).toBeVisible();
   await page.goto("/en");
   await expect(page.getByRole("heading", { name: "AI Agent workflow automation platform" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Open dashboard" }).first().click();
-  await expect(page).toHaveURL(/\/login\?lang=en&next=/);
+  // 1. Log in (local @agentops.local accounts are created on first login).
+  await page.goto("/login?lang=en");
   await expect(page.getByRole("heading", { name: "Log in to AgentOps" })).toBeVisible();
-  await page.getByLabel("Email").fill("operator@agentops.local");
+  await page.getByLabel("Email").fill(`e2e-${Date.now()}@agentops.local`);
   await page.getByLabel("Password").fill("password123");
   const [loginResponse] = await Promise.all([
     page.waitForResponse((response) => response.url().includes("/auth/login") && response.request().method() === "POST"),
@@ -25,83 +25,69 @@ test("user can exercise the main AgentOps workflow through the UI", async ({ pag
   expect(loginResponse.ok()).toBe(true);
   await expect(page).toHaveURL(/\/dashboard\?lang=en$/);
   await expect(page.getByRole("heading", { name: "Workflow operations" })).toBeVisible();
-  await expect(page.getByText("Signed in: operator")).toBeVisible();
-  await expect(page.getByText("[+] Dependency readiness")).toBeVisible();
-  await expect(page.getByText("postgres", { exact: true })).toBeVisible();
-  await expect(page.getByText("kafka", { exact: true })).toBeVisible();
 
+  // 2. Create a workflow from the lead template; it opens in the builder.
   await page.locator("aside").getByRole("link", { name: /Workflows/ }).click();
-  await expect(page).toHaveURL(/\/workflows\?lang=en$/);
   await expect(page.getByRole("heading", { name: "Workflows" })).toBeVisible();
-  await expect(page.getByText("Lead qualification")).toBeVisible();
+  const [createResponse] = await Promise.all([
+    page.waitForResponse((response) => /\/workflows$/.test(response.url()) && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Create from lead template" }).click()
+  ]);
+  expect(createResponse.ok()).toBe(true);
+  const { id: workflowId } = (await createResponse.json()) as { id: string };
+  await expect(page).toHaveURL(new RegExp(`/workflows/${workflowId}/builder`));
+  await expect(page.getByText("Valid graph")).toBeVisible();
+  await expect(page.getByText("leadScore > 80")).toBeVisible();
+  await expect(page.getByText("Review email")).toBeVisible();
 
+  // 3. Publish.
   const [publishResponse] = await Promise.all([
-    page.waitForResponse(
-      (response) => response.url().includes("/workflows/wf_lead_qualification/publish") && response.request().method() === "POST"
-    ),
+    page.waitForResponse((response) => response.url().includes(`/workflows/${workflowId}/publish`) && response.request().method() === "POST"),
     page.getByRole("button", { name: /^Publish$/ }).click()
   ]);
   expect(publishResponse.ok()).toBe(true);
   await expect(page.getByRole("button", { name: "Published" })).toBeVisible();
 
+  // 4. Run with the sample hot lead and open the run.
   const [runResponse] = await Promise.all([
-    page.waitForResponse(
-      (response) => response.url().includes("/workflows/wf_lead_qualification/run") && response.request().method() === "POST"
-    ),
+    page.waitForResponse((response) => response.url().includes(`/workflows/${workflowId}/run`) && response.request().method() === "POST"),
     page.getByRole("button", { name: /^Run$/ }).click()
   ]);
   expect(runResponse.ok()).toBe(true);
-  const runPayload = (await runResponse.json()) as { run: { id: string } };
-  expect(runPayload.run.id).toMatch(/^run_/);
-
-  const stepsResponse = await request.get(`${apiUrl}/workflow-runs/${runPayload.run.id}/steps`);
-  expect(stepsResponse.ok()).toBe(true);
-  const stepsPayload = (await stepsResponse.json()) as { steps: Array<{ status: string }> };
-  expect(stepsPayload.steps).toHaveLength(5);
-  expect(stepsPayload.steps[0]?.status).toBe("COMPLETED");
-
-  await page.goto(`/runs/${runPayload.run.id}?lang=en`);
+  const { run } = (await runResponse.json()) as { run: { id: string } };
+  await page.goto(`/runs/${run.id}?lang=en`);
   await expect(page.getByRole("heading", { name: "Run timeline" })).toBeVisible();
-  await expect(page.getByText(runPayload.run.id)).toBeVisible();
-  await expect(page.getByText("Manual lead trigger")).toBeVisible();
-  await expect(page.getByText("Trigger accepted by API and workflow event published.")).toBeVisible();
 
-  await page.getByRole("link", { name: "Builder" }).first().click();
-  await expect(page).toHaveURL(/\/workflows\/wf_lead_qualification\/builder\?lang=en$/);
-  await expect(page.getByText("Valid graph")).toBeVisible();
-  await expect(page.getByText("Manual lead trigger")).toBeVisible();
-  await page.getByText("Score lead").click();
-  await expect(page.getByText("Node config")).toBeVisible();
-  await expect(page.getByText("outputSchema")).toBeVisible();
+  // The page polls: scoring -> branch A -> email draft -> waiting for approval.
+  await expect(page.getByText("This run is waiting for an email approval.")).toBeVisible({ timeout: 60_000 });
+  // The input panel shows the trigger input with PII masked.
+  await expect(page.locator("main aside pre")).toContainText("an***@shopabc.vn");
+  await expect(page.getByText("anna@shopabc.vn")).toHaveCount(0);
 
-  await page.locator("aside").getByRole("link", { name: /Agents/ }).click();
-  await expect(page).toHaveURL(/\/agents\?lang=en$/);
-  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
-  await page.locator("#ai-input").fill(
-    JSON.stringify(
-      {
-        leadName: "UI Smoke Lead",
-        message: "urgent sales automation and support routing"
-      },
-      null,
-      2
-    )
-  );
-  const [aiResponse] = await Promise.all([
-    page.waitForResponse((response) => response.url().includes("/ai/test-agent") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Test agent" }).click()
+  // 5. Approve the drafted email.
+  await page.getByRole("link", { name: "Open approvals" }).click();
+  await expect(page.getByRole("heading", { name: "Emails waiting for approval" })).toBeVisible();
+  const card = page.locator("article", { hasText: run.id });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  await expect(card.getByText("high-intent")).toBeVisible();
+  await card.getByLabel("Reason / note").fill("Looks good");
+  const [decisionResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes(`/workflow-runs/${run.id}/steps/`) && response.request().method() === "POST"),
+    card.getByRole("button", { name: "Approve and send" }).click()
   ]);
-  expect(aiResponse.ok()).toBe(true);
-  const aiPayload = (await aiResponse.json()) as { validation: { schemaValid: boolean } };
-  expect(aiPayload.validation.schemaValid).toBe(true);
-  await expect(page.getByText("high-intent")).toBeVisible();
+  expect(decisionResponse.status()).toBe(200);
+  // The decided card leaves the queue; its outcome stays in the "Just decided" block with a link to the run.
+  await expect(page.getByText("Approved and email sent").first()).toBeVisible();
+  await expect(card).toHaveCount(0);
 
-  await page.locator("aside").getByRole("link", { name: /Settings/ }).click();
-  await expect(page).toHaveURL(/\/settings\?lang=en$/);
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await expect(page.getByText("API boundary")).toBeVisible();
-  await expect(page.getByText("postgres", { exact: true })).toBeVisible();
-  await expect(page.getByText("kafka", { exact: true })).toBeVisible();
+  // 6. The run finishes and the sales task shows on the dashboard.
+  await page.goto(`/runs/${run.id}?lang=en`);
+  await expect(page.getByText("✓ Run finished")).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator("[data-step='notify-1']").getByText("COMPLETED", { exact: true })).toBeVisible();
+
+  await page.goto("/dashboard?lang=en");
+  await expect(page.getByText("Sales tasks")).toBeVisible();
+  await expect(page.getByText("Call lead back within 24 hours").first()).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });

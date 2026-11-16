@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 60_000,
+  // One worker: the specs share a rate-limited login endpoint and one demo workspace.
+  workers: 1,
   expect: {
     timeout: 10_000
   },
