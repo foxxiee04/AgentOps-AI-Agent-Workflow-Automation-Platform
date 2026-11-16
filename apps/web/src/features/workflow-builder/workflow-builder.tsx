@@ -1,17 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
-import { Background, Controls, MarkerType, MiniMap, Position, ReactFlow, type Edge, type Node } from "@xyflow/react";
-import { validateWorkflowDefinition, type WorkflowNodeType } from "@agentops/shared";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
+import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type Node } from "@xyflow/react";
+import { useQuery } from "@tanstack/react-query";
+import { isRunActive, sampleLeadWorkflowDefinition, validateWorkflowDefinition, type WorkflowNodeType, type WorkflowStatus } from "@agentops/shared";
 import { StatusPill } from "../../components/status-pill";
-import { PublishWorkflowButton, RunWorkflowButton } from "../workflows/workflow-actions";
+import { Reveal, useIconHover } from "../../components/motion";
+import PlayerIcon from "../../icons/player-icon";
+import UploadIcon from "../../icons/upload-icon";
 import type { ApiDataSource, WorkflowView } from "../../lib/api";
+import { formatDuration } from "../../lib/status";
 import type { Locale } from "../../lib/i18n";
 import { useWorkflowBuilderStore } from "./workflow-builder-store";
+import { layoutWorkflow } from "./layout";
+import { fetchRun, fetchRunSteps, publishWorkflow, runWorkflow } from "./builder-client";
 
 const nodeDefaults = {
-  sourcePosition: Position.Right,
-  targetPosition: Position.Left
+  sourcePosition: Position.Bottom,
+  targetPosition: Position.Top
 };
 
 const nodeMarkers: Record<WorkflowNodeType, string> = {
@@ -27,14 +35,21 @@ const nodeMarkers: Record<WorkflowNodeType, string> = {
   END: "[X]"
 };
 
-const knownPositions: Record<string, { x: number; y: number }> = {
-  "trigger-1": { x: 0, y: 130 },
-  "ai-1": { x: 260, y: 80 },
-  "condition-1": { x: 520, y: 130 },
-  "webhook-1": { x: 780, y: 80 },
-  "notification-1": { x: 780, y: 230 },
-  "end-1": { x: 1040, y: 130 }
-};
+export const knownPositions: Record<string, { x: number; y: number }> = layoutWorkflow(
+  sampleLeadWorkflowDefinition.nodes,
+  sampleLeadWorkflowDefinition.edges
+);
+
+export function edgeStyle(condition: string | undefined) {
+  const normalized = condition?.trim().toLowerCase();
+  const isMutedBranch = normalized === "else" || normalized === "default" || normalized === "rejected";
+  return {
+    label: condition?.trim() ? condition : undefined,
+    style: { stroke: isMutedBranch ? "#9a9898" : "#646262", strokeDasharray: isMutedBranch ? "6 4" : undefined },
+    labelStyle: { fill: "#201d1d", fontWeight: 700, fontFamily: "ui-monospace, monospace" },
+    labelBgStyle: { fill: "#fdfcfc" }
+  };
+}
 
 type WorkflowBuilderLabels = {
   builder: {
@@ -69,7 +84,7 @@ const defaultLabels: WorkflowBuilderLabels = {
   builder: {
     fallback: "fallback",
     design: "Design",
-    run: "Run",
+    run: "Run preview",
     inspector: "Inspector",
     workflow: "Workflow",
     mode: "Mode",
@@ -94,33 +109,124 @@ const defaultLabels: WorkflowBuilderLabels = {
   }
 };
 
+const strings = {
+  vi: {
+    previewEmpty: "Chưa có run - bấm Chạy để xem từng bước",
+    runCreated: "✓ Đã tạo run",
+    viewRun: "Xem run →",
+    publishFirst: "Publish trước khi chạy"
+  },
+  en: {
+    previewEmpty: "No run yet - press Run to follow the steps",
+    runCreated: "✓ Created run",
+    viewRun: "View run →",
+    publishFirst: "Publish trước khi chạy"
+  }
+} as const;
+
+function IconSlot({ children }: { children: ReactNode }) {
+  return (
+    <span aria-hidden="true" className="inline-flex shrink-0">
+      {children}
+    </span>
+  );
+}
+
+function stepColor(status: string): { border: string; dash?: boolean; muted?: boolean } {
+  switch (status) {
+    case "COMPLETED":
+      return { border: "#15803d" };
+    case "RUNNING":
+    case "WAITING_APPROVAL":
+      return { border: "#b45309" };
+    case "FAILED":
+      return { border: "#dc2626" };
+    case "SKIPPED":
+      return { border: "#9a9898", dash: true, muted: true };
+    default:
+      return { border: "#d9d4d4" };
+  }
+}
+
 export function WorkflowBuilder({
   workflow,
   source,
   labels = defaultLabels,
-  locale = "vi"
+  locale = "vi",
+  invalidMessage
 }: {
   workflow: WorkflowView;
   source: ApiDataSource;
   labels?: WorkflowBuilderLabels;
   locale?: Locale;
+  invalidMessage?: string;
 }) {
   const copy = labels;
+  const t = strings[locale];
   const { mode, selectedNodeId, setMode, selectNode } = useWorkflowBuilderStore();
+  const router = useRouter();
+  const { ref: publishIconRef, ...publishIconHandlers } = useIconHover();
+  const { ref: runIconRef, ...runIconHandlers } = useIconHover();
+
+  const [status, setStatus] = useState<WorkflowStatus>(workflow.status);
+  const [runId, setRunId] = useState<string | undefined>(undefined);
+  const [isRunning, setIsRunning] = useState(false);
+  const [runError, setRunError] = useState<string | undefined>(undefined);
+  const [runSuccess, setRunSuccess] = useState<string | undefined>(undefined);
+  const [publishState, setPublishState] = useState<{ status: "idle" | "loading" | "success" | "error"; message?: string }>({ status: "idle" });
+
   const validationIssues = useMemo(() => validateWorkflowDefinition(workflow.definition), [workflow.definition]);
+
+  const runQuery = useQuery({
+    queryKey: ["builder-run", runId],
+    queryFn: () => fetchRun(runId!),
+    enabled: !!runId,
+    refetchInterval: (query) => (runId && isRunActive(query.state.data?.status ?? "") ? 2000 : false)
+  });
+
+  const stepsQuery = useQuery({
+    queryKey: ["builder-run-steps", runId],
+    queryFn: () => fetchRunSteps(runId!),
+    enabled: !!runId,
+    refetchInterval: () => (runId && isRunActive(runQuery.data?.status ?? "") ? 2000 : false)
+  });
+
+  const stepByNode = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const step of stepsQuery.data?.steps ?? []) map.set(step.nodeId, step);
+    return map;
+  }, [stepsQuery.data]);
+
+  const positions = useMemo(() => layoutWorkflow(workflow.definition.nodes, workflow.definition.edges), [workflow.definition.nodes, workflow.definition.edges]);
 
   const nodes = useMemo<Node[]>(
     () =>
-      workflow.definition.nodes.map((node, index) => ({
-        id: node.id,
-        type: "default",
-        position: knownPositions[node.id] ?? { x: index * 260, y: index % 2 === 0 ? 120 : 240 },
-        data: {
-          label: <NodeLabel marker={nodeMarkers[node.type]} title={node.name} detail={node.type} />
-        },
-        ...nodeDefaults
-      })),
-    [workflow.definition.nodes]
+      workflow.definition.nodes.map((node, index) => {
+        const step = runId ? stepByNode.get(node.id) : undefined;
+        const color = step ? stepColor(step.status) : undefined;
+        const pos = positions?.[node.id] ?? positions?.positions?.[node.id] ?? { x: index * 260, y: index % 2 === 0 ? 120 : 240 };
+        return {
+          id: node.id,
+          type: "default",
+          position: pos,
+          data: {
+            label: <NodeLabel marker={nodeMarkers[node.type]} title={node.name} detail={node.type} />
+          },
+          ...nodeDefaults,
+          style: {
+            borderColor: color ? color.border : "var(--hairline)",
+            transition: "border-color 0.25s ease, opacity 0.25s ease",
+            ...(color
+              ? {
+                  borderWidth: 2,
+                  borderStyle: color.dash ? "dashed" : "solid",
+                  opacity: color.muted ? 0.6 : 1
+                }
+              : {})
+          }
+        };
+      }),
+    [workflow.definition.nodes, positions, stepByNode, runId]
   );
 
   const edges = useMemo<Edge[]>(
@@ -129,69 +235,163 @@ export function WorkflowBuilder({
         id: edge.id,
         source: edge.source,
         target: edge.target,
-        label: edge.condition,
-        markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: "#646262" },
-        labelStyle: { fill: "#424245", fontWeight: 600 }
+        type: "smoothstep",
+        pathOptions: { borderRadius: 6 },
+        ...edgeStyle(edge.condition),
+        markerEnd: { type: MarkerType.ArrowClosed }
       })),
     [workflow.definition.edges]
   );
 
   const selectedDefinitionNode = workflow.definition.nodes.find((node) => node.id === selectedNodeId);
+  const selectedStep = selectedNodeId ? stepByNode.get(selectedNodeId) : undefined;
+
+  async function handlePublish() {
+    if (validationIssues.length > 0) return;
+    setPublishState({ status: "loading" });
+    try {
+      await publishWorkflow(workflow.id);
+      setStatus("ACTIVE");
+      setPublishState({ status: "success" });
+      router.refresh();
+    } catch (error) {
+      setPublishState({ status: "error", message: error instanceof Error ? error.message : "publish failed" });
+    }
+  }
+
+  async function handleRun() {
+    setRunError(undefined);
+    if (status !== "ACTIVE") {
+      setRunError(t.publishFirst);
+      return;
+    }
+    setIsRunning(true);
+    try {
+      const result = await runWorkflow(workflow.id);
+      setRunId(result.run.id);
+      setRunSuccess(result.run.id);
+      setMode("run-preview");
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : "run failed");
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  const canPublish = validationIssues.length === 0;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="overflow-hidden rounded-[8px] border border-[var(--hairline)] bg-white">
+      <section className="overflow-hidden rounded-xl border border-[var(--hairline)] bg-white">
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] px-4 py-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-base font-bold text-[#171412]">{workflow.name}</h1>
-              <StatusPill tone={workflow.status === "ACTIVE" ? "success" : "warning"}>{workflow.status}</StatusPill>
+              <h1 className="text-base font-bold text-[var(--ink-deep)]">{workflow.name}</h1>
+              <StatusPill tone={status === "ACTIVE" ? "success" : "warning"}>{status}</StatusPill>
               {source === "fallback" ? <StatusPill tone="warning">{copy.builder.fallback}</StatusPill> : null}
             </div>
-            <p className="mt-1 text-sm text-[#5f5750]">{workflow.description}</p>
+            <p className="mt-1 text-sm text-[var(--mute)]">{workflow.description}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-[8px] border border-[var(--hairline-strong)] bg-white p-0.5">
+            <div className="flex rounded-xl border border-[var(--hairline-strong)] bg-white p-0.5">
               {(["design", "run-preview"] as const).map((item) => (
                 <button
                   key={item}
                   type="button"
+                  aria-pressed={mode === item}
                   onClick={() => setMode(item)}
-                  className={`min-h-9 rounded-[7px] px-3 text-sm font-medium ${
-                    mode === item ? "bg-[var(--accent-soft)] text-[#17337a]" : "text-[var(--mute)]"
+                  className={`min-h-9 rounded-lg px-3 text-sm font-medium ${
+                    mode === item ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--mute)]"
                   }`}
                 >
                   {item === "design" ? copy.builder.design : copy.builder.run}
                 </button>
               ))}
             </div>
-            <PublishWorkflowButton workflowId={workflow.id} labels={copy.common} />
-            <RunWorkflowButton workflowId={workflow.id} labels={copy.common} locale={locale} />
+            <button
+              type="button"
+              {...publishIconHandlers}
+              onClick={handlePublish}
+              disabled={!canPublish || publishState.status === "loading"}
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink-deep)] disabled:border-[var(--hairline)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+              title={!canPublish ? invalidMessage : publishState.status === "error" ? publishState.message : undefined}
+            >
+              <IconSlot>
+                <UploadIcon ref={publishIconRef} size={16} strokeWidth={1.75} />
+              </IconSlot>
+              {publishState.status === "loading"
+                ? copy.common.publishing
+                : publishState.status === "success"
+                  ? copy.common.published
+                  : copy.common.publish}
+            </button>
+            <button
+              type="button"
+              {...runIconHandlers}
+              onClick={handleRun}
+              disabled={status !== "ACTIVE" || isRunning}
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-3 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+              title={status !== "ACTIVE" ? t.publishFirst : undefined}
+            >
+              <IconSlot>
+                <PlayerIcon ref={runIconRef} size={16} strokeWidth={1.75} />
+              </IconSlot>
+              {isRunning ? copy.common.running : copy.common.run}
+            </button>
+            {status !== "ACTIVE" ? <span className="text-xs text-[var(--mute)]">{t.publishFirst}</span> : null}
           </div>
         </div>
+        {runSuccess ? (
+          <Reveal>
+            <div className="border-b border-[var(--hairline)] px-4 py-2 text-sm">
+              <span className="font-mono text-[#15803d]">{t.runCreated} {runSuccess.slice(0, 12)}</span>
+              <span className="mx-2 text-[var(--mute)]">·</span>
+              <Link href={`/runs/${runSuccess}?lang=${locale}`} className="font-semibold text-[var(--accent)]">
+                {t.viewRun}
+              </Link>
+            </div>
+          </Reveal>
+        ) : null}
+        {runError ? (
+          <Reveal>
+            <p role="alert" className="border-b border-[var(--hairline)] bg-[var(--danger-soft)] px-4 py-2 font-mono text-xs text-[var(--danger-ink)]">
+              ⚠ {runError}
+            </p>
+          </Reveal>
+        ) : null}
+        {publishState.status === "error" && publishState.message ? (
+          <Reveal>
+            <p role="alert" className="border-b border-[var(--hairline)] bg-[var(--danger-soft)] px-4 py-2 font-mono text-xs text-[var(--danger-ink)]">
+              ⚠ {publishState.message}
+            </p>
+          </Reveal>
+        ) : null}
         <div className="h-[620px] min-h-[520px]">
           <ReactFlow
             nodes={nodes}
             edges={edges}
             fitView
+            fitViewOptions={{ padding: 0.2 }}
+            minZoom={0.6}
+            onInit={(instance) => {
+              requestAnimationFrame(() => instance.fitView({ padding: 0.2 }));
+            }}
             nodesDraggable
             onNodeClick={(_, node) => selectNode(node.id)}
             onPaneClick={() => selectNode(undefined)}
           >
-            <Background color="#c7bdb3" />
+            <Background color="#d9d4d4" />
             <Controls />
-            <MiniMap nodeColor="#2457d6" maskColor="rgba(246,247,251,0.72)" />
           </ReactFlow>
         </div>
       </section>
 
-      <aside className="rounded-[8px] border border-[var(--hairline)] bg-white">
+      <aside className="rounded-xl border border-[var(--hairline)] bg-white">
         <div className="border-b border-[var(--hairline)] px-4 py-3">
-          <p className="text-xs font-semibold uppercase text-[#6b625a]">{copy.builder.inspector}</p>
-          <h2 className="mt-1 text-lg font-bold text-[#171412]">{selectedDefinitionNode ? selectedDefinitionNode.name : copy.builder.workflow}</h2>
+          <p className="text-xs font-semibold uppercase text-[var(--mute)]">{copy.builder.inspector}</p>
+          <h2 className="mt-1 text-lg font-bold text-[var(--ink-deep)]">{selectedDefinitionNode ? selectedDefinitionNode.name : copy.builder.workflow}</h2>
         </div>
-        <div className="divide-y divide-[#eee7df] text-sm">
+        <div className="divide-y divide-[var(--hairline)] text-sm">
           <InspectorRow label={copy.builder.mode} value={mode === "design" ? copy.builder.draftDesign : copy.builder.runPreview} />
           <InspectorRow label={copy.builder.nodes} value={String(workflow.definition.nodes.length)} />
           <InspectorRow label={copy.builder.edges} value={String(workflow.definition.edges.length)} />
@@ -199,21 +399,41 @@ export function WorkflowBuilder({
           <InspectorRow label={copy.builder.kafkaEvent} value="workflow-triggered" />
         </div>
 
+        {mode === "run-preview" && !runId ? (
+          <div className="border-t border-[var(--hairline)] px-4 py-3">
+            <p className="font-mono text-sm text-[var(--mute)]">{t.previewEmpty}</p>
+          </div>
+        ) : null}
+
         {selectedDefinitionNode ? (
-          <div className="border-t border-[#ded7cf] px-4 py-3">
-            <p className="text-xs font-semibold uppercase text-[#6b625a]">{copy.builder.nodeConfig}</p>
-            <pre className="mt-2 max-h-64 overflow-auto rounded-[4px] bg-[#f2eee9] p-3 text-xs leading-5 text-[#2f2a26]">
-              {JSON.stringify(selectedDefinitionNode.config, null, 2)}
-            </pre>
+          <div className="border-t border-[var(--hairline)] px-4 py-3">
+            {mode === "run-preview" && runId ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase text-[var(--mute)]">Step</p>
+                <InspectorRow label="Status" value={selectedStep?.status ?? "PENDING"} />
+                <InspectorRow label="Duration" value={formatDuration(selectedStep?.durationMs) ?? "-"} />
+                <p className="text-xs font-semibold uppercase text-[var(--mute)]">Output</p>
+                <pre className="mt-2 max-h-64 overflow-auto rounded-xl bg-[var(--surface-soft)] p-3 text-xs leading-5 text-[var(--body)]">
+                  {JSON.stringify(selectedStep?.output ?? null, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs font-semibold uppercase text-[var(--mute)]">{copy.builder.nodeConfig}</p>
+                <pre className="mt-2 max-h-64 overflow-auto rounded-xl bg-[var(--surface-soft)] p-3 text-xs leading-5 text-[var(--body)]">
+                  {JSON.stringify(selectedDefinitionNode.config, null, 2)}
+                </pre>
+              </>
+            )}
           </div>
         ) : (
-          <div className="border-t border-[#ded7cf] px-4 py-3">
-            <p className="text-xs font-semibold uppercase text-[#6b625a]">{copy.builder.validationIssues}</p>
-            <div className="mt-2 space-y-2 text-sm text-[#403a35]">
+          <div className="border-t border-[var(--hairline)] px-4 py-3">
+            <p className="text-xs font-semibold uppercase text-[var(--mute)]">{copy.builder.validationIssues}</p>
+            <div className="mt-2 space-y-2 text-sm text-[var(--body)]">
               {validationIssues.length > 0 ? (
-                validationIssues.map((issue) => <p key={`${issue.code}-${issue.nodeId ?? issue.edgeId ?? issue.message}`}>[!] {issue.message}</p>)
+                validationIssues.map((issue) => <p key={`${issue.code}-${issue.nodeId ?? issue.edgeId ?? issue.message}`}>⚠ {issue.message}</p>)
               ) : (
-                <p>[ok] {copy.builder.validMessage}</p>
+                <p>✓ {copy.builder.validMessage}</p>
               )}
             </div>
           </div>
@@ -225,11 +445,11 @@ export function WorkflowBuilder({
 
 function NodeLabel({ marker, title, detail }: { marker: string; title: string; detail: string }) {
   return (
-    <div className="flex min-w-[178px] items-center gap-3 rounded-[4px] bg-white px-3 py-2">
-      <span className="font-mono text-xs font-bold text-[#5f5750]">{marker}</span>
+    <div className="flex min-w-[178px] items-center gap-3 rounded-xl bg-white px-3 py-2">
+      <span className="font-mono text-xs font-bold text-[var(--mute)]">{marker}</span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-bold text-[#171412]">{title}</span>
-        <span className="block truncate text-xs font-semibold text-[#5f5750]">{detail}</span>
+        <span className="block truncate text-sm font-bold text-[var(--ink-deep)]">{title}</span>
+        <span className="block truncate text-xs font-semibold text-[var(--mute)]">{detail}</span>
       </span>
     </div>
   );
@@ -238,8 +458,8 @@ function NodeLabel({ marker, title, detail }: { marker: string; title: string; d
 function InspectorRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 py-3">
-      <p className="text-xs font-semibold uppercase text-[#6b625a]">{label}</p>
-      <p className="mt-1 font-medium text-[#171412]">{value}</p>
+      <p className="text-xs font-semibold uppercase text-[var(--mute)]">{label}</p>
+      <p className="mt-1 font-medium text-[var(--ink-deep)]">{value}</p>
     </div>
   );
 }

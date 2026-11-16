@@ -1,7 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { Children, isValidElement, useState, type ReactNode } from "react";
+import { Reveal, Stagger, StaggerItem, StatusFlash, useIconHover } from "../../components/motion";
+import SparklesIcon from "../../icons/sparkles-icon";
 import { clientApiPost, type AiTestResult } from "../../lib/api";
+
+/**
+ * Client-side stagger wrapper so server pages can animate rows on first mount.
+ * Children keep their keys and DOM position inside the staggered wrappers.
+ */
+export function StaggerList({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <Stagger className={className}>
+      {Children.map(children, (child, index) => (
+        <StaggerItem key={isValidElement(child) && child.key != null ? child.key : index}>{child}</StaggerItem>
+      ))}
+    </Stagger>
+  );
+}
+
+/** Client boundary for `StatusFlash` so server pages can keep their status tags. */
+export function FlashStatus({ status, children }: { status: string; children: ReactNode }) {
+  return <StatusFlash status={status}>{children}</StatusFlash>;
+}
 
 const defaultInput = JSON.stringify(
   {
@@ -41,9 +62,11 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
   const [result, setResult] = useState<AiTestResult | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
+  const { ref: testIconRef, ...testIconHandlers } = useIconHover();
 
   async function testAgent() {
     setIsLoading(true);
+    setResult(undefined);
     setError(undefined);
     try {
       const parsedInput = JSON.parse(input) as Record<string, unknown>;
@@ -61,9 +84,9 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
 
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-      <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
+      <section className="rounded-xl border border-[var(--hairline)] bg-white">
         <div className="border-b border-[var(--hairline)] px-4 py-3">
-          <h2 className="text-base font-bold text-[var(--ink-deep)]">[+] {copy.consoleTitle}</h2>
+          <h2 className="text-base font-bold text-[var(--ink-deep)]">{copy.consoleTitle}</h2>
         </div>
         <div className="space-y-3 p-4">
           <label className="block text-sm font-semibold text-[var(--mute)]" htmlFor="ai-input">
@@ -73,38 +96,44 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
             id="ai-input"
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            className="min-h-56 w-full rounded-[8px] border border-[var(--hairline)] bg-[#fbfcff] p-3 font-mono text-sm text-[var(--ink-deep)] outline-none focus:border-[var(--accent)] focus:bg-white"
+            className="min-h-56 w-full rounded-xl border border-[var(--hairline)] bg-[var(--surface-soft)] p-3 font-mono text-sm text-[var(--ink-deep)] outline-none focus:border-[var(--accent)] focus:bg-white"
           />
           <button
             type="button"
+            {...testIconHandlers}
             onClick={testAgent}
             disabled={isLoading}
-            className="min-h-9 rounded-[8px] bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
           >
+            <span aria-hidden="true" className="inline-flex shrink-0">
+              <SparklesIcon ref={testIconRef} size={16} strokeWidth={1.75} />
+            </span>
             {isLoading ? copy.testing : copy.testAgent}
           </button>
-          {error ? <p className="rounded-[4px] border border-[#dc2626] bg-[#fff1f2] px-3 py-2 text-sm text-[#7f1d1d]">[!] {error}</p> : null}
+          {error ? <p className="rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-ink)]">⚠ {error}</p> : null}
         </div>
       </section>
 
-      <section className="rounded-[8px] border border-[var(--hairline)] bg-white">
+      <section className="rounded-xl border border-[var(--hairline)] bg-white">
         <div className="border-b border-[var(--hairline)] px-4 py-3">
-          <h2 className="text-base font-bold text-[var(--ink-deep)]">[+] {copy.outputTitle}</h2>
+          <h2 className="text-base font-bold text-[var(--ink-deep)]">{copy.outputTitle}</h2>
         </div>
         <div className="p-4">
           {result ? (
-            <div className="space-y-3">
-              <div className="grid gap-2 text-sm sm:grid-cols-3">
-                <p>[provider] {result.provider}</p>
-                <p>[model] {result.modelName}</p>
-                <p>[schema] {result.validation.schemaValid ? copy.valid : copy.invalid}</p>
+            <Reveal>
+              <div className="space-y-3">
+                <div className="grid gap-2 text-sm sm:grid-cols-3">
+                  <p>[provider] {result.provider}</p>
+                  <p>[model] {result.modelName}</p>
+                  <p>[schema] {result.validation.schemaValid ? copy.valid : copy.invalid}</p>
+                </div>
+                <pre className="max-h-96 overflow-auto rounded-xl bg-[var(--surface-soft)] p-3 text-xs leading-5 text-[var(--body)]">
+                  {JSON.stringify(result.result, null, 2)}
+                </pre>
               </div>
-              <pre className="max-h-96 overflow-auto rounded-[4px] bg-[#f2eee9] p-3 text-xs leading-5 text-[#2f2a26]">
-                {JSON.stringify(result.result, null, 2)}
-              </pre>
-            </div>
+            </Reveal>
           ) : (
-            <p className="text-sm text-[#5f5750]">[ ] {copy.emptyOutput}</p>
+            <p className="text-sm text-[var(--mute)]">{copy.emptyOutput}</p>
           )}
         </div>
       </section>

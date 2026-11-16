@@ -1,8 +1,10 @@
-import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
 import { StatusPill, type StatusPillTone } from "../../components/status-pill";
-import { RunWorkflowButton, PublishWorkflowButton } from "../../features/workflows/workflow-actions";
-import { fallbackWorkflows, safeApiGet, type WorkflowView } from "../../lib/api";
+import { DataNotice, EmptyState, ErrorState } from "../../components/data-state";
+import { CreateFromTemplateButton, WorkflowCard } from "../../features/workflows/workflow-actions";
+import { WorkflowsHeading, WorkflowStagger } from "../../features/workflows/workflow-motion";
+import { fallbackWorkflows, type WorkflowView } from "../../lib/api";
+import { safeApiGet } from "../../lib/server-api";
 import { appCopy, resolveLocale, type LocaleSearchParams } from "../../lib/i18n";
 
 const statusTone: Record<WorkflowView["status"], StatusPillTone> = {
@@ -20,53 +22,50 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
   return (
     <AppShell active="workflows" locale={locale}>
       <div className="space-y-8 p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#d8d0c7] pb-4">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
           <div>
-            <p className="text-sm font-semibold uppercase text-[#6b625a]">{t.workflows.eyebrow}</p>
-            <h1 className="mt-1 text-3xl font-bold leading-tight text-[#171412]">{t.workflows.title}</h1>
+            <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.workflows.eyebrow}</p>
+            <WorkflowsHeading>{t.workflows.title}</WorkflowsHeading>
           </div>
-          <Link href={`/workflows/wf_lead_qualification/builder?lang=${locale}`} className="rounded-[8px] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">
-            {t.workflows.newWorkflow}
-          </Link>
+          <CreateFromTemplateButton labels={t.workflows} locale={locale} />
         </div>
 
-        {workflows.source === "fallback" ? (
-          <div className="rounded-[4px] border border-[#b45309] bg-[#fff7ed] px-3 py-2 text-sm text-[#7c2d12]">
-            [!] {t.workflows.fallback}
-          </div>
-        ) : null}
+        <DataNotice resource={workflows} labels={t.states} />
 
-        <div className="divide-y divide-[#eef2f8] rounded-[8px] border border-[var(--hairline)] bg-white">
+        {workflows.source === "error" ? (
+          <ErrorState labels={t.states} detail={workflows.error} />
+        ) : workflows.data.length === 0 ? (
+          <EmptyState title={t.states.emptyTitle} body={t.workflows.empty} />
+        ) : (
+        <WorkflowStagger className="divide-y divide-[var(--hairline)] rounded-xl border border-[var(--hairline)] bg-white">
           {workflows.data.map((workflow) => (
-            <article key={workflow.id} className="bg-white px-4 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-bold text-[#171412]">{workflow.name}</h2>
-                    <StatusPill tone={statusTone[workflow.status]}>{workflow.status}</StatusPill>
-                  </div>
-                  <p className="mt-1 max-w-3xl text-sm text-[#4e4742]">{workflow.description}</p>
-                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs font-medium text-[#5f5750]">
-                    <span>[{t.workflows.nodes}] {workflow.definition.nodes.length}</span>
-                    <span>[{t.workflows.edges}] {workflow.definition.edges.length}</span>
-                    <span>[{t.workflows.workspace}] {workflow.workspaceId}</span>
-                    <span>[{t.workflows.version}] {workflow.currentVersionId ?? "draft"}</span>
-                  </div>
+            <WorkflowCard
+              key={workflow.id}
+              workflowId={workflow.id}
+              status={workflow.status}
+              currentVersionId={workflow.currentVersionId}
+              definition={workflow.definition}
+              locale={locale}
+              labels={t.common}
+              invalidMessage={t.workflows.invalidGraph}
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold text-[var(--ink-deep)]">{workflow.name}</h2>
+                  <StatusPill tone={statusTone[workflow.status]}>{workflow.status}</StatusPill>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/workflows/${workflow.id}/builder?lang=${locale}`}
-                    className="inline-flex min-h-9 items-center rounded-[8px] border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink)]"
-                  >
-                    {t.common.builder}
-                  </Link>
-                  <PublishWorkflowButton workflowId={workflow.id} labels={t.common} />
-                  <RunWorkflowButton workflowId={workflow.id} labels={t.common} locale={locale} />
+                <p className="mt-1 max-w-3xl text-sm text-[var(--body)]">{workflow.description}</p>
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs font-medium text-[var(--mute)]">
+                  <span>[{t.workflows.nodes}] {workflow.definition.nodes.length}</span>
+                  <span>[{t.workflows.edges}] {workflow.definition.edges.length}</span>
+                  <span>[{t.workflows.workspace}] {workflow.workspaceId}</span>
+                  <span>[{t.workflows.version}] {workflow.currentVersionId ?? "draft"}</span>
                 </div>
               </div>
-            </article>
+            </WorkflowCard>
           ))}
-        </div>
+        </WorkflowStagger>
+        )}
       </div>
     </AppShell>
   );
