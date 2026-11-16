@@ -1,3 +1,4 @@
+import { maskSensitivePromptInput } from "@agentops/shared";
 import {
   createEvent,
   eventEnvelopeSchema,
@@ -26,10 +27,9 @@ export function handleToolCallRequested(rawEvent: unknown): EventEnvelope {
       toolCallId: payload.toolCallId,
       toolType: payload.toolType,
       status: "mock_completed",
-      output: {
-        message: `${payload.toolType} executed in mock mode`,
-        receivedInput: payload.input
-      }
+      definition: payload.definition,
+      context: payload.context,
+      output: mockToolOutput(payload.toolType, payload.input, payload.config)
     }
   });
 }
@@ -43,4 +43,18 @@ function createFailure(event: EventEnvelope, nodeId: string, message: string): E
     ...traceContextFromEvent(event),
     payload: { nodeId, message }
   });
+}
+
+/** Mock delivery result. Never echoes the raw input: it holds lead PII and is stored on the step. */
+function mockToolOutput(toolType: string, input: Record<string, unknown>, config: Record<string, unknown>) {
+  if (toolType === "email_mock") {
+    return {
+      mode: "mock",
+      delivered: true,
+      to: maskSensitivePromptInput(String(input["email"] ?? "")),
+      subject: String(input["subject"] ?? config["subject"] ?? "")
+    };
+  }
+
+  return { mode: "mock", delivered: true, url: String(config["url"] ?? ""), method: String(config["method"] ?? "POST") };
 }
