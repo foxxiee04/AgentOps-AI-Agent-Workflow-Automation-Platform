@@ -1,0 +1,116 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - cluster-secret-store.yaml
+  - cluster-issuer.yaml
+  - pdb.yaml
+
+components:
+  - ../../components/keda-autoscaling
+
+# Placeholder account id; the pipeline pins the release commit id as the tag.
+images:
+  - name: agentops/api
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/prod/api
+    newTag: 0.1.0
+  - name: agentops/web
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/prod/web
+    newTag: 0.1.0
+  - name: agentops/workflow-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/prod/workflow-worker
+    newTag: 0.1.0
+  - name: agentops/ai-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/prod/ai-worker
+    newTag: 0.1.0
+  - name: agentops/tool-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/prod/tool-worker
+    newTag: 0.1.0
+  - name: agentops/notification-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/prod/notification-worker
+    newTag: 0.1.0
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: agentops-config
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: agentops-config
+      data:
+        APP_ENV: prod
+        WEB_APP_URL: https://agentops.example.com
+        API_PUBLIC_URL: https://api.agentops.example.com
+        GOOGLE_OAUTH_REDIRECT_URI: https://api.agentops.example.com/auth/google/callback
+        AUTH_COOKIE_DOMAIN: agentops.example.com
+        # Endpoints come from Terraform outputs; DATABASE_URL is in the secret.
+        KAFKA_BROKERS: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        REDIS_URL: redis://REPLACE_WITH_ELASTICACHE_ENDPOINT:6379
+        OTEL_ENABLED: "true"
+        KAFKA_TOPIC_PARTITIONS: "6"
+        KAFKA_TOPIC_REPLICATION_FACTOR: "2"
+  - target:
+      kind: Ingress
+      name: agentops
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-prod
+  - target:
+      kind: ExternalSecret
+      name: agentops-secrets
+    patch: |-
+      - op: replace
+        path: /spec/dataFrom/0/extract/key
+        value: agentops/prod/app
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: agentops-api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 6
+  - target:
+      kind: Deployment
+      name: agentops-api
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: agentops-api
+      spec:
+        replicas: 2
+        template:
+          spec:
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: agentops-api
+  - target:
+      kind: Deployment
+      name: agentops-web
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: agentops-web
+      spec:
+        replicas: 2
+        template:
+          spec:
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: agentops-web

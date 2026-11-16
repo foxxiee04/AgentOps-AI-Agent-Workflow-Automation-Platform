@@ -1,0 +1,58 @@
+# Run once per release, before rolling out the application Deployments.
+# Jobs are immutable, so delete any previous Job first:
+#   kubectl -n agentops delete job agentops-db-migrate --ignore-not-found
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentops-db-migrate
+  labels:
+    app.kubernetes.io/name: agentops-db-migrate
+    app.kubernetes.io/component: migrate
+    app.kubernetes.io/part-of: agentops
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: agentops-migrate
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: agentops/tools:local
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "pnpm db:migrate:deploy && pnpm db:seed && pnpm kafka:bootstrap"]
+          env:
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - configMapRef:
+                name: agentops-config
+            - secretRef:
+                name: agentops-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

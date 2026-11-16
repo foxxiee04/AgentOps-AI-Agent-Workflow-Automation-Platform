@@ -1,0 +1,21 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agentops-api
+  namespace: agentops
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentops-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agentops-web
+  namespace: agentops
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentops-web
