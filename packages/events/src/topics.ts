@@ -8,6 +8,7 @@ export const kafkaTopics = {
   toolCallRequested: "tool-call-requested",
   toolCallCompleted: "tool-call-completed",
   humanApprovalRequested: "human-approval-requested",
+  humanApprovalDecided: "human-approval-decided",
   notificationRequested: "notification-requested",
   workflowCompleted: "workflow-completed",
   workflowFailed: "workflow-failed",
