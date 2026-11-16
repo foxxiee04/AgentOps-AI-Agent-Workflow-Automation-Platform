@@ -38,9 +38,27 @@ export class WorkerMetrics {
     ["worker", "topic", "group_id"]
   );
 
+  private readonly outcomesTotal = new CounterMetric(
+    "agentops_worker_message_outcomes_total",
+    "Kafka messages by processing outcome (processed, duplicate, dead_lettered).",
+    ["worker", "topic", "group_id", "outcome"]
+  );
+  private readonly deadLettersTotal = new CounterMetric(
+    "agentops_worker_dead_letters_total",
+    "Kafka messages sent to dead-letter-events after retries were exhausted.",
+    ["worker", "topic", "group_id"]
+  );
+
   private server: Server | undefined;
+  private readonly extra: Array<{ render(): string }> = [];
 
   constructor(private readonly workerName: string) {}
+
+  /** Adds domain metric families (AI, business) to this worker's /metrics output. */
+  register<T extends { render(): string }>(renderable: T): T {
+    this.extra.push(renderable);
+    return renderable;
+  }
 
   recordMessage(event: WorkerMetricEvent) {
     const labels = {
@@ -51,6 +69,17 @@ export class WorkerMetrics {
     this.messagesConsumedTotal.inc(labels);
     this.messageDurationSeconds.observe({ ...labels, status: event.status }, event.durationMs / 1000);
     this.lastMessageTimestampSeconds.set(labels, Date.now() / 1000);
+  }
+
+  /** Records the result of `processMessage` (status = processed | duplicate | dead_lettered). */
+  recordOutcome(topic: string, groupId: string, outcome: { status: string; error?: string }, durationMs: number) {
+    const failed = outcome.status === "dead_lettered";
+    this.recordMessage({ topic, groupId, status: failed ? "error" : "success", durationMs });
+    this.outcomesTotal.inc({ worker: this.workerName, topic, group_id: groupId, outcome: outcome.status });
+    if (failed) {
+      this.deadLettersTotal.inc({ worker: this.workerName, topic, group_id: groupId });
+      this.recordError({ topic, groupId, errorType: "DeadLettered" });
+    }
   }
 
   recordError(error: WorkerMetricError) {
@@ -99,7 +128,10 @@ export class WorkerMetrics {
       this.messagesConsumedTotal.render(),
       this.messageDurationSeconds.render(),
       this.errorsTotal.render(),
-      this.lastMessageTimestampSeconds.render()
+      this.lastMessageTimestampSeconds.render(),
+      this.outcomesTotal.render(),
+      this.deadLettersTotal.render(),
+      ...this.extra.map((renderable) => renderable.render())
     ]
       .filter(Boolean)
       .join("\n\n")

@@ -1,5 +1,6 @@
 import {
   context,
+  isSpanContextValid,
   propagation,
   SpanKind,
   SpanStatusCode,
@@ -16,7 +17,7 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION
 } from "@opentelemetry/semantic-conventions";
-import { createTraceparent, parseTraceparent } from "./trace";
+import { createTraceId, createTraceparent, parseTraceparent } from "./trace";
 
 export { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 
@@ -91,6 +92,12 @@ export function startOtelSpan(name: string, options: StartOtelSpanOptions = {}) 
   );
   const spanContext = trace.setSpan(parentContext, span);
 
+  if (!isSpanContextValid(span.spanContext())) {
+    // OTel disabled: keep correlating logs/events with the caller's trace id (or a fresh one).
+    const traceId = parseTraceparent(options.traceparent)?.traceId ?? createTraceId();
+    return { span, context: spanContext, traceId, traceparent: createTraceparent(traceId) };
+  }
+
   return {
     span,
     context: spanContext,
@@ -125,7 +132,7 @@ export function runWithOtelContext<T>(otelContext: Context, callback: () => T): 
 export function traceparentFromSpan(span: Pick<Span, "spanContext">) {
   const spanContext = span.spanContext();
 
-  if (!spanContext.traceId || !spanContext.spanId) {
+  if (!spanContext.traceId || !spanContext.spanId || !isSpanContextValid(spanContext)) {
     return undefined;
   }
 
