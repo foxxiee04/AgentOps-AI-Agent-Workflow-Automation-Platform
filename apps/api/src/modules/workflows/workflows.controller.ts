@@ -1,19 +1,29 @@
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import type { AuthenticatedCaller } from "../../common/auth/jwt-auth.guard";
 import { WorkspaceRoleGuard } from "../../common/rbac/workspace-role.guard";
-import { WorkspaceRoles } from "../../common/rbac/workspace-role.decorator";
+import { WorkspaceRoles, WorkspaceScope } from "../../common/rbac/workspace-role.decorator";
 import { CreateWorkflowDto, RunWorkflowDto, UpdateWorkflowDto } from "./dto";
 import { WorkflowsService } from "./workflows.service";
 
+type AuthenticatedRequest = {
+  auth: AuthenticatedCaller;
+};
+
 @ApiTags("workflows")
 @UseGuards(WorkspaceRoleGuard)
+@WorkspaceScope("workflowParamOrBody")
 @Controller("workflows")
 export class WorkflowsController {
   constructor(@Inject(WorkflowsService) private readonly workflowsService: WorkflowsService) {}
 
   @Get()
-  findAll(@Query("workspaceId") workspaceId?: string) {
-    return this.workflowsService.findAll(workspaceId);
+  findAll(
+    @Req() request: AuthenticatedRequest,
+    @Query("workspaceId") workspaceId?: string,
+    @Query("includeArchived") includeArchived?: string
+  ) {
+    return this.workflowsService.findAll(workspaceId, request.auth.userId, includeArchived === "true");
   }
 
   @Post()
@@ -23,6 +33,7 @@ export class WorkflowsController {
   }
 
   @Get(":id")
+  @WorkspaceRoles("VIEWER")
   findOne(@Param("id") id: string) {
     return this.workflowsService.findOne(id);
   }
@@ -52,6 +63,7 @@ export class WorkflowsController {
   }
 
   @Get(":id/runs")
+  @WorkspaceRoles("VIEWER")
   runs(@Param("id") id: string) {
     return this.workflowsService.runsForWorkflow(id);
   }

@@ -1,8 +1,15 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@agentops/database";
 import {
+  formatLeadInputErrors,
+  leadInputSchema,
+  maskSensitivePromptInput,
+  requiresLeadInput,
   validateWorkflowDefinition,
+  type WorkflowRunStepView,
+  type WorkflowRunStepsView,
+  type WorkflowRunView,
   workflowDefinitionSchema,
   type WorkflowDefinition,
   type WorkflowNodeType,
@@ -38,28 +45,6 @@ type WorkflowVersionRecord = {
   createdAt: string;
 };
 
-type WorkflowRunRecord = {
-  id: string;
-  workflowId: string;
-  workspaceId: string;
-  workflowVersionId: string;
-  status: WorkflowRunStatus;
-  triggerType: string;
-  input: Record<string, unknown>;
-  createdAt: string;
-  eventId?: string;
-};
-
-type WorkflowRunStepRecord = {
-  id: string;
-  workflowRunId: string;
-  nodeId: string;
-  nodeName: string;
-  nodeType: WorkflowNodeType;
-  status: WorkflowStepStatus;
-  message: string;
-};
-
 type WorkflowDbRecord = {
   id: string;
   workspaceId: string;
@@ -91,6 +76,18 @@ type WorkflowRunDbRecord = {
   inputJson: unknown;
   triggerEventId: string | null;
   createdAt: Date;
+  startedAt?: Date | null;
+  finishedAt?: Date | null;
+  errorMessage?: string | null;
+};
+
+const stepStatusMessages: Record<WorkflowStepStatus, string> = {
+  PENDING: "Waiting for workflow-worker execution in the async pipeline.",
+  RUNNING: "Running in a worker.",
+  WAITING_APPROVAL: "Waiting for a reviewer to approve or reject.",
+  COMPLETED: "Completed.",
+  FAILED: "Failed.",
+  SKIPPED: "Branch not taken."
 };
 
 @Injectable()
@@ -101,10 +98,15 @@ export class WorkflowsService {
     @Inject(DemoDataService) private readonly demoData: DemoDataService
   ) {}
 
-  async findAll(workspaceId?: string) {
+  /** Archived workflows are hidden unless the caller explicitly asks for them. */
+  async findAll(workspaceId?: string, userId?: string, includeArchived = false) {
     await this.demoData.ensureDemoWorkflow();
     const workflows = await this.prisma.client.workflow.findMany({
-      where: workspaceId ? { workspaceId } : undefined,
+      where: {
+        ...(workspaceId ? { workspaceId } : {}),
+        ...(userId ? { workspace: { members: { some: { userId } } } } : {}),
+        ...(includeArchived ? {} : { status: { not: "ARCHIVED" } })
+      },
       orderBy: { updatedAt: "desc" }
     });
 
@@ -168,6 +170,7 @@ export class WorkflowsService {
   async publish(id: string) {
     await this.demoData.ensureDemoWorkflow();
     const workflow = await this.findWorkflowRecord(id);
+    this.assertNotArchived(workflow);
     const definition = this.parseDefinition(workflow.definitionJson);
     const issues = validateWorkflowDefinition(definition);
     if (issues.length > 0) {
@@ -204,16 +207,22 @@ export class WorkflowsService {
 
   async run(id: string, dto: RunWorkflowDto) {
     await this.demoData.ensureDemoWorkflow();
-    let workflow = await this.findWorkflowRecord(id);
-    let version = workflow.currentVersionId ? await this.findWorkflowVersionRecord(workflow.currentVersionId) : undefined;
+    const workflow = await this.findWorkflowRecord(id);
+    this.assertNotArchived(workflow);
+    const version = workflow.currentVersionId
+      ? await this.findWorkflowVersionRecord(workflow.currentVersionId)
+      : undefined;
 
+    // Publishing is an ADMIN action, so a run must never publish a draft on the caller's behalf.
     if (!version) {
-      const published = await this.publish(id);
-      workflow = await this.findWorkflowRecord(id);
-      version = await this.findWorkflowVersionRecord(published.version.id);
+      throw new ConflictException({
+        message: "Workflow has no published version. Publish it before running.",
+        code: "WORKFLOW_NOT_PUBLISHED"
+      });
     }
 
     const definition = this.parseDefinition(version.definitionJson);
+    const input = this.resolveRunInput(definition, dto.input);
     const runId = `run_${randomUUID()}`;
     const run = await this.prisma.client.$transaction(async (tx) => {
       const createdRun = await tx.workflowRun.create({
@@ -224,7 +233,7 @@ export class WorkflowsService {
           workflowVersionId: version.id,
           status: "PENDING",
           triggerType: dto.triggerType ?? "manual",
-          inputJson: toInputJson(dto.input ?? {})
+          inputJson: toInputJson(input)
         }
       });
 
@@ -235,7 +244,7 @@ export class WorkflowsService {
           nodeId: node.id,
           nodeType: node.type,
           status: index === 0 ? "COMPLETED" : "PENDING",
-          inputJson: index === 0 ? toInputJson(dto.input ?? {}) : undefined,
+          inputJson: index === 0 ? toInputJson(input) : undefined,
           outputJson: index === 0 ? toInputJson({ message: "Trigger accepted by API and workflow event published." }) : undefined
         }))
       });
@@ -249,7 +258,7 @@ export class WorkflowsService {
       workflowId: workflow.id,
       workflowRunId: run.id,
       payload: {
-        input: dto.input ?? {},
+        input,
         triggerType: dto.triggerType ?? "manual",
         workflowVersionId: version.id,
         definition
@@ -292,18 +301,21 @@ export class WorkflowsService {
 
   async listRuns() {
     const runs = await this.prisma.client.workflowRun.findMany({
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      take: 200
     });
 
     return runs.map((run) => this.toWorkflowRunRecord(run));
   }
 
-  async stepsForRun(id: string): Promise<{ workflowRunId: string; steps: WorkflowRunStepRecord[] }> {
+  /** Step timeline from the immutable version, merged with what the workers persisted (input is masked). */
+  async stepsForRun(id: string): Promise<WorkflowRunStepsView> {
     const run = await this.prisma.client.workflowRun.findUnique({
       where: { id },
       include: {
         workflowVersion: true,
-        steps: true
+        steps: true,
+        aiTaskResults: true
       }
     });
     if (!run) {
@@ -314,16 +326,30 @@ export class WorkflowsService {
 
     return {
       workflowRunId: run.id,
-      steps: definition.nodes.map((node, index) => {
+      steps: definition.nodes.map((node, index): WorkflowRunStepView => {
         const persisted = run.steps.find((step) => step.nodeId === node.id);
+        const status = (persisted?.status ?? (index === 0 ? "COMPLETED" : "PENDING")) as WorkflowStepStatus;
+        const ai = run.aiTaskResults.find((result) => result.nodeId === node.id);
+        const startedAt = persisted?.startedAt ?? undefined;
+        const finishedAt = persisted?.finishedAt ?? undefined;
         return {
           id: persisted?.id ?? `${run.id}_${node.id}`,
           workflowRunId: run.id,
           nodeId: node.id,
           nodeName: node.name,
           nodeType: node.type,
-          status: (persisted?.status ?? (index === 0 ? "COMPLETED" : "PENDING")) as WorkflowStepStatus,
-          message: this.stepMessage(index, persisted?.errorMessage ?? undefined)
+          status,
+          message: persisted?.errorMessage ?? (index === 0 && status === "COMPLETED" ? "Trigger accepted by API and workflow event published." : stepStatusMessages[status]),
+          input: persisted?.inputJson == null ? undefined : maskSensitivePromptInput(persisted.inputJson),
+          output: persisted?.outputJson ?? undefined,
+          errorMessage: persisted?.errorMessage ?? undefined,
+          startedAt: startedAt?.toISOString(),
+          finishedAt: finishedAt?.toISOString(),
+          durationMs: startedAt && finishedAt ? finishedAt.getTime() - startedAt.getTime() : undefined,
+          retryCount: persisted?.retryCount ?? 0,
+          tokenUsage: ai
+            ? { provider: ai.provider, modelName: ai.modelName, inputTokens: ai.inputTokens, outputTokens: ai.outputTokens }
+            : undefined
         };
       })
     };
@@ -350,13 +376,36 @@ export class WorkflowsService {
     return workflow;
   }
 
-  private async findWorkflowVersionRecord(id: string): Promise<WorkflowVersionDbRecord> {
-    const version = await this.prisma.client.workflowVersion.findUnique({ where: { id } });
-    if (!version) {
-      throw new NotFoundException("Workflow version not found");
+  /** Archived workflows are read-only: they can neither be published nor run. */
+  private assertNotArchived(workflow: WorkflowDbRecord) {
+    if (workflow.status === "ARCHIVED") {
+      throw new ConflictException({
+        message: "Workflow is archived.",
+        code: "WORKFLOW_ARCHIVED"
+      });
+    }
+  }
+
+  private async findWorkflowVersionRecord(id: string): Promise<WorkflowVersionDbRecord | undefined> {
+    return (await this.prisma.client.workflowVersion.findUnique({ where: { id } })) ?? undefined;
+  }
+
+  /** Lead workflows only accept a valid lead payload; other workflows take the input as is. */
+  private resolveRunInput(definition: WorkflowDefinition, input: Record<string, unknown> | undefined) {
+    if (!requiresLeadInput(definition)) {
+      return input ?? {};
     }
 
-    return version;
+    const parsed = leadInputSchema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid lead input",
+        code: "INVALID_LEAD_INPUT",
+        details: formatLeadInputErrors(parsed.error)
+      });
+    }
+
+    return parsed.data;
   }
 
   private parseDefinition(input: unknown): WorkflowDefinition {
@@ -388,7 +437,7 @@ export class WorkflowsService {
     };
   }
 
-  private toWorkflowRunRecord(run: WorkflowRunDbRecord): WorkflowRunRecord {
+  private toWorkflowRunRecord(run: WorkflowRunDbRecord): WorkflowRunView {
     return {
       id: run.id,
       workflowId: run.workflowId,
@@ -396,23 +445,16 @@ export class WorkflowsService {
       workflowVersionId: run.workflowVersionId,
       status: run.status as WorkflowRunStatus,
       triggerType: run.triggerType,
-      input: run.inputJson as Record<string, unknown>,
+      // Lead input contains PII: clients only ever see the masked form.
+      input: maskSensitivePromptInput(run.inputJson ?? {}) as Record<string, unknown>,
       createdAt: run.createdAt.toISOString(),
+      startedAt: run.startedAt?.toISOString(),
+      finishedAt: run.finishedAt?.toISOString(),
+      errorMessage: run.errorMessage ?? undefined,
       eventId: run.triggerEventId ?? undefined
     };
   }
-
-  private stepMessage(index: number, errorMessage?: string) {
-    if (errorMessage) {
-      return errorMessage;
-    }
-
-    return index === 0
-      ? "Trigger accepted by API and workflow event published."
-      : "Waiting for workflow-worker execution in the async pipeline.";
-  }
 }
-
 function toInputJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
