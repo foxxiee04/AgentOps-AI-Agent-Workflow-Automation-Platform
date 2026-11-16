@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Prometheus, Alertmanager, Grafana and Tempo for a cluster, reusing the rules
+# and dashboards of the local compose stack. The generators read files outside
+# this directory, so render with:
+#   kubectl kustomize --load-restrictor LoadRestrictionsNone infrastructure/k8s/monitoring | kubectl apply -f -
+# No top-level `namespace:` here: the pod-discovery Role and RoleBinding must stay
+# in the agentops namespace.
+resources:
+  - monitoring.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - namespace: monitoring
+    name: prometheus-config
+    files:
+      - prometheus.yml
+  - namespace: monitoring
+    name: prometheus-rules
+    files:
+      - ../../observability/prometheus/rules/agentops-alerts.yml
+  - namespace: monitoring
+    name: alertmanager-config
+    files:
+      - alertmanager.yml
+  - namespace: monitoring
+    name: tempo-config
+    files:
+      - ../../observability/tempo/tempo.yml
+  - namespace: monitoring
+    name: grafana-datasources
+    files:
+      - datasources.yml
+  - namespace: monitoring
+    name: grafana-dashboard-provider
+    files:
+      - ../../observability/grafana/provisioning/dashboards/agentops.yml
+  - namespace: monitoring
+    name: grafana-dashboards
+    files:
+      - ../../observability/grafana/dashboards/agentops-ai.json
+      - ../../observability/grafana/dashboards/agentops-business.json
+      - ../../observability/grafana/dashboards/agentops-kafka.json
+      - ../../observability/grafana/dashboards/agentops-overview.json
+      - ../../observability/grafana/dashboards/agentops-red.json

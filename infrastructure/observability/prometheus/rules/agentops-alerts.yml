@@ -105,3 +105,98 @@ groups:
         annotations:
           summary: AgentOps Kafka consumer lag is high
           description: Consumer group {{ $labels.group_id }} has more than 100 pending messages on topic {{ $labels.topic }}.
+
+  - name: agentops-pipeline
+    rules:
+      - alert: AgentOpsWorkerErrorRateHigh
+        expr: |
+          (
+            sum(rate(agentops_worker_message_outcomes_total{outcome="dead_lettered"}[5m])) by (worker)
+            /
+            clamp_min(sum(rate(agentops_worker_message_outcomes_total[5m])) by (worker), 1e-9)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "{{ $labels.worker }}: more than 5% of messages dead-lettered"
+          description: Messages are failing after 3 attempts. Check the worker logs and dead-letter-events.
+
+      - alert: AgentOpsWorkerLatencyP95High
+        expr: histogram_quantile(0.95, sum(rate(agentops_worker_message_duration_seconds_bucket[5m])) by (le, worker)) > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "{{ $labels.worker }}: p95 message handling above 10s"
+          description: Slow provider calls or database writes; check the AI dashboard and Tempo traces.
+
+      - alert: AgentOpsKafkaLagGrowing
+        expr: |
+          deriv(sum(agentops_kafka_consumer_lag) by (group_id, topic)[10m:1m]) > 0
+          and
+          sum(agentops_kafka_consumer_lag) by (group_id, topic) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Lag keeps growing for {{ $labels.group_id }} on {{ $labels.topic }}"
+          description: Consumers are not keeping up for 10 minutes. Scale the worker or check for a stuck partition.
+
+      - alert: AgentOpsDeadLettersIncreasing
+        expr: sum(increase(agentops_worker_dead_letters_total[10m])) by (worker, topic) > 0
+        for: 0m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "New dead letters from {{ $labels.worker }} ({{ $labels.topic }})"
+          description: A message failed 3 attempts (or a non-retryable error) and was sent to dead-letter-events; its run is FAILED.
+
+      - alert: AgentOpsAiQuotaExhausted
+        expr: sum(increase(agentops_ai_calls_total{status="quota_exceeded"}[10m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: ai
+        annotations:
+          summary: AI daily quota reached
+          description: AI calls are being rejected by AI_DAILY_CALL_LIMIT / AI_DAILY_TOKEN_LIMIT; new leads fail at the scoring step.
+
+      - alert: AgentOpsAiInvalidJsonHigh
+        expr: |
+          (
+            sum(increase(agentops_ai_output_validation_total{result="invalid"}[15m]))
+            /
+            clamp_min(sum(increase(agentops_ai_output_validation_total[15m])), 1e-9)
+          ) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+          service: ai
+        annotations:
+          summary: More than 20% of AI outputs fail JSON Schema validation
+          description: Check the prompt and model; run /ai/evaluate-agent against the labeled lead dataset.
+
+      - alert: AgentOpsOutboxBacklog
+        expr: sum(agentops_domain_events_unpublished) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: Domain events are waiting to be published to Kafka
+          description: The API stored events it could not publish; the relay retries every 30s. Check Kafka connectivity.
+
+      - alert: AgentOpsApprovalsBacklog
+        expr: sum(agentops_approvals_pending) > 20
+        for: 30m
+        labels:
+          severity: info
+          service: business
+        annotations:
+          summary: More than 20 emails waiting for approval
+          description: Hot leads are waiting for a reviewer at /approvals.

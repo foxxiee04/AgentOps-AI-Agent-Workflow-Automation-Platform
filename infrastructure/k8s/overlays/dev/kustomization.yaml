@@ -1,0 +1,78 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - cluster-secret-store.yaml
+  - cluster-issuer.yaml
+
+components:
+  - ../../components/in-cluster-data
+
+# Placeholder account id; the pipeline sets the tag with
+# `kustomize edit set image`.
+images:
+  - name: agentops/api
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/dev/api
+    newTag: dev
+  - name: agentops/web
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/dev/web
+    newTag: dev
+  - name: agentops/workflow-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/dev/workflow-worker
+    newTag: dev
+  - name: agentops/ai-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/dev/ai-worker
+    newTag: dev
+  - name: agentops/tool-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/dev/tool-worker
+    newTag: dev
+  - name: agentops/notification-worker
+    newName: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com/dev/notification-worker
+    newTag: dev
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: agentops-config
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: agentops-config
+      data:
+        APP_ENV: dev
+        WEB_APP_URL: https://dev.agentops.example.com
+        AI_DAILY_CALL_LIMIT: "200"
+        OTEL_ENABLED: "true"
+  - target:
+      kind: Ingress
+      name: agentops
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-staging
+      - op: replace
+        path: /spec/tls/0/hosts
+        value:
+          - dev.agentops.example.com
+          - api.dev.agentops.example.com
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.agentops.example.com
+      - op: replace
+        path: /spec/rules/1/host
+        value: api.dev.agentops.example.com
+  - target:
+      kind: ExternalSecret
+      name: agentops-secrets
+    patch: |-
+      - op: replace
+        path: /spec/dataFrom/0/extract/key
+        value: agentops/dev/app
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2

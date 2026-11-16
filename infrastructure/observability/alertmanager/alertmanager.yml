@@ -17,6 +17,12 @@ receivers:
       - url: http://host.docker.internal:4000/notifications/alertmanager
         send_resolved: true
         max_alerts: 20
+        # Non-local deployments must send a Bearer token matching ALERTMANAGER_WEBHOOK_TOKEN
+        # (the local compose stack runs without a token). Uncomment and mount the file:
+        # http_config:
+        #   authorization:
+        #     type: Bearer
+        #     credentials_file: /etc/alertmanager/webhook-token
 
 inhibit_rules:
   - source_matchers:
