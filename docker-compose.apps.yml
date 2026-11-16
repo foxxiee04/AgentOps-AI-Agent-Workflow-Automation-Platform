@@ -12,7 +12,10 @@ x-web-build: &web-build
 
 x-worker-env: &worker-env
   NODE_ENV: production
+  APP_ENV: local
+  DATABASE_URL: postgresql://agentops:agentops@postgres:5432/agentops
   KAFKA_BROKERS: kafka:9092
+  WORKFLOW_AUTO_APPROVE: "false"
   OTEL_ENABLED: "false"
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
 
@@ -31,10 +34,13 @@ x-api-env: &api-env
 
 services:
   setup:
-    image: agentops/api:local
-    build: *api-build
+    # Full workspace image (prisma CLI, tsx) for migrations, seeds and topic bootstrap.
+    image: agentops/tools:local
+    build:
+      <<: *api-build
+      target: tools
     container_name: agentops-local-setup
-    command: sh -c "pnpm db:push && pnpm kafka:bootstrap"
+    command: sh -c "pnpm db:migrate:deploy && pnpm db:seed && pnpm db:seed:demo && pnpm kafka:bootstrap"
     environment: *api-env
     depends_on:
       postgres:
@@ -72,6 +78,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://localhost:4000
+      API_PUBLIC_URL: http://localhost:4000
       API_INTERNAL_URL: http://api:4000
     ports:
       - "3000:3000"
@@ -79,7 +86,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/en').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -94,13 +101,12 @@ services:
       dockerfile: infrastructure/docker/worker.Dockerfile
       args:
         WORKER_PACKAGE: "@agentops/workflow-worker"
-        WORKER_MAIN: apps/workflow-worker/dist/main.js
     container_name: agentops-local-workflow-worker
     environment:
       <<: *worker-env
-      WORKFLOW_WORKER_METRICS_PORT: "4101"
     ports:
-      - "4101:4101"
+      # Workers listen on WORKER_METRICS_PORT=9100 inside the image; host ports stay 4101-4104 for Prometheus.
+      - "4101:9100"
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -114,13 +120,12 @@ services:
       dockerfile: infrastructure/docker/worker.Dockerfile
       args:
         WORKER_PACKAGE: "@agentops/ai-worker"
-        WORKER_MAIN: apps/ai-worker/dist/main.js
     container_name: agentops-local-ai-worker
     environment:
       <<: *worker-env
-      AI_WORKER_METRICS_PORT: "4102"
     ports:
-      - "4102:4102"
+      # Workers listen on WORKER_METRICS_PORT=9100 inside the image; host ports stay 4101-4104 for Prometheus.
+      - "4102:9100"
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -134,13 +139,12 @@ services:
       dockerfile: infrastructure/docker/worker.Dockerfile
       args:
         WORKER_PACKAGE: "@agentops/tool-worker"
-        WORKER_MAIN: apps/tool-worker/dist/main.js
     container_name: agentops-local-tool-worker
     environment:
       <<: *worker-env
-      TOOL_WORKER_METRICS_PORT: "4103"
     ports:
-      - "4103:4103"
+      # Workers listen on WORKER_METRICS_PORT=9100 inside the image; host ports stay 4101-4104 for Prometheus.
+      - "4103:9100"
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -154,13 +158,12 @@ services:
       dockerfile: infrastructure/docker/worker.Dockerfile
       args:
         WORKER_PACKAGE: "@agentops/notification-worker"
-        WORKER_MAIN: apps/notification-worker/dist/main.js
     container_name: agentops-local-notification-worker
     environment:
       <<: *worker-env
-      NOTIFICATION_WORKER_METRICS_PORT: "4104"
     ports:
-      - "4104:4104"
+      # Workers listen on WORKER_METRICS_PORT=9100 inside the image; host ports stay 4101-4104 for Prometheus.
+      - "4104:9100"
     depends_on:
       setup:
         condition: service_completed_successfully

@@ -7,7 +7,8 @@ const argsByMode = {
   up: [...composeFiles, "up", "-d", "--build"],
   down: [...composeFiles, "down"],
   logs: [...composeFiles, "logs", "-f", "api", "web", "workflow-worker", "ai-worker", "tool-worker", "notification-worker"],
-  config: [...composeFiles, "config"]
+  config: [...composeFiles, "config"],
+  reset: [...composeFiles, "down", "-v"]
 };
 
 const args = argsByMode[mode] ? [...argsByMode[mode], ...extraArgs] : undefined;
@@ -23,5 +24,16 @@ const result = spawnSync("docker", args, {
     COMPOSE_BAKE: "false"
   }
 });
+
+if (mode === "reset" && result.status === 0) {
+  const upResult = spawnSync("docker", argsByMode.up, {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      COMPOSE_BAKE: "false"
+    }
+  });
+  process.exit(upResult.status ?? 1);
+}
 
 process.exit(result.status ?? 1);
