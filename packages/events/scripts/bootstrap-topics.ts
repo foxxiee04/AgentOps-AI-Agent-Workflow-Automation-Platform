@@ -11,6 +11,7 @@ function parseBrokers(value: string) {
 const brokers = parseBrokers(process.env.KAFKA_BROKERS ?? "localhost:9094");
 const numPartitions = Number(process.env.KAFKA_TOPIC_PARTITIONS ?? 3);
 const replicationFactor = Number(process.env.KAFKA_TOPIC_REPLICATION_FACTOR ?? 1);
+const allowIncrease = process.env.KAFKA_TOPIC_ALLOW_INCREASE === "true";
 const topicNames = Object.values(kafkaTopics);
 
 const kafka = new Kafka({
@@ -38,6 +39,36 @@ async function main() {
           replicationFactor
         }))
       });
+    }
+
+    if (allowIncrease) {
+      const existingTopicList = topicNames.filter((topic) => existingTopics.has(topic));
+      if (existingTopicList.length > 0) {
+        const metadata = await admin.fetchTopicMetadata({ topics: existingTopicList });
+        for (const topicMeta of metadata.topics) {
+          const currentPartitions = topicMeta.partitions.length;
+          if (currentPartitions < numPartitions) {
+            await admin.createPartitions({
+              topicPartitions: [
+                {
+                  topic: topicMeta.name,
+                  count: numPartitions
+                }
+              ]
+            });
+            console.log(
+              JSON.stringify({
+                topic: topicMeta.name,
+                action: "increase_partitions",
+                from: currentPartitions,
+                to: numPartitions
+              })
+            );
+          } else if (currentPartitions > numPartitions) {
+            // never decrease
+          }
+        }
+      }
     }
 
     console.log(

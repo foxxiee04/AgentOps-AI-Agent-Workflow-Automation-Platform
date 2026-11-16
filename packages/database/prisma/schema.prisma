@@ -39,6 +39,13 @@ enum WorkflowStepStatus {
   SKIPPED
 }
 
+enum HumanApprovalStatus {
+  WAITING_APPROVAL
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
 enum WorkflowNodeType {
   TRIGGER
   AI_AGENT
@@ -53,48 +60,54 @@ enum WorkflowNodeType {
 }
 
 model User {
-  id               String            @id @default(cuid())
-  email            String            @unique
+  id               String             @id @default(cuid())
+  email            String             @unique
   passwordHash     String
   name             String
   avatarUrl        String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  ownedWorkspaces  Workspace[]        @relation("WorkspaceOwner")
   memberships      WorkspaceMember[]
-  workflowsCreated Workflow[]        @relation("WorkflowCreatedBy")
-  versionsCreated  WorkflowVersion[] @relation("WorkflowVersionCreatedBy")
-  refreshTokens     AuthRefreshToken[]
-  auditLogs         AuditLog[]
+  workflowsCreated Workflow[]         @relation("WorkflowCreatedBy")
+  versionsCreated  WorkflowVersion[]  @relation("WorkflowVersionCreatedBy")
+  refreshTokens    AuthRefreshToken[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  approvalsDecided HumanApproval[]
 }
 
 model AuthRefreshToken {
-  id          String    @id @default(cuid())
-  userId      String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Workspace {
-  id              String            @id @default(cuid())
-  name            String
-  slug            String            @unique
-  ownerId         String
-  plan            String            @default("FREE")
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  members         WorkspaceMember[]
-  workflows       Workflow[]
-  workflowRuns    WorkflowRun[]
+  id               String            @id @default(cuid())
+  name             String
+  slug             String            @unique
+  ownerId          String
+  plan             String            @default("FREE")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members          WorkspaceMember[]
+  workflows        Workflow[]
+  workflowRuns     WorkflowRun[]
   webhookEndpoints WebhookEndpoint[]
-  notifications   Notification[]
-  auditLogs       AuditLog[]
-  usageRecords    UsageRecord[]
-  apiKeys         ApiKey[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  usageRecords     UsageRecord[]
+  apiKeys          ApiKey[]
+  aiTaskResults    AiTaskResult[]
+  toolCallResults  ToolCallResult[]
 }
 
 model WorkspaceMember {
@@ -107,38 +120,43 @@ model WorkspaceMember {
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId])
+  @@index([userId])
 }
 
 model Workflow {
-  id               String             @id @default(cuid())
+  id               String            @id @default(cuid())
   workspaceId      String
   name             String
   description      String?
-  status           WorkflowStatus     @default(DRAFT)
+  status           WorkflowStatus    @default(DRAFT)
   currentVersionId String?
   definitionJson   Json
   createdById      String
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy        User               @relation("WorkflowCreatedBy", fields: [createdById], references: [id])
-  currentVersion   WorkflowVersion?   @relation("CurrentWorkflowVersion", fields: [currentVersionId], references: [id])
-  versions         WorkflowVersion[]   @relation("WorkflowVersions")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy        User              @relation("WorkflowCreatedBy", fields: [createdById], references: [id])
+  currentVersion   WorkflowVersion?  @relation("CurrentWorkflowVersion", fields: [currentVersionId], references: [id])
+  versions         WorkflowVersion[] @relation("WorkflowVersions")
   runs             WorkflowRun[]
   webhookEndpoints WebhookEndpoint[]
+  aiAgentConfigs   AiAgentConfig[]
+  toolConfigs      ToolConfig[]
+
+  @@index([workspaceId, updatedAt])
 }
 
 model WorkflowVersion {
-  id            String        @id @default(cuid())
-  workflowId    String
-  versionNumber Int
+  id             String        @id @default(cuid())
+  workflowId     String
+  versionNumber  Int
   definitionJson Json
-  createdById   String
-  createdAt     DateTime      @default(now())
-  workflow      Workflow      @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
-  currentFor    Workflow[]    @relation("CurrentWorkflowVersion")
-  createdBy     User          @relation("WorkflowVersionCreatedBy", fields: [createdById], references: [id])
-  runs          WorkflowRun[]
+  createdById    String
+  createdAt      DateTime      @default(now())
+  workflow       Workflow      @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
+  currentFor     Workflow[]    @relation("CurrentWorkflowVersion")
+  createdBy      User          @relation("WorkflowVersionCreatedBy", fields: [createdById], references: [id])
+  runs           WorkflowRun[]
 
   @@unique([workflowId, versionNumber])
 }
@@ -156,6 +174,8 @@ model WorkflowRun {
   startedAt         DateTime?
   finishedAt        DateTime?
   errorMessage      String?
+  // Internal execution context (trigger input + node outputs). Never returned to clients unmasked.
+  contextJson       Json?
   createdAt         DateTime          @default(now())
   workflow          Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   workflowVersion   WorkflowVersion   @relation(fields: [workflowVersionId], references: [id])
@@ -164,6 +184,13 @@ model WorkflowRun {
   aiTaskResults     AiTaskResult[]
   toolCallResults   ToolCallResult[]
   usageRecords      UsageRecord[]
+  approvals         HumanApproval[]
+  domainEvents      DomainEvent[]
+
+  // Run lists (dashboard, per workflow) and status filters.
+  @@index([workspaceId, createdAt])
+  @@index([workflowId, createdAt])
+  @@index([status, createdAt])
 }
 
 model WorkflowStepRun {
@@ -183,29 +210,71 @@ model WorkflowStepRun {
   @@unique([workflowRunId, nodeId])
 }
 
+model HumanApproval {
+  id            String              @id @default(cuid())
+  workspaceId   String
+  workflowRunId String
+  nodeId        String
+  status        HumanApprovalStatus @default(WAITING_APPROVAL)
+  // Masked content shown to the reviewer (e.g. drafted email, lead summary).
+  payloadJson   Json?
+  decidedById   String?
+  comment       String?
+  requestedAt   DateTime            @default(now())
+  decidedAt     DateTime?
+  workflowRun   WorkflowRun         @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  // Keep the decision when the reviewer account is deleted.
+  decidedBy     User?               @relation(fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([workflowRunId, nodeId])
+  @@index([workspaceId, status, requestedAt])
+}
+
+// Consumer-side idempotency: one row per (consumer group, workflowRunId:nodeId:eventType) handled.
+model ProcessedMessage {
+  id             String   @id @default(cuid())
+  consumerGroup  String
+  idempotencyKey String
+  eventId        String
+  outcome        String
+  processedAt    DateTime @default(now())
+
+  @@unique([consumerGroup, idempotencyKey])
+  // Retention cleanup of old idempotency records.
+  @@index([processedAt])
+}
+
 model AiAgentConfig {
-  id          String   @id @default(cuid())
-  workflowId  String
-  nodeId      String
-  configJson  Json
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  workflowId String
+  nodeId     String
+  configJson Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, nodeId])
 }
 
 model AiTaskResult {
-  id             String      @id @default(cuid())
-  workspaceId    String
-  workflowRunId  String
-  nodeId         String
-  provider       String
-  modelName      String
-  promptJson     Json?
-  outputJson     Json?
-  inputTokens    Int         @default(0)
-  outputTokens   Int         @default(0)
-  errorMessage   String?
-  createdAt      DateTime    @default(now())
-  workflowRun    WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  workspaceId   String
+  workflowRunId String
+  nodeId        String
+  provider      String
+  modelName     String
+  promptJson    Json?
+  outputJson    Json?
+  inputTokens   Int         @default(0)
+  outputTokens  Int         @default(0)
+  errorMessage  String?
+  createdAt     DateTime    @default(now())
+  workflowRun   WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // One result per AI node per run (the worker writes it idempotently).
+  @@unique([workflowRunId, nodeId])
+  @@index([workspaceId, createdAt])
 }
 
 model ToolConfig {
@@ -216,6 +285,9 @@ model ToolConfig {
   configJson Json
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, nodeId])
 }
 
 model ToolCallResult {
@@ -230,6 +302,9 @@ model ToolCallResult {
   errorMessage  String?
   createdAt     DateTime    @default(now())
   workflowRun   WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, nodeId])
 }
 
 model WebhookEndpoint {
@@ -244,29 +319,36 @@ model WebhookEndpoint {
 }
 
 model Notification {
-  id          String    @id @default(cuid())
-  workspaceId String
-  userId      String?
-  type        String
-  title       String
-  body        String
-  status      String    @default("UNREAD")
+  id           String    @id @default(cuid())
+  workspaceId  String
+  userId       String?
+  type         String
+  title        String
+  body         String
+  status       String    @default("UNREAD")
   metadataJson Json?
-  createdAt   DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Sales task list and notification feed.
+  @@index([workspaceId, type, createdAt])
 }
 
 model AuditLog {
-  id          String    @id @default(cuid())
-  workspaceId String
-  actorUserId String?
-  action      String
-  entityType  String
-  entityId    String?
+  id           String    @id @default(cuid())
+  workspaceId  String
+  actorUserId  String?
+  action       String
+  entityType   String
+  entityId     String?
   metadataJson Json?
-  createdAt   DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  actor       User?     @relation(fields: [actorUserId], references: [id])
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Audit rows outlive the actor's account.
+  actor        User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
 }
 
 model ApiKey {
@@ -288,19 +370,22 @@ model UsageRecord {
   createdAt             DateTime     @default(now())
   workspace             Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflowRun           WorkflowRun? @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
+
+  // Daily AI quota checks.
+  @@index([workspaceId, createdAt])
 }
 
 model BillingPlanMock {
-  id              String   @id @default(cuid())
-  code            String   @unique
-  name            String
-  monthlyRunLimit Int
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  monthlyRunLimit  Int
   dailyAiCallLimit Int
-  createdAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
 }
 
 model DomainEvent {
-  id               String    @id
+  id               String      @id
   type             String
   workspaceId      String
   workflowId       String?
@@ -312,9 +397,12 @@ model DomainEvent {
   payloadJson      Json
   kafkaPublishedAt DateTime?
   kafkaError       String?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime    @default(now())
+  workflowRun      WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
   @@index([workflowRunId, createdAt])
   @@index([type, createdAt])
+  // Outbox relay: events not yet published to Kafka (kafkaPublishedAt IS NULL), oldest first.
+  @@index([kafkaPublishedAt, createdAt])
 }

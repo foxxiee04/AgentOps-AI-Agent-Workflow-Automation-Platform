@@ -11,6 +11,7 @@ export const eventTypeSchema = z.enum([
   kafkaTopics.toolCallRequested,
   kafkaTopics.toolCallCompleted,
   kafkaTopics.humanApprovalRequested,
+  kafkaTopics.humanApprovalDecided,
   kafkaTopics.notificationRequested,
   kafkaTopics.workflowCompleted,
   kafkaTopics.workflowFailed,
