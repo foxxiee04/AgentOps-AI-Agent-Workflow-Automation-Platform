@@ -145,6 +145,52 @@ export const kafkaConsumerLag = new GaugeMetric(
   ["group_id", "topic", "partition"]
 );
 
+export const kafkaTopicMessages = new GaugeMetric(
+  "agentops_kafka_topic_messages",
+  "Messages currently retained in a Kafka topic (dead-letter-events = dead letters).",
+  ["topic"]
+);
+
+export const approvalsPending = new GaugeMetric("agentops_approvals_pending", "Emails waiting for a reviewer decision.", ["workspace_id"]);
+
+export const approvalDecisionsTotal = new CounterMetric("agentops_approval_decisions_total", "Reviewer decisions on drafted emails.", [
+  "decision"
+]);
+
+export const domainEventsUnpublished = new GaugeMetric(
+  "agentops_domain_events_unpublished",
+  "Domain events stored in PostgreSQL but not yet published to Kafka (outbox backlog).",
+  []
+);
+
+export const authLoginsTotal = new CounterMetric("agentops_auth_logins_total", "Login attempts.", ["provider", "result"]);
+
+export const authRegistrationsTotal = new CounterMetric("agentops_auth_registrations_total", "User registrations.", ["provider"]);
+
+export const usersTotal = new GaugeMetric("agentops_users_total", "Total registered users.", []);
+
+export const activeUsers = new GaugeMetric(
+  "agentops_active_users",
+  "Distinct users who obtained a session (login, refresh or OAuth) in the window.",
+  ["window"]
+);
+
+// Known label sets start at 0 so increase()/rate() also count the first login after an API restart.
+for (const provider of ["password", "google"]) {
+  authRegistrationsTotal.inc({ provider }, 0);
+  for (const result of ["success", "failure"]) {
+    authLoginsTotal.inc({ provider, result }, 0);
+  }
+}
+
+export function recordLogin(provider: "password" | "google", result: "success" | "failure") {
+  authLoginsTotal.inc({ provider, result });
+}
+
+export function recordRegistration(provider: "password" | "google") {
+  authRegistrationsTotal.inc({ provider });
+}
+
 export function recordHttpRequest(method: string, route: string, statusCode: number, durationMs: number) {
   const labels = {
     method,
@@ -167,6 +213,14 @@ function renderMetrics() {
     httpRequestDurationSeconds.render(),
     workflowRunsTotal.render(),
     kafkaConsumerLag.render(),
+    kafkaTopicMessages.render(),
+    approvalsPending.render(),
+    approvalDecisionsTotal.render(),
+    domainEventsUnpublished.render(),
+    authLoginsTotal.render(),
+    authRegistrationsTotal.render(),
+    usersTotal.render(),
+    activeUsers.render(),
     alertNotificationsTotal.render()
   ]
     .filter(Boolean)

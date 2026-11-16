@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { Public } from "../../common/auth/public.decorator";
 import { CreateWebhookDto } from "./dto";
 
 @ApiTags("webhooks")
@@ -15,6 +16,7 @@ export class WebhooksController {
   ];
 
   @Post(":workflowId")
+  @Public()
   receive(@Param("workflowId") workflowId: string, @Body() body: Record<string, unknown>) {
     return {
       workflowId,

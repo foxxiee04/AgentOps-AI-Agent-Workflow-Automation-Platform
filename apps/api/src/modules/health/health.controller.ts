@@ -1,5 +1,6 @@
 import { Controller, Get, Inject } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { SkipThrottle } from "@nestjs/throttler";
 import {
   HealthCheck,
   HealthCheckError,
@@ -10,9 +11,12 @@ import {
 import { KafkaAdminService } from "../../common/infrastructure/kafka-admin.service";
 import { PrismaService } from "../../common/infrastructure/prisma.service";
 import { RedisHealthService } from "../../common/infrastructure/redis-health.service";
+import { Public } from "../../common/auth/public.decorator";
 
 @ApiTags("health")
 @Controller("health")
+@Public()
+@SkipThrottle()
 export class HealthController {
   constructor(
     @Inject(HealthCheckService) private readonly health: HealthCheckService,

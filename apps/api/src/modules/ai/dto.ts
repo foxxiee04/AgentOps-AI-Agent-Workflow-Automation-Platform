@@ -27,10 +27,12 @@ export class AiEvaluationCaseDto {
 }
 
 export class EvaluateAgentDto {
+  /** Defaults to the labeled lead dataset when omitted. */
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => AiEvaluationCaseDto)
-  testCases!: AiEvaluationCaseDto[];
+  testCases?: AiEvaluationCaseDto[];
 
   @IsOptional()
   @IsObject()
