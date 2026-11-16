@@ -27,6 +27,9 @@
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/health/live",
               "host": ["{{baseUrl}}"],
@@ -55,6 +58,9 @@
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/health/ready",
               "host": ["{{baseUrl}}"],
@@ -95,6 +101,9 @@
                 "value": "application/json"
               }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"new.user@agentops.local\",\n  \"password\": \"password123\",\n  \"name\": \"New User\"\n}"
@@ -116,6 +125,7 @@
                   "  const json = pm.response.json();",
                   "  pm.expect(json.user.email).to.eql('new.user@agentops.local');",
                   "  pm.expect(json.accessToken).to.be.a('string');",
+                  "  pm.collectionVariables.set(\"accessToken\", json.accessToken);",
                   "});"
                 ]
               }
@@ -132,6 +142,9 @@
                 "value": "application/json"
               }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"demo@agentops.local\",\n  \"password\": \"password123\"\n}"
@@ -153,6 +166,7 @@
                   "  const json = pm.response.json();",
                   "  pm.expect(json.user.email).to.eql('demo@agentops.local');",
                   "  pm.expect(json.refreshToken).to.be.a('string');",
+                  "  pm.collectionVariables.set(\"accessToken\", json.accessToken);",
                   "});"
                 ]
               }
@@ -194,12 +208,7 @@
           "name": "List Workspaces",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-workspace-role",
-                "value": "{{workspaceRole}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/workspaces",
               "host": ["{{baseUrl}}"],
@@ -227,12 +236,7 @@
           "name": "Get Workspace",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-workspace-role",
-                "value": "{{workspaceRole}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/workspaces/{{workspaceId}}",
               "host": ["{{baseUrl}}"],
@@ -262,10 +266,6 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "x-workspace-role",
-                "value": "ADMIN"
               }
             ],
             "body": {
@@ -299,12 +299,7 @@
           "name": "List Members",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-workspace-role",
-                "value": "{{workspaceRole}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/members",
               "host": ["{{baseUrl}}"],
@@ -335,12 +330,7 @@
           "name": "List Workflows",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-workspace-role",
-                "value": "{{workspaceRole}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/workflows?workspaceId={{workspaceId}}",
               "host": ["{{baseUrl}}"],
@@ -374,12 +364,7 @@
           "name": "Get Workflow",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-workspace-role",
-                "value": "{{workspaceRole}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/workflows/{{workflowId}}",
               "host": ["{{baseUrl}}"],
@@ -407,12 +392,7 @@
           "name": "Publish Workflow",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "x-workspace-role",
-                "value": "ADMIN"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/workflows/{{workflowId}}/publish",
               "host": ["{{baseUrl}}"],
@@ -444,10 +424,6 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "x-workspace-role",
-                "value": "MEMBER"
               }
             ],
             "body": {
@@ -482,12 +458,7 @@
           "name": "List Workflow Runs",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-workspace-role",
-                "value": "{{workspaceRole}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/workflows/{{workflowId}}/runs",
               "host": ["{{baseUrl}}"],
@@ -926,10 +897,24 @@
       ]
     }
   ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:4000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
     }
   ]
 }
