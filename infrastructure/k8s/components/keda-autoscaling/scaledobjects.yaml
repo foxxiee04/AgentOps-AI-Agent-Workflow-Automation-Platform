@@ -1,0 +1,148 @@
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: workflow-worker
+  namespace: agentops
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: workflow-worker
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  pollingInterval: 15
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.workflow-worker
+        topic: workflow-triggered
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.workflow-worker
+        topic: agent-task-completed
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.workflow-worker
+        topic: tool-call-completed
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.workflow-worker
+        topic: human-approval-decided
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.workflow-worker
+        topic: workflow-step-failed
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ai-worker
+  namespace: agentops
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-worker
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  pollingInterval: 15
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.ai-worker
+        topic: agent-task-requested
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: tool-worker
+  namespace: agentops
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tool-worker
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  pollingInterval: 15
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.tool-worker
+        topic: tool-call-requested
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: notification-worker
+  namespace: agentops
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: notification-worker
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  pollingInterval: 15
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
+        consumerGroup: agentops.notification-worker
+        topic: notification-requested
+        lagThreshold: "50"
+        offsetResetPolicy: latest
+        allowIdleConsumers: "false"

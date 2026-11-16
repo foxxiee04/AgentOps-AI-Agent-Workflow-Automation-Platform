@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - scaledobjects.yaml
+
+patches:
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: workflow-worker
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: workflow-worker
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: ai-worker
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: ai-worker
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: tool-worker
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: tool-worker
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: notification-worker
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: notification-worker

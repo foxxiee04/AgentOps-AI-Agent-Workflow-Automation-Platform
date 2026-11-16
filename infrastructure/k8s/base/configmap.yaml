@@ -5,10 +5,22 @@ metadata:
   namespace: agentops
 data:
   NODE_ENV: production
+  APP_ENV: prod
   PORT: "4000"
-  WEB_APP_URL: http://agentops.local
+  WEB_APP_URL: https://agentops.example.com
   API_URL: http://agentops-api:4000
-  NEXT_PUBLIC_API_URL: http://api.agentops.local
-  DATABASE_URL: postgresql://agentops:agentops@postgres:5432/agentops
-  REDIS_URL: redis://redis:6379
+  API_INTERNAL_URL: http://agentops-api:4000
+  # Browser-facing API URL, read by the web app at runtime.
+  API_PUBLIC_URL: https://api.agentops.example.com
+  GOOGLE_OAUTH_REDIRECT_URI: https://api.agentops.example.com/auth/google/callback
+  API_TRUST_PROXY: "1"
   KAFKA_BROKERS: kafka:9092
+  REDIS_URL: redis://redis:6379
+  WORKER_METRICS_PORT: "9100"
+  WORKFLOW_AUTO_APPROVE: "false"
+  AI_DAILY_CALL_LIMIT: "500"
+  AI_DAILY_TOKEN_LIMIT: "500000"
+  DOMAIN_EVENT_RELAY_INTERVAL_MS: "30000"
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo.monitoring:4318/v1/traces
+  KAFKAJS_NO_PARTITIONER_WARNING: "1"

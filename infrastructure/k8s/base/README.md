@@ -1,26 +1,12 @@
 # Kubernetes Base
 
-Base manifests should define shared Kubernetes resources before environment-specific overrides.
+`base/` holds the shared kustomize resources every overlay builds on:
 
-Use this folder for:
+- namespace `agentops`
+- ConfigMap `agentops-config` (no secrets)
+- one ServiceAccount per workload, token not mounted
+- Deployments + Services for api, web, and the four workers, with probes, resources, pod security, and HPA
+- Ingress (nginx + cert-manager TLS) and NetworkPolicies
+- ExternalSecret `agentops-secrets` from ClusterSecretStore `agentops-secrets-store`
 
-- Deployments
-- Services
-- ConfigMaps
-- Secret templates
-- Ingress base
-- PersistentVolumeClaim templates
-- HorizontalPodAutoscaler templates
-
-Keep environment-specific values in overlays.
-
-## Current Base Files
-
-- `namespace.yaml`
-- `configmap.yaml`
-- `secrets.example.yaml`
-- `data.yaml`
-- `apps.yaml`
-- `ingress.yaml`
-
-`secrets.example.yaml` contains placeholder values only. Replace them through an overlay, sealed secret, external secret operator, or manual `kubectl create secret` before a real deployment.
+`secrets.example.env` lists the keys for a manual `kubectl create secret` on a local k3s. Keep environment-specific values (images, hosts, replicas) in the overlays.

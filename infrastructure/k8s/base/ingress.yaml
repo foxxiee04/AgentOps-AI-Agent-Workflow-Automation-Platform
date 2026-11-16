@@ -1,11 +1,21 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: agentops-ingress
+  name: agentops
   namespace: agentops
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 1m
 spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - agentops.example.com
+        - api.agentops.example.com
+      secretName: agentops-tls
   rules:
-    - host: agentops.local
+    - host: agentops.example.com
       http:
         paths:
           - path: /
@@ -15,10 +25,82 @@ spec:
                 name: agentops-web
                 port:
                   number: 3000
-    - host: api.agentops.local
+    - host: api.agentops.example.com
       http:
+        # One Prefix path per public route group. /metrics is intentionally NOT
+        # routed here, so internal Prometheus metrics are never exposed publicly.
         paths:
-          - path: /
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /workspaces
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /workflows
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /workflow-runs
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /ai
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /dashboard
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /audit
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
+          - path: /docs
             pathType: Prefix
             backend:
               service:

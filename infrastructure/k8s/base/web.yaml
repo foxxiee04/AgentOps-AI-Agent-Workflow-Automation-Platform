@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentops-web
+  namespace: agentops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentops-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentops-web
+        app.kubernetes.io/component: web
+    spec:
+      serviceAccountName: agentops-web
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: agentops/web:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          # agentops-config sets PORT=4000 for the API; the web server listens on 3000.
+          env:
+            - name: PORT
+              value: "3000"
+          envFrom:
+            - configMapRef:
+                name: agentops-config
+            - secretRef:
+                name: agentops-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /en
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /en
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/apps/web/.next/cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentops-web
+  namespace: agentops
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: agentops-web
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
