@@ -77,9 +77,25 @@ POST   /workflows/:id/run
 GET    /workflows/:id/runs
 GET    /workflow-runs/:id
 GET    /workflow-runs/:id/steps
+GET    /workflow-runs/:id/stream                   (Server-Sent Events)
+GET    /workflow-runs/approvals?workspaceId=&status=WAITING_APPROVAL|APPROVED|REJECTED|ALL
+POST   /workflow-runs/:id/steps/:stepId/approval   { "decision": "approve" | "reject", "comment"?: string }
 ```
 
+Approval decisions require an access token (`Authorization: Bearer <access token>` or the browser's HttpOnly `agentops_access` cookie); the caller must be a workspace member with role `MEMBER` or higher (VIEWER gets 403). `stepId` accepts the step id (`<runId>_<nodeId>`) or the node id. The first decision wins: later calls return `409` with the stored decision in `details`. Approve publishes `human-approval-decided`; reject marks the step `FAILED`, the run `CANCELLED`, and also publishes the event for the audit trail. Every decision writes an `AuditLog` row.
+
 `GET /workflow-runs/:id/steps` returns a step timeline generated from the immutable workflow version definition attached to the run.
+
+`GET /workflow-runs/:id/stream` (role `VIEWER`, same cookie/bearer auth as the other run endpoints, so `new EventSource(url, { withCredentials: true })` works) streams live run status as `text/event-stream`. Events:
+
+| Event | Data | When |
+| --- | --- | --- |
+| `snapshot` | `{ run, steps }` (same shapes as `GET /:id` and `GET /:id/steps`) | on connect, then whenever the run status/timestamps or any step id/status/finishedAt changes |
+| `ping` | empty | every 15 s, keeps proxies from closing the connection |
+| `end` | `{ status }` | the run is no longer active (`COMPLETED`, `FAILED`, `CANCELLED`); sent after the final `snapshot`, then the stream closes |
+| `error` | `{ message }` | the run cannot be read (e.g. 404 not found); the stream closes |
+
+The server polls PostgreSQL every second per connection (no Kafka fan-out, so it works with several API replicas) and closes the stream after 30 minutes; clients should reconnect if they still need updates.
 
 Workflow publish/run APIs are durable-first: the API writes workflow versions, runs, and initial step rows to PostgreSQL before publishing the `workflow-triggered` event. The event is stored in `domain_events`, then sent to Kafka using the event type as the topic.
 
@@ -111,6 +127,8 @@ GET /dashboard/usage
 GET /dashboard/errors
 GET /dashboard/recent-activity
 GET /dashboard/readiness
+GET /dashboard/leads          scored leads (masked contact fields, score, category, summary)
+GET /dashboard/sales-tasks    follow-up tasks created by the NOTIFICATION node
 ```
 
 `GET /dashboard/readiness` returns an operational checklist for the demo workspace, including workflow publishing, event pipeline activity, AI provider configuration, OpenTelemetry export, and production-secret readiness. Non-ready items include a concrete `action` so the frontend can display the next configuration step.
@@ -145,19 +163,20 @@ The request boundary accepts or creates W3C `traceparent`, sets `x-request-id`, 
 
 ## Frontend Integration
 
-`apps/web/src/lib/api.ts` is the web API boundary. Current pages use:
+`apps/web/src/lib/api.ts` is the web API boundary; response shapes are the zod schemas in `packages/shared/src/views.ts`, shared with the API. Current pages use:
 
-- `/dashboard`: dashboard overview, workflow runs, readiness, AI providers, recent activity.
+- `/dashboard`: overview, scored leads, sales tasks, workflow runs, dependency health, AI providers, recent activity.
 - `/login` and `/register`: password auth through `/auth/login` and `/auth/register`.
-- `/auth/callback`: stores OAuth callback session fragments from social login.
-- `/workflows`: workflow list, publish action, run action.
-- `/workflows/:id/builder`: workflow detail for React Flow nodes and edges.
-- `/runs`: workflow run history from `/dashboard/workflow-runs`.
-- `/runs/:id`: workflow run metadata and step timeline from `/workflow-runs/:id` and `/workflow-runs/:id/steps`.
+- `/auth/callback`: finishes social login; session cookies are already set by the API, the fragment carries only the user profile and redirect path.
+- `/workflows`: workflow list, "create from lead template" (`POST /workflows`), publish (blocked client-side while the graph has validation issues), run.
+- `/workflows/:id/builder`: React Flow graph with positions for the lead template, labelled branch edges (`leadScore > 80`, dashed `else`) and validation issues.
+- `/runs`: run history from `/dashboard/workflow-runs`.
+- `/runs/:id`: run metadata and step timeline (status, masked input, output, tokens, duration, errors); polls every 4 s while the run is `PENDING`, `RUNNING` or `WAITING_APPROVAL`.
+- `/approvals`: emails waiting for review (polls every 5 s); approve/reject calls `POST /workflow-runs/:id/steps/:stepId/approval` with the user's bearer token.
 - `/agents`: AI providers, usage, and test-agent endpoint.
 - `/settings`: dependency readiness, operational readiness checklist, and runtime boundary summary.
 
-Server pages call the API with `safeApiGet`, which returns fallback data when the API is offline so builds and demos remain usable.
+Server pages call the API with `safeApiGet`. When the API is unreachable they render an error state; demo fallback data is shown only when `NEXT_PUBLIC_DEMO_FALLBACK=true` (off by default).
 
 ## Response Rules
 

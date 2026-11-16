@@ -259,10 +259,13 @@ Expected: có workflow demo `wf_lead_qualification`.
 ### TC-08: Publish và run workflow demo
 
 ```powershell
+$login = Invoke-RestMethod -Method Post -Uri http://localhost:4000/auth/login -ContentType "application/json" -Body (@{ email = "demo@agentops.local"; password = "<your-local-password>" } | ConvertTo-Json)
+$token = $login.accessToken
+
 Invoke-RestMethod `
   -Method Post `
   -Uri http://localhost:4000/workflows/wf_lead_qualification/publish `
-  -Headers @{ "x-workspace-role" = "ADMIN" }
+  -Headers @{ Authorization = "Bearer $token" }
 
 $runBody = @{
   triggerType = "manual"
@@ -279,14 +282,14 @@ $runBody = @{
 $runResult = Invoke-RestMethod `
   -Method Post `
   -Uri http://localhost:4000/workflows/wf_lead_qualification/run `
-  -Headers @{ "x-workspace-role" = "MEMBER" } `
+  -Headers @{ Authorization = "Bearer $token" } `
   -ContentType "application/json" `
   -Body $runBody
 
 $runResult
 ```
 
-Expected: `run.status = PENDING` và event type là `workflow-triggered`.
+Expected: `run.status = PENDING` và event type là `workflow-triggered`. Roles come from workspace membership, not from a header; a VIEWER gets 403.
 
 ### TC-09: Metrics
 
@@ -340,7 +343,8 @@ Nếu database lỗi connection:
 
 ```powershell
 docker compose ps postgres
-pnpm db:push
+pnpm db:migrate:status
+pnpm db:migrate:deploy
 ```
 
 Xem log Docker:

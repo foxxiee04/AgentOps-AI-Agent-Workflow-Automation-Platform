@@ -39,7 +39,6 @@ Analyze the lead and return JSON with:
 - category
 - summary
 - recommendedAction
-- personalizedEmail
 - confidence
 ```
 
@@ -51,7 +50,6 @@ Analyze the lead and return JSON with:
   "category": "high-intent",
   "summary": "The lead is interested in automating sales and support workflows.",
   "recommendedAction": "Send a personalized follow-up email and create a sales task.",
-  "personalizedEmail": "Hi Anna, thanks for reaching out...",
   "confidence": 0.91
 }
 ```
@@ -69,6 +67,16 @@ GET  /ai/usage
 `/ai/test-agent` previews the rendered prompt, safe input, JSON Schema validation result, and token estimate. `/ai/evaluate-agent` runs multiple deterministic test cases and returns pass rate plus mismatches.
 
 The `/agents` frontend page reads `/ai/providers` and `/ai/usage`, then posts to `/ai/test-agent` through a small browser console. Keep this UI as a testing surface for prompt/config experiments until persisted agent configuration screens are implemented.
+
+## Lead Scoring Setup
+
+- Scoring output: `leadScore` (0-100), `category` (`high-intent` | `low-intent` | `spam`), `summary`, `recommendedAction`, `confidence`. The email step is a second AI node returning `subject` and `body`.
+- Prompts live in `packages/shared/src/ai.ts` (`leadScoringSystemPrompt`, `leadScoringUserPromptTemplate`, `leadEmail*`) and use `{{name}}`, `{{company}}`, `{{email}}`, `{{message}}`, `{{source}}`.
+- Providers: `mock` (default, deterministic, no network) or `openai` (Responses API with strict JSON Schema, called only from `ai-worker`). To switch, set `OPENAI_API_KEY` and set `modelProvider: "openai"`, `modelName: "gpt-4o-mini"` on the node; use a stronger `modelName` on the email node if writing quality needs it.
+- Retry: output that is not valid JSON or fails the schema is retried up to `retryLimit` extra times (token usage is summed); after that the step fails and the result is not used.
+- Privacy: email addresses become `an***@domain`, phone numbers become `[PHONE_REDACTED]`, secret-like keys become `[REDACTED]` before the prompt is built.
+- Quotas: `AI_DAILY_CALL_LIMIT` (default 100) and `AI_DAILY_TOKEN_LIMIT` (default 200000) per day; `/ai/test-agent` and `/ai/evaluate-agent` return HTTP 429 when exceeded and `/ai/usage` reports both limits.
+- Evaluation: `POST /ai/evaluate-agent` with an empty body runs the labeled dataset (`leadEvaluationCases`, 24 leads) and returns `passRate` plus mismatches. Run it after every prompt change and compare the pass rate.
 
 ## Safety Rules
 

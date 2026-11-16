@@ -4,6 +4,9 @@ This folder is the project knowledge base. Read the relevant document before imp
 
 ## Documents
 
+- `system-documentation.md`: the complete system document: architecture and data diagrams, every screen, deployment, monitoring (with screenshots), security and testing. Start here.
+- `test-scenarios.md`: end-to-end test scenarios and the latest results.
+- `production-runbook-aws.md`: AWS EKS bring-up, problems found, access and teardown.
 - `architecture.md`: system architecture and design decisions.
 - `api.md`: planned REST API surface.
 - `database.md`: core data model and persistence rules.

@@ -41,6 +41,8 @@ The architecture is intentionally **Modular Monolith + Kafka Workers**, not full
 | AI | OpenAI Responses API path, mock provider, structured JSON output, prompt templates, JSON Schema validation, optional pgvector |
 | Infrastructure | Docker, Kubernetes, Terraform, AWS ECR, Nginx Ingress, GitHub Actions, Prometheus, Alertmanager, Grafana, Tempo, OpenTelemetry |
 
+The complete system document, with architecture diagrams and screenshots of the application and the monitoring stack, is [docs/system-documentation.md](docs/system-documentation.md). Test scenarios are in [docs/test-scenarios.md](docs/test-scenarios.md) and the AWS production runbook in [docs/production-runbook-aws.md](docs/production-runbook-aws.md).
+
 See [docs/technology-decisions.md](docs/technology-decisions.md) for current package choices, Prisma 7 notes, and recommended additions such as Playwright, OpenTelemetry, Prometheus, Testcontainers, and Sentry.
 
 ## Repository Map
@@ -67,8 +69,76 @@ infrastructure/
   observability/        Metrics, logging, dashboards, and tracing notes
 docs/                   Architecture, API, Kafka, database, AI, security, deployment docs
 agents/                 Human/Codex agent role descriptions
-.codex/skills/          Project-local Codex skills
+  .codex/skills/          Project-local Codex skills
 ```
+
+## Getting Started From Zero
+
+Prerequisites:
+
+- Node.js 22 (`>=22.0.0`)
+- pnpm 11 (`>=11.0.0`)
+- Docker Desktop, running
+
+Then, from the repository root:
+
+1. Install dependencies.
+
+   ```bash
+   pnpm install
+   ```
+
+2. Create the local env file.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Start local infrastructure (PostgreSQL, Redis, Kafka, and observability).
+
+   ```bash
+   pnpm compose:up
+   ```
+
+4. Apply migrations, seed reference + demo data, and create Kafka topics.
+
+   ```bash
+   pnpm local:setup
+   ```
+
+5. Build the shared packages.
+
+   ```bash
+   pnpm build:packages
+   ```
+
+6. Run the apps in watch mode.
+
+   ```bash
+   pnpm dev
+   ```
+
+   Or run the whole product stack in containers instead:
+
+   ```bash
+   pnpm local:docker
+   ```
+
+7. Open `http://localhost:3000` and log in with any `@agentops.local` email (local demo accounts are auto-created).
+
+8. Run the seeded `Lead qualification` workflow, then approve the drafted email in `/approvals`.
+
+### Checks
+
+- `pnpm build && pnpm typecheck && pnpm test`
+- `pnpm test:integration`
+- `pnpm test:e2e`
+- `pnpm eval:leads`
+- `pnpm load:leads` then `pnpm load:report`
+- `pnpm docker:lint`
+- `pnpm k8s:validate`
+- `pnpm tf:validate`
+- `pnpm ci:lint`
 
 ## Runtime Naming
 
@@ -86,11 +156,19 @@ Use one naming style across local Docker, Kubernetes, and AWS:
 Useful commands:
 
 ```bash
+pnpm local:docker
+pnpm compose:apps:reset
 pnpm compose:up
-pnpm db:push
+pnpm db:migrate:deploy
+pnpm db:seed
+pnpm db:seed:demo
+pnpm db:reset
+pnpm test:integration
 pnpm kafka:bootstrap
 pnpm docker:build:apps
 ```
+
+`pnpm local:docker` starts the full local product stack: PostgreSQL, Redis, Kafka, observability, API, web, and all workers. It also applies the versioned Prisma migrations, the required and demo seeds, and Kafka topic bootstrap through the setup container. `pnpm compose:apps:reset` removes the local AgentOps Docker volumes and starts the full seeded stack again.
 
 ## Workers And Monolith
 
@@ -123,6 +201,8 @@ Postman files live in `postman/`:
 - `AgentOps.local.postman_environment.json`
 
 Import both files, select the `AgentOps Local` environment, start the API on `http://localhost:4000`, then run the collection in order.
+
+Manual end-to-end test instructions live in [test/manual-test-guide.md](test/manual-test-guide.md). The guide covers Docker startup, seeded data, browser flows, API smoke commands, and database reset/reseed.
 
 ## External Structure References
 
