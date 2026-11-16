@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createEvent, type CreateEventInput, type EventEnvelope } from "@agentops/events";
 import { parseKafkaBrokers } from "@agentops/config";
@@ -8,11 +8,12 @@ import { PrismaService } from "../infrastructure/prisma.service";
 import { getRequestContext } from "../http/request-context";
 
 @Injectable()
-export class DomainEventsService implements OnModuleDestroy {
+export class DomainEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DomainEventsService.name);
   private readonly events: EventEnvelope[] = [];
   private producer: Producer | undefined;
   private producerConnected = false;
+  private relayTimer: NodeJS.Timeout | undefined;
 
   constructor(
     @Optional() @Inject(PrismaService) private readonly prisma?: PrismaService,
@@ -77,7 +78,69 @@ export class DomainEventsService implements OnModuleDestroy {
     return [...this.events].slice(-20).reverse();
   }
 
+  /** Outbox relay: periodically re-sends events whose Kafka publish failed (kafkaPublishedAt IS NULL). */
+  onModuleInit() {
+    const intervalMs = Number(this.config?.get<string>("DOMAIN_EVENT_RELAY_INTERVAL_MS") ?? 30_000);
+    if (!this.prisma || !this.config || !Number.isFinite(intervalMs) || intervalMs <= 0) {
+      return;
+    }
+    this.relayTimer = setInterval(() => {
+      void this.republishPending().catch((error: unknown) =>
+        this.logger.warn(`domain event relay failed: ${error instanceof Error ? error.message : String(error)}`)
+      );
+    }, intervalMs);
+    this.relayTimer.unref();
+  }
+
+  /**
+   * Publishes stored events that never reached Kafka, oldest first. Consumers are idempotent, so an
+   * event that was in fact delivered before the failure is skipped downstream.
+   */
+  async republishPending(options: { olderThanMs?: number; limit?: number } = {}) {
+    if (!this.prisma) {
+      return { published: 0, failed: 0 };
+    }
+    const pending = await this.prisma.client.domainEvent.findMany({
+      where: { kafkaPublishedAt: null, createdAt: { lt: new Date(Date.now() - (options.olderThanMs ?? 10_000)) } },
+      orderBy: { createdAt: "asc" },
+      take: options.limit ?? 50
+    });
+
+    let published = 0;
+    let failed = 0;
+    for (const row of pending) {
+      const event: EventEnvelope = {
+        eventId: row.id,
+        type: row.type as EventEnvelope["type"],
+        workspaceId: row.workspaceId,
+        workflowId: row.workflowId ?? undefined,
+        workflowRunId: row.workflowRunId,
+        requestId: row.requestId ?? undefined,
+        traceId: row.traceId ?? undefined,
+        traceparent: row.traceparent ?? undefined,
+        parentEventId: row.parentEventId ?? undefined,
+        timestamp: row.createdAt.toISOString(),
+        payload: row.payloadJson as Record<string, unknown>
+      };
+      try {
+        await this.publishToKafka(event);
+        await this.markPublished(event.eventId);
+        published += 1;
+      } catch (error) {
+        await this.markPublishFailed(event.eventId, error);
+        failed += 1;
+      }
+    }
+    if (pending.length > 0) {
+      this.logger.log(JSON.stringify({ message: "domain event relay", published, failed }));
+    }
+    return { published, failed };
+  }
+
   async onModuleDestroy() {
+    if (this.relayTimer) {
+      clearInterval(this.relayTimer);
+    }
     if (!this.producer || !this.producerConnected) {
       return;
     }

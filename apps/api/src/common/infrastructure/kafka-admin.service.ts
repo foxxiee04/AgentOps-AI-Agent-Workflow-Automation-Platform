@@ -45,6 +45,13 @@ export class KafkaAdminService implements OnModuleDestroy {
     });
   }
 
+  /** Messages ever written to a topic (sum of high watermarks); used for the dead-letter count. */
+  async topicMessageCount(topic: string) {
+    const admin = await this.getConnectedAdmin();
+    const offsets = (await admin.fetchTopicOffsets(topic)) as Array<{ high?: string; offset?: string; low?: string }>;
+    return offsets.reduce((sum, partition) => sum + Number(partition.high ?? partition.offset ?? 0) - Number(partition.low ?? 0), 0);
+  }
+
   async onModuleDestroy() {
     if (!this.admin || !this.connected) {
       return;

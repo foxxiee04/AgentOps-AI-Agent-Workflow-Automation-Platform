@@ -12,6 +12,8 @@ import * as argon2 from "argon2";
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { DemoDataService, demoWorkspaceId } from "../../common/infrastructure/demo-data.service";
 import { PrismaService } from "../../common/infrastructure/prisma.service";
+import { recordLogin, recordRegistration } from "../../common/metrics/api-metrics";
+import { isDemoLoginEnabled } from "./demo-login";
 import type { LoginDto, RefreshTokenDto, RegisterDto } from "./dto";
 
 type AuthUser = {
@@ -118,6 +120,7 @@ export class AuthService {
       return createdUser;
     });
 
+    recordRegistration("password");
     return this.issueSession(user);
   }
 
@@ -125,13 +128,19 @@ export class AuthService {
     const email = this.normalizeEmail(dto.email);
     const user = (await this.prisma.client.user.findUnique({ where: { email } })) ?? (await this.createLocalDemoUser(dto));
     if (!user || !(await this.verifyPassword(user, dto.password))) {
+      recordLogin("password", "failure");
       throw new UnauthorizedException("Invalid email or password");
     }
 
+    recordLogin("password", "success");
     return this.issueSession(user);
   }
 
   async refresh(dto: RefreshTokenDto) {
+    if (!dto.refreshToken) {
+      throw new UnauthorizedException("Refresh token is invalid or expired");
+    }
+
     const tokenHash = this.hashRefreshToken(dto.refreshToken);
     const storedToken = await this.prisma.client.authRefreshToken.findUnique({
       where: { tokenHash },
@@ -159,6 +168,20 @@ export class AuthService {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Verifies a `Bearer <jwt>` value taken from the Authorization header or the access cookie
+   * and returns the caller; throws 401 otherwise.
+   */
+  async authenticate(authorization?: string): Promise<{ userId: string; email: string }> {
+    const token = authorization?.replace(/^Bearer\s+/i, "");
+    if (!token) {
+      throw new UnauthorizedException("Missing bearer token");
+    }
+
+    const claims = await this.verifyAccessToken(token);
+    return { userId: claims.sub, email: claims.email };
   }
 
   async me(authorization?: string) {
@@ -208,21 +231,27 @@ export class AuthService {
     }
 
     const claims = this.decodeGoogleIdToken(tokenResponse.id_token, config.clientId);
+    const email = this.normalizeEmail(claims.email);
+    const existingUser = await this.prisma.client.user.findUnique({ where: { email } });
     const user = await this.prisma.client.user.upsert({
-      where: { email: this.normalizeEmail(claims.email) },
+      where: { email },
       update: {
         name: claims.name ?? claims.email.split("@")[0],
         avatarUrl: claims.picture
       },
       create: {
         id: `user_google_${claims.sub}`,
-        email: this.normalizeEmail(claims.email),
+        email,
         name: claims.name ?? claims.email.split("@")[0],
         avatarUrl: claims.picture,
         passwordHash: "google-oauth-password-disabled"
       }
     });
     const session = await this.issueSession(user, "google");
+    recordLogin("google", "success");
+    if (!existingUser) {
+      recordRegistration("google");
+    }
 
     return {
       redirectTo: parsedState.redirectTo,
@@ -230,12 +259,10 @@ export class AuthService {
     };
   }
 
-  frontendCallbackUrl(session: AuthSession, redirectTo: string) {
+  frontendCallbackUrl(user: AuthUser, redirectTo: string) {
     const url = new URL("/auth/callback", this.webAppUrl());
     const fragment = new URLSearchParams({
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-      user: Buffer.from(JSON.stringify(session.user)).toString("base64url"),
+      user: Buffer.from(JSON.stringify(user)).toString("base64url"),
       redirectTo
     });
     url.hash = fragment.toString();
@@ -249,15 +276,22 @@ export class AuthService {
   }
 
   private async createLocalDemoUser(dto: LoginDto): Promise<UserRecord | undefined> {
+    if (!isDemoLoginEnabled()) {
+      return undefined;
+    }
+
     const email = this.normalizeEmail(dto.email);
     if (!email.endsWith("@agentops.local")) {
       return undefined;
     }
 
-    await this.demoData.ensureDemoWorkspace();
+    // The workflow too, not just the workspace: WorkspaceRoleGuard resolves `wf_lead_qualification`
+    // before the service would lazily create it, so on an empty database the first run would 404.
+    await this.demoData.ensureDemoWorkflow();
     const user = await this.prisma.client.user.create({
       data: {
-        id: `user_${Buffer.from(email).toString("base64url").slice(0, 12)}`,
+        // Hash of the full email: a prefix of it collided for emails sharing their first characters.
+        id: `user_${createHash("sha256").update(email).digest("hex").slice(0, 20)}`,
         email,
         name: email.split("@")[0],
         passwordHash: await argon2.hash(dto.password)

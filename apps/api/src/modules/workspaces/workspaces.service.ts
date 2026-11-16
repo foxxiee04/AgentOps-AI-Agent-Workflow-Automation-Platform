@@ -31,27 +31,28 @@ export class WorkspacesService {
     @Inject(DemoDataService) private readonly demoData: DemoDataService
   ) {}
 
-  async findAll() {
+  async findAll(userId?: string) {
     await this.demoData.ensureDemoWorkspace();
     const workspaces = await this.prisma.client.workspace.findMany({
+      where: userId ? { members: { some: { userId } } } : undefined,
       orderBy: { createdAt: "asc" }
     });
     return workspaces.map((workspace) => this.toWorkspaceRecord(workspace));
   }
 
-  async create(dto: CreateWorkspaceDto) {
+  async create(dto: CreateWorkspaceDto, ownerId: string = demoUserId) {
     await this.demoData.ensureDemoWorkspace();
     const workspace = await this.prisma.client.workspace.create({
       data: {
         id: `ws_${randomUUID()}`,
         name: dto.name,
         slug: dto.slug,
-        ownerId: demoUserId,
+        ownerId,
         plan: "FREE",
         members: {
           create: {
             id: `wsm_${randomUUID()}`,
-            userId: demoUserId,
+            userId: ownerId,
             role: "OWNER"
           }
         }

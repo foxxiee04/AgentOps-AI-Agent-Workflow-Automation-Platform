@@ -5,6 +5,7 @@ import { REQUEST_ID_HEADER, RequestWithId } from "./request-id.middleware";
 type ErrorBody = {
   error?: string;
   message?: string | string[];
+  details?: unknown;
 };
 
 @Catch(HttpException)
@@ -21,6 +22,7 @@ export class HttpExceptionFilter implements ExceptionFilter<HttpException> {
       statusCode,
       error: body.error ?? exception.name,
       message: body.message ?? exception.message,
+      ...(body.details !== undefined ? { details: body.details } : {}),
       requestId: request.requestId ?? response.getHeader(REQUEST_ID_HEADER),
       path: request.originalUrl,
       timestamp: new Date().toISOString()
