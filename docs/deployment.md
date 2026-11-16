@@ -4,8 +4,10 @@ Deployment is planned in layers: local infrastructure, containers, Kubernetes, T
 
 ## Local
 
-- Use `docker-compose.yml` for PostgreSQL, Redis, and Kafka.
-- Add app Dockerfiles after the web/API/worker code exists.
+- Use `docker-compose.yml` for PostgreSQL, Redis, Kafka, and observability.
+- Use `docker-compose.apps.yml` together with `docker-compose.yml` for the full local product stack.
+- Start the full seeded local stack with `pnpm local:docker`.
+- Reset Docker volumes and reseed the full local stack with `pnpm compose:apps:reset`.
 - Keep local ports stable: web `3000`, API `4000`, PostgreSQL host `55432`, Kafka external `9094`, Prometheus `9090`, Alertmanager `9093`, Grafana `3001`, Tempo `3200`, OTLP gRPC `4317`, and OTLP HTTP `4318`.
 
 ## Naming
@@ -30,29 +32,51 @@ agentops-local-grafana
 agentops-local-tempo
 ```
 
-## Kubernetes Workloads
+## Containers
 
-```txt
-frontend
-api-backend
-workflow-worker
-ai-worker
-tool-worker
-notification-worker
-postgres
-redis
-kafka
+Each app image is a multi-stage build (node:22-alpine + pnpm 11.5.2) that ships only the app's `dist/` and production `node_modules`. Runners use non-root `node` (uid 1000), `tini` as PID 1, and a HEALTHCHECK on `/health/live` (api `:4000`, workers `:9100`, web `:3000/en`). `api.Dockerfile --target tools` builds the full workspace with dev deps for the compose `setup` service and the Kubernetes `agentops-db-migrate` Job. See `infrastructure/docker/README.md`.
+
+## Kubernetes
+
+Manifests are kustomize base + components + overlays. Workloads: `agentops-api` (4000), `agentops-web` (3000), `workflow-worker`, `ai-worker`, `tool-worker`, `notification-worker` (metrics 9100). `components/in-cluster-data/` provides Postgres, Redis, and Kafka for dev/k3s; `overlays/prod` uses managed MSK/ElastiCache.
+
+Validate with `pnpm k8s:validate` (kustomize v5.6.0 + kubeconform v0.6.7). Deploy order:
+
+1. Install ingress-nginx, cert-manager, and External Secrets (plus KEDA for prod, see [Autoscaling](#autoscaling)).
+2. Create the secret in AWS Secrets Manager.
+3. `kubectl apply -k infrastructure/k8s/jobs/db-migrate` with the overlay's image.
+4. `kubectl apply -k infrastructure/k8s/overlays/<env>`.
+
+## Autoscaling
+
+Load-test facts (1000 leads, 20 VUs, mock AI provider):
+
+| Worker replicas | Drain rate |
+| --- | --- |
+| 1 | 8.2 runs/s |
+| 3 | 12.2 runs/s |
+
+Intake is about 30 req/s, so a single replica - and even three - cannot keep up and Kafka lag grows. Two scalers exist:
+
+- **CPU HPA** (`infrastructure/k8s/base/hpa.yaml`): every worker requests `50m` CPU (the `ai-worker` requests `100m`) and scales at 75% utilization. CPU is only a proxy for the backlog: a worker can be idle on CPU while its topic lags, and a CPU spike does not mean messages are waiting. The API keeps a CPU HPA (2-6 replicas in prod) because it serves HTTP traffic.
+- **KEDA lag scaling** (`infrastructure/k8s/components/keda-autoscaling/`, prod only): one `ScaledObject` per worker with a Kafka trigger per consumed topic, `lagThreshold: "50"`, `minReplicaCount: 1`, `maxReplicaCount: 6`, `pollingInterval: 15`, `cooldownPeriod: 120`, and a 120s scale-down stabilization window. KEDA creates the HPA itself, so the component deletes the four worker HPAs from the base; the API HPA stays CPU-based.
+
+KEDA must be installed in the cluster before the prod overlay is applied:
+
+```bash
+helm repo add kedacore https://kedacore.github.io/charts
+helm install keda kedacore/keda --namespace keda --create-namespace
 ```
 
-## Kubernetes Resources
+Partitions cap the useful replica count: a partition is consumed by exactly one consumer in a group, so the useful replicas of a worker are bounded by the partition count (3 by default, 6 in prod once the topics are increased).
 
-- Deployment
-- Service
-- Ingress
-- ConfigMap
-- Secret
-- PersistentVolumeClaim
-- HorizontalPodAutoscaler
+To raise the partition count of an existing cluster:
+
+```bash
+KAFKA_BROKERS=<msk-brokers> KAFKA_TOPIC_PARTITIONS=6 KAFKA_TOPIC_ALLOW_INCREASE=true pnpm kafka:bootstrap
+```
+
+`KAFKA_TOPIC_PARTITIONS` (default 3) sets the partition count for new topics. `KAFKA_TOPIC_ALLOW_INCREASE=true` is opt-in: the bootstrap script increases existing topics up to the target and logs each change; it never decreases partitions. Increasing partitions is irreversible (Kafka cannot shrink a topic), and per-key ordering is unaffected because messages are keyed by workflow run id, so every run stays on a single partition. The prod overlay records the intent in the `agentops-config` ConfigMap (`KAFKA_TOPIC_PARTITIONS: "6"`), but the count only changes when the bootstrap script runs against the cluster.
 
 ## Health Checks
 
@@ -138,18 +162,15 @@ AWS EKS + VPC + Node Group + ECR + RDS + ElastiCache + ALB
 
 ## CI/CD
 
-Pull requests:
+GitHub Actions workflows live in `.github/workflows/`; see `.github/workflows/README.md` for the workflow list and the required repository variables, secret, environments, and branch protection.
 
-- Install dependencies
-- Run lint
-- Run unit tests
-- Run typecheck
-- Build affected apps
+The flow is:
 
-Main branch:
+1. **PR -> main checks.** A pull request must pass `ci.yml` (quality, integration, security, infra, image scans). Terraform changes also get a `terraform-plan.yml` comment per environment.
+2. **Dev auto deploy.** A merge to `main` triggers `deploy-dev.yml`: build and push the commit-tagged images to `dev/<app>`, run the migration Job, roll out, smoke test, and automatically roll back on failure.
+3. **Manual prod promotion with approval.** `deploy-prod.yml` is dispatched with a tested tag, pauses on the `production` environment's required reviewers, promotes the images without rebuilding, and deploys with the same script.
+4. **Rollback.** `scripts/k8s-deploy.sh` rolls every Deployment back to its previous revision if a rollout or smoke test fails.
 
-- Build Docker images
-- Push images
-- Run Terraform plan
-- Deploy Kubernetes manifests after approval
-- Run smoke tests
+Terraform is applied separately with `terraform-apply.yml` (manual, per-environment approval).
+
+Validate the workflow files locally with `pnpm ci:lint` (actionlint + shellcheck).

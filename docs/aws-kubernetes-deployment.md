@@ -2,17 +2,35 @@
 
 AgentOps should support two AWS deployment tracks.
 
+## Terraform
+
+Two environment entrypoints drive everything (see `infrastructure/terraform/README.md`):
+
+- `environments/dev`: k3s on one EC2 node — the dev/demo track.
+- `environments/prod`: EKS + managed data services — the production track.
+
+Both apply through the approved CI workflow (GitHub OIDC, no static AWS keys) after a plan in the PR. The high-level flow:
+
+```txt
+bootstrap (once per account: S3 state bucket + DynamoDB lock table)
+-> dev (k3s) or prod (EKS) apply via CI
+-> install ingress-nginx, cert-manager, External Secrets
+-> fill the app secret (agentops/<env>/app)
+-> run the db-migrate Job
+-> kubectl apply -k the overlay
+```
+
 ## Track A: EC2 + k3s
 
 Best for the portfolio/demo phase.
 
 ```txt
-Terraform
--> default VPC security group
+Terraform (environments/dev)
+-> VPC + security group
 -> EC2 instance
 -> k3s bootstrap
 -> ECR repositories
--> kubectl apply Kubernetes manifests
+-> kubectl apply -k the dev overlay
 ```
 
 Why this track:
@@ -26,12 +44,12 @@ Why this track:
 Best when the project needs a managed Kubernetes story.
 
 ```txt
-Terraform or eksctl
+Terraform (environments/prod)
 -> EKS cluster
--> managed node group or EKS Auto Mode
+-> managed node group
 -> ECR repositories
 -> ingress/load balancer
--> Kubernetes manifests or Helm chart
+-> kubectl apply -k the prod overlay
 ```
 
 Why this track:
@@ -53,7 +71,7 @@ tool-worker
 notification-worker
 ```
 
-Terraform dev environment now outputs `ecr_repository_urls`. CI/CD should build each Docker image, push to ECR, patch Kubernetes image names, then deploy.
+The Terraform environments output `ecr_repository_urls`. CI/CD should build each Docker image, push to ECR, set the overlay `images:` newName values, then deploy by applying the overlay.
 
 ## Runtime Services
 
@@ -83,14 +101,16 @@ JWT_REFRESH_SECRET
 ## Deploy Order
 
 ```txt
-1. terraform init/plan/apply
-2. build and push images to ECR
-3. create or replace Kubernetes secrets
-4. apply namespace, config, data services, apps, ingress
-5. run pnpm db:push against the deployment database
-6. run pnpm kafka:bootstrap against the deployment Kafka broker
+1. bootstrap the Terraform state backend (once per account)
+2. apply dev (k3s) or prod (EKS) through CI
+3. install ingress-nginx, cert-manager, and External Secrets
+4. fill the app secret (agentops/<env>/app)
+5. run the db-migrate Job (never `db:reset`, which refuses non-local hosts)
+6. kubectl apply -k infrastructure/k8s/overlays/<env>
 7. smoke test /health/live and /health/ready
 ```
+
+Kafka bootstrap is handled by the in-cluster Kafka (dev) or MSK (prod); there is no separate `kafka:bootstrap` step.
 
 ## Cost Guardrails
 

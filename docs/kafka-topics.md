@@ -9,12 +9,13 @@ Kafka is used for asynchronous workflow execution. Consumers must assume at-leas
 | `workflow-triggered` | API | Workflow Worker |
 | `workflow-step-started` | Workflow Worker | API/dashboard listeners |
 | `workflow-step-completed` | Workers | Workflow Worker, API/dashboard listeners |
-| `workflow-step-failed` | Workers | Workflow Worker, API/dashboard listeners |
+| `workflow-step-failed` | Workers (and dead-letter handling) | Workflow Worker, API/dashboard listeners |
 | `agent-task-requested` | Workflow Worker | AI Worker |
 | `agent-task-completed` | AI Worker | Workflow Worker |
 | `tool-call-requested` | Workflow Worker | Tool Worker |
 | `tool-call-completed` | Tool Worker | Workflow Worker |
 | `human-approval-requested` | Workflow Worker | API/dashboard listeners |
+| `human-approval-decided` | API | Workflow Worker |
 | `notification-requested` | API/workers | Notification Worker |
 | `workflow-completed` | Workflow Worker | API/dashboard listeners |
 | `workflow-failed` | Workflow Worker | API/dashboard listeners |
@@ -59,8 +60,8 @@ Override with `KAFKA_BROKERS`, `KAFKA_TOPIC_PARTITIONS`, or `KAFKA_TOPIC_REPLICA
 - Every event must include `eventId`, `type`, `workspaceId`, `workflowRunId`, and `timestamp`.
 - Propagate `requestId`, `traceId`, `traceparent`, and `parentEventId` when an event is caused by another HTTP request or Kafka event.
 - The API stores domain events in PostgreSQL before sending them to Kafka, then records `kafkaPublishedAt` or `kafkaError`.
-- Use `workflowRunId` plus node/task identifiers for idempotency.
-- Retry failed handling up to 3 times before publishing to `dead-letter-events`.
+- Use `workflowRunId` plus node/task identifiers for idempotency: `workflowRunId:nodeId:eventType`, recorded per consumer group in the `ProcessedMessage` table.
+- Retry failed handling up to 3 times before publishing to `dead-letter-events` (implemented once in `processMessage`, used by every worker). A dead-lettered node also gets `workflow-step-failed`, which fails the run.
 - Commit consumer offsets only after durable state is written.
 - Store enough event/run context to debug execution without leaking secrets.
 

@@ -57,3 +57,55 @@ Add these when the relevant feature becomes real:
 - Temporal: powerful, but too much operational surface for the first MVP because Kafka workers already prove async execution.
 - BullMQ as a second queue: Redis should remain cache/status/rate-limit until a clear non-Kafka queue use case appears.
 - A separate BFF service: Next.js and NestJS are enough for the current architecture.
+
+## Cloud Deployment Decisions (2026-10-19)
+
+### Kubernetes
+
+- **dev/demo**: k3s on one EC2 `t3.large` — cheap, one node, with in-cluster Postgres, Redis, and Kafka via `infrastructure/k8s/components/in-cluster-data`.
+- **prod**: EKS — managed control plane, managed node group of 2–4 × `t3.medium`, IRSA for External Secrets.
+- **Upgrade path**: the same images and kustomize base; only the overlay and the Terraform environment change.
+
+### Kafka
+
+- **dev**: single-node Kafka in the cluster.
+- **prod**: Amazon MSK provisioned, 2 × `kafka.t3.small` across 2 AZs.
+- Why not MSK Serverless: it requires IAM SASL auth, which `kafkajs` needs an extra mechanism for; MSK provisioned keeps a plaintext listener inside the VPC (TLS later).
+- Why not self-hosted Kafka on EC2 for prod: operations (patching, disks, rebalancing) cost more than the price difference.
+
+### Data
+
+- **prod** RDS PostgreSQL 16 `db.t4g.micro` (password managed by RDS in Secrets Manager).
+- ElastiCache Redis 7 `cache.t4g.micro` with TLS (`rediss://`).
+
+### Secrets
+
+- AWS Secrets Manager `agentops/<env>/app`; values are set outside Terraform.
+- Synced into the cluster by External Secrets.
+
+### CI access
+
+- GitHub OIDC role per environment, no static AWS keys.
+
+### Cost estimate
+
+USD/month, `ap-southeast-1`, on-demand, approximate — verify with the AWS pricing calculator.
+
+| Environment | Item | Approx. USD/month |
+| --- | --- | --- |
+| dev | EC2 `t3.large` | ~77 |
+| dev | EBS 50 GB gp3 | ~5 |
+| dev | public IPv4 | ~4 |
+| dev | ECR / S3 / DynamoDB / Secrets | ~3 |
+| **dev** | **total** | **~90** |
+| prod | EKS control plane | ~73 |
+| prod | 2 × `t3.medium` | ~77 |
+| prod | NAT gateway + data | ~45 + data |
+| prod | RDS `db.t4g.micro` single-AZ (+ storage) | ~16 (+ ~3) |
+| prod | ElastiCache `cache.t4g.micro` | ~14 |
+| prod | MSK 2 × `kafka.t3.small` (+ storage) | ~75 (+ ~5) |
+| prod | load balancer for ingress-nginx | ~20 |
+| prod | Secrets / ECR / logs | ~10 |
+| **prod** | **total** | **~340** |
+
+Biggest levers: the NAT gateway, MSK, and the EKS control plane.
