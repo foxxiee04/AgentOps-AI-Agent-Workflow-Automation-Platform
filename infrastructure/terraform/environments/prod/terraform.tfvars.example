@@ -1,0 +1,17 @@
+owner             = "platform-team"
+github_repository = "REPLACE_OWNER/agentops"
+
+# from the bootstrap output
+github_oidc_provider_arn = "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"
+
+# from the dev output / same account
+dev_ecr_repository_arns = ["arn:aws:ecr:ap-southeast-1:111122223333:repository/dev/*"]
+
+# Restrict the public EKS API endpoint instead of allowing all addresses.
+# eks_public_access_cidrs = ["203.0.113.0/24"]
+
+# Cost/HA toggles for the managed data services.
+rds_multi_az           = false
+rds_instance_class     = "db.t4g.micro"
+redis_node_type        = "cache.t4g.micro"
+msk_broker_instance_type = "kafka.t3.small"

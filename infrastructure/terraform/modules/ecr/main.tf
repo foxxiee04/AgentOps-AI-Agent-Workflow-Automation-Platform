@@ -1,8 +1,9 @@
 resource "aws_ecr_repository" "repositories" {
-  for_each = toset(var.repository_names)
+  for_each = toset(var.repositories)
 
-  name                 = "${var.name}/${each.value}"
-  image_tag_mutability = "MUTABLE"
+  name                 = "${var.name}/${each.key}"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = var.force_delete
 
   encryption_configuration {
     encryption_type = "AES256"
@@ -12,9 +13,7 @@ resource "aws_ecr_repository" "repositories" {
     scan_on_push = true
   }
 
-  tags = {
-    Name = "${var.name}-${each.value}"
-  }
+  tags = merge(var.tags, { Name = "${var.name}/${each.key}" })
 }
 
 resource "aws_ecr_lifecycle_policy" "repositories" {
@@ -26,16 +25,29 @@ resource "aws_ecr_lifecycle_policy" "repositories" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep the latest 20 images"
+        description  = "Expire untagged images after 7 days"
         selection = {
-          tagStatus   = "any"
-          countType   = "imageCountMoreThan"
-          countNumber = 20
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 7
         }
         action = {
           type = "expire"
         }
-      }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep the last ${var.image_retention_count} tagged images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = var.image_retention_count
+        }
+        action = {
+          type = "expire"
+        }
+      },
     ]
   })
 }

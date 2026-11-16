@@ -1,7 +1,13 @@
-aws_region    = "us-east-1"
-name          = "agentops-dev"
-ami_id        = "ami_replace_me"
-instance_type = "t3.small"
-key_name      = "replace-me"
-ssh_cidr      = "203.0.113.10/32"
+owner             = "platform-team"
+github_repository = "REPLACE_OWNER/agentops"
 
+# from the bootstrap output
+github_oidc_provider_arn = "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"
+
+# Ubuntu 24.04 (Noble) AMI id for ap-southeast-1. Find the current id with:
+#   aws ssm get-parameter \
+#     --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
+#     --region ap-southeast-1 --query Parameter.Value --output text
+ami_id            = "ami-REPLACE_WITH_UBUNTU_24_04"
+instance_type     = "t3.large"
+admin_cidr_blocks = ["203.0.113.10/32"]
