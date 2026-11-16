@@ -1,9 +1,32 @@
-import type { WorkflowDefinition, WorkflowNodeType, WorkflowRunStatus, WorkflowStatus, WorkflowStepStatus } from "@agentops/shared";
+import {
+  approvalDecisionResultSchema,
+  humanApprovalViewSchema,
+  sampleLeadWorkflowDefinition,
+  workflowRunStepsViewSchema,
+  workflowRunViewSchema,
+  type ApprovalDecision,
+  type ApprovalDecisionResult,
+  type HumanApprovalView,
+  type WorkflowDefinition,
+  type WorkflowRunStepView,
+  type WorkflowRunStepsView,
+  type WorkflowRunView,
+  type WorkflowStatus
+} from "@agentops/shared";
+import { z } from "zod";
+import { readPublicApiUrl, resolvePublicApiUrl } from "./runtime-config";
 
-export const apiUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
-const serverApiUrl = (process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+export type { HumanApprovalView, WorkflowRunStepView, WorkflowRunStepsView, WorkflowRunView };
 
-export type ApiDataSource = "api" | "fallback";
+export const apiUrl = readPublicApiUrl();
+export const serverApiUrl = (process.env.API_INTERNAL_URL ?? resolvePublicApiUrl()).replace(/\/$/, "");
+
+/** Demo data is shown only when explicitly enabled; otherwise an unreachable API is an error state. */
+export function isDemoFallbackEnabled(env: Record<string, string | undefined> = { NEXT_PUBLIC_DEMO_FALLBACK: process.env.NEXT_PUBLIC_DEMO_FALLBACK }) {
+  return env["NEXT_PUBLIC_DEMO_FALLBACK"] === "true";
+}
+
+export type ApiDataSource = "api" | "fallback" | "error";
 
 export type ApiResource<T> = {
   data: T;
@@ -46,33 +69,6 @@ export type WorkflowView = {
   definition: WorkflowDefinition;
   createdAt: string;
   updatedAt: string;
-};
-
-export type WorkflowRunView = {
-  id: string;
-  workflowId: string;
-  workspaceId: string;
-  workflowVersionId: string;
-  status: WorkflowRunStatus;
-  triggerType: string;
-  input: Record<string, unknown>;
-  createdAt: string;
-  eventId?: string;
-};
-
-export type WorkflowRunStepView = {
-  id: string;
-  workflowRunId: string;
-  nodeId: string;
-  nodeName: string;
-  nodeType: WorkflowNodeType;
-  status: WorkflowStepStatus;
-  message: string;
-};
-
-export type WorkflowRunStepsView = {
-  workflowRunId: string;
-  steps: WorkflowRunStepView[];
 };
 
 export type RecentActivity = {
@@ -123,44 +119,14 @@ export type AiTestResult = {
   };
 };
 
-const sampleDefinition: WorkflowDefinition = {
-  nodes: [
-    { id: "trigger-1", type: "TRIGGER", name: "Manual lead trigger", config: { triggerType: "manual" } },
-    {
-      id: "ai-1",
-      type: "AI_AGENT",
-      name: "Score lead",
-      config: {
-        modelProvider: "mock",
-        outputSchema: {
-          type: "object",
-          required: ["leadScore", "summary", "recommendedAction"],
-          properties: {
-            leadScore: { type: "number" },
-            summary: { type: "string" },
-            recommendedAction: { type: "string" }
-          }
-        }
-      }
-    },
-    { id: "condition-1", type: "CONDITION", name: "High intent?", config: { expression: "leadScore > 80" } },
-    { id: "webhook-1", type: "WEBHOOK", name: "Send follow-up mock", config: { url: "https://example.com/mock" } },
-    { id: "end-1", type: "END", name: "Done", config: {} }
-  ],
-  edges: [
-    { id: "edge-1", source: "trigger-1", target: "ai-1" },
-    { id: "edge-2", source: "ai-1", target: "condition-1" },
-    { id: "edge-3", source: "condition-1", target: "webhook-1", condition: "true" },
-    { id: "edge-4", source: "webhook-1", target: "end-1" }
-  ]
-};
+const sampleDefinition: WorkflowDefinition = sampleLeadWorkflowDefinition;
 
 export const fallbackWorkflows: WorkflowView[] = [
   {
     id: "wf_lead_qualification",
     workspaceId: "ws_demo",
     name: "Lead qualification",
-    description: "Score a new lead, branch on intent, and send a webhook mock.",
+    description: "Score a new lead, branch on intent, draft an email for approval, and create a sales task.",
     status: "DRAFT",
     createdBy: "user_demo",
     definition: sampleDefinition,
@@ -238,11 +204,13 @@ export const fallbackRuns: WorkflowRunView[] = [
     workspaceId: "ws_demo",
     workflowVersionId: "wfv_demo_lead_qualification",
     status: "RUNNING",
-    triggerType: "manual",
+    triggerType: "webhook",
     input: {
-      leadName: "Demo lead",
-      source: "fallback",
-      intent: "urgent sales automation"
+      name: "Demo lead",
+      company: "Shop ABC",
+      email: "de***@example.com",
+      message: "We need chat automation and order tracking.",
+      source: "fallback"
     },
     createdAt: "2026-06-07T00:00:00.000Z",
     eventId: "evt_demo_workflow_triggered"
@@ -263,6 +231,7 @@ export function fallbackStepsForRun(id: string): WorkflowRunStepsView {
       nodeName: node.name,
       nodeType: node.type,
       status: index === 0 ? "COMPLETED" : "PENDING",
+      retryCount: 0,
       message:
         index === 0
           ? "Trigger accepted by API and workflow event published."
@@ -301,58 +270,154 @@ export const fallbackAiUsage: AiUsage = {
   notes: "Fallback UI data. Start the API to load live workspace usage."
 };
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${serverApiUrl}${path}`, {
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly details?: unknown
+  ) {
+    super(message);
   }
-
-  return response.json() as Promise<T>;
 }
 
-export async function safeApiGet<T>(path: string, fallback: T): Promise<ApiResource<T>> {
+export async function readError(response: Response): Promise<ApiError> {
+  const text = await response.text();
   try {
-    return { data: await apiGet<T>(path), source: "api" };
+    const body = JSON.parse(text) as { message?: string | string[]; details?: unknown };
+    const message = Array.isArray(body.message) ? body.message.join("; ") : body.message;
+    return new ApiError(response.status, message || `API request failed: ${response.status}`, body.details);
+  } catch {
+    return new ApiError(response.status, text || `API request failed: ${response.status}`);
+  }
+}
+
+/**
+ * Readiness-aware variant of `safeApiGet` (in `server-api.ts`). `/health/ready` answers HTTP 503 with a JSON report
+ * ({ status, info, error, details }) when a dependency is down; that body is real API data, not an
+ * unreachable API, so it is returned as `source: "api"` and the per-dependency detail is kept.
+ */
+export async function safeHealthGet<T>(path: string, fallback: T, schema?: z.ZodType<T>): Promise<ApiResource<T>> {
+  try {
+    const response = await fetch(`${serverApiUrl}${path}`, { cache: "no-store" });
+    if (response.status === 503) {
+      const body = await response
+        .clone()
+        .json()
+        .catch(() => undefined);
+      // The API's exception filter wraps Terminus' report: { statusCode, error, details, ... } (no `status`).
+      if (body && typeof body === "object" && ("status" in body || "details" in body)) {
+        const report = "status" in body ? body : { status: "error", error: (body as { error?: unknown }).error, details: (body as { details?: unknown }).details };
+        return { data: schema ? schema.parse(report) : (report as T), source: "api" };
+      }
+    }
+    if (!response.ok) {
+      throw await readError(response);
+    }
+    const body = (await response.json()) as unknown;
+    return { data: schema ? schema.parse(body) : (body as T), source: "api" };
   } catch (error) {
     return {
       data: fallback,
-      source: "fallback",
+      source: isDemoFallbackEnabled() ? "fallback" : "error",
       error: error instanceof Error ? error.message : "API request failed"
     };
   }
 }
 
+let refreshing: Promise<boolean> | undefined;
+/** Rotates the HttpOnly session cookies via the refresh cookie; concurrent callers share one request. */
+export function refreshBrowserSession(): Promise<boolean> {
+  refreshing ??= fetch(`${apiUrl}/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  })
+    .then((response) => response.ok, () => false)
+    .finally(() => {
+      refreshing = undefined;
+    });
+  return refreshing;
+}
+
+async function fetchWithSession(path: string, init: RequestInit): Promise<Response> {
+  const response = await fetch(`${apiUrl}${path}`, { ...init, credentials: "include" });
+  if (response.status === 401 && (await refreshBrowserSession())) {
+    return fetch(`${apiUrl}${path}`, { ...init, credentials: "include" });
+  }
+  return response;
+}
+
+export async function clientApiGet<T>(path: string, schema?: z.ZodType<T>): Promise<T> {
+  const response = await fetchWithSession(path, { cache: "no-store" });
+  if (!response.ok) {
+    throw await readError(response);
+  }
+  const body = (await response.json()) as unknown;
+  return schema ? schema.parse(body) : (body as T);
+}
+
 export async function clientApiPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const token = readBrowserAccessToken();
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchWithSession(path, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "x-workspace-role": "OWNER",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(body)
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `API request failed: ${response.status}`);
+    throw await readError(response);
   }
 
   return response.json() as Promise<T>;
 }
 
-function readBrowserAccessToken() {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
+export const runSchemas = {
+  run: workflowRunViewSchema,
+  steps: workflowRunStepsViewSchema,
+  approvals: z.array(humanApprovalViewSchema)
+};
 
-  try {
-    return (JSON.parse(window.localStorage.getItem("agentops.auth.v1") ?? "null") as { accessToken?: string } | null)?.accessToken;
-  } catch {
-    return undefined;
+export function fetchRun(runId: string) {
+  return clientApiGet(`/workflow-runs/${encodeURIComponent(runId)}`, workflowRunViewSchema);
+}
+
+export function fetchRunSteps(runId: string) {
+  return clientApiGet(`/workflow-runs/${encodeURIComponent(runId)}/steps`, workflowRunStepsViewSchema);
+}
+
+export function fetchPendingApprovals(workspaceId = "ws_demo") {
+  return clientApiGet(`/workflow-runs/approvals?workspaceId=${encodeURIComponent(workspaceId)}`, runSchemas.approvals);
+}
+
+/** The email a reviewer edited before approving. */
+export type ApprovalEditedEmail = { subject: string; body: string };
+
+/**
+ * Body of an approval decision: the shared decision (a `comment` is optional for approve,
+ * mandatory for reject) plus the draft the reviewer edited.
+ */
+export type ApprovalDecisionRequest = {
+  decision: ApprovalDecision["decision"];
+  comment?: ApprovalDecision["comment"];
+  editedEmail?: ApprovalEditedEmail;
+};
+
+export async function decideApproval(approval: Pick<HumanApprovalView, "workflowRunId" | "stepId">, decision: ApprovalDecisionRequest): Promise<ApprovalDecisionResult> {
+  const result = await clientApiPost<unknown>(
+    `/workflow-runs/${encodeURIComponent(approval.workflowRunId)}/steps/${encodeURIComponent(approval.stepId)}/approval`,
+    decision
+  );
+  return approvalDecisionResultSchema.parse(result);
+}
+
+/** Maps API failures of an approval decision to the i18n key the UI shows. */
+export function approvalErrorKey(error: unknown): "conflict" | "forbidden" | "unauthorized" | "failed" {
+  if (error instanceof ApiError) {
+    if (error.status === 409) return "conflict";
+    if (error.status === 403) return "forbidden";
+    if (error.status === 401) return "unauthorized";
   }
+  return "failed";
 }
