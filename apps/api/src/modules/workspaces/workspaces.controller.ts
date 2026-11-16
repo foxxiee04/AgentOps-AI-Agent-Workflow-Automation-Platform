@@ -1,27 +1,34 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import type { AuthenticatedCaller } from "../../common/auth/jwt-auth.guard";
 import { WorkspaceRoleGuard } from "../../common/rbac/workspace-role.guard";
-import { WorkspaceRoles } from "../../common/rbac/workspace-role.decorator";
+import { WorkspaceRoles, WorkspaceScope } from "../../common/rbac/workspace-role.decorator";
 import { CreateWorkspaceDto, InviteWorkspaceMemberDto, UpdateWorkspaceDto, UpdateWorkspaceMemberRoleDto } from "./dto";
 import { WorkspacesService } from "./workspaces.service";
 
+type AuthenticatedRequest = {
+  auth: AuthenticatedCaller;
+};
+
 @ApiTags("workspaces")
 @UseGuards(WorkspaceRoleGuard)
+@WorkspaceScope("workspaceParam")
 @Controller("workspaces")
 export class WorkspacesController {
   constructor(@Inject(WorkspacesService) private readonly workspacesService: WorkspacesService) {}
 
   @Get()
-  findAll() {
-    return this.workspacesService.findAll();
+  findAll(@Req() request: AuthenticatedRequest) {
+    return this.workspacesService.findAll(request.auth.userId);
   }
 
   @Post()
-  create(@Body() dto: CreateWorkspaceDto) {
-    return this.workspacesService.create(dto);
+  create(@Req() request: AuthenticatedRequest, @Body() dto: CreateWorkspaceDto) {
+    return this.workspacesService.create(dto, request.auth.userId);
   }
 
   @Get(":id")
+  @WorkspaceRoles("VIEWER")
   findOne(@Param("id") id: string) {
     return this.workspacesService.findOne(id);
   }
@@ -39,6 +46,7 @@ export class WorkspacesController {
   }
 
   @Get(":id/members")
+  @WorkspaceRoles("VIEWER")
   members(@Param("id") id: string) {
     return this.workspacesService.membersForWorkspace(id);
   }
