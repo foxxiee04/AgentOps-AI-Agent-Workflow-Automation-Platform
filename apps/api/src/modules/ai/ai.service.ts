@@ -1,10 +1,20 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import {
   aiAgentNodeConfigSchema,
+  aiQuotaExceeded,
+  describeAiQuota,
+  resolveAiQuotaLimits,
   buildAiPrompt,
+  buildMockLeadEmail,
+  buildMockLeadScore,
   defaultLeadScoringOutputSchema,
   estimateTokenCount,
+  leadEvaluationCases,
+  estimateAiCostUsd,
   evaluateAiOutput,
+  evaluateLeadClassification,
+  leadGoldenSetVersion,
+  type EvaluatedCase,
   leadScoreResultSchema,
   validateAiOutput,
   type AiAgentNodeConfig,
@@ -22,17 +32,35 @@ export class AiService {
   ) {}
 
   async testAgent(dto: TestAgentDto) {
+    await this.assertWithinQuota();
     const result = this.runMockAgent(dto.input, this.resolveConfig(dto.config, dto.modelProvider));
     await this.recordUsage(result.tokenUsage.inputTokens + result.tokenUsage.outputTokens);
     return result;
   }
 
   async evaluateAgent(dto: EvaluateAgentDto) {
+    await this.assertWithinQuota();
     const config = this.resolveConfig(dto.config);
-    const results = dto.testCases.map((testCase) => {
+    const testCases = dto.testCases ?? leadEvaluationCases;
+    const evaluated: EvaluatedCase[] = [];
+    const results = testCases.map((testCase) => {
+      const startedAt = Date.now();
       const execution = this.runMockAgent(testCase.input, config);
       const expected = testCase.expected ?? {};
-      const mismatches = evaluateAiOutput(execution.result, expected);
+      // Golden-set labels include the expected branch; derive it the way the workflow does (leadScore > 80).
+      const leadScore = typeof execution.result["leadScore"] === "number" ? (execution.result["leadScore"] as number) : undefined;
+      const comparable = leadScore === undefined ? execution.result : { ...execution.result, branch: leadScore > 80 ? "A" : "B" };
+      const mismatches = evaluateAiOutput(comparable, expected);
+      evaluated.push({
+        caseId: testCase.id,
+        expected: { category: String(expected["category"] ?? ""), branch: expected["branch"] as "A" | "B" | undefined },
+        output: { category: execution.result["category"] as string | undefined, leadScore },
+        schemaValid: execution.validation.schemaValid,
+        latencyMs: Date.now() - startedAt,
+        inputTokens: execution.tokenUsage.inputTokens,
+        outputTokens: execution.tokenUsage.outputTokens,
+        costUsd: estimateAiCostUsd(config.modelProvider, config.modelName, execution.tokenUsage.inputTokens, execution.tokenUsage.outputTokens)
+      });
 
       return {
         caseId: testCase.id,
@@ -45,14 +73,18 @@ export class AiService {
       };
     });
     const passed = results.filter((result) => result.passed).length;
+    await this.recordUsage(results.reduce((sum, r) => sum + r.tokenUsage.inputTokens + r.tokenUsage.outputTokens, 0));
 
     return {
       provider: config.modelProvider,
       modelName: config.modelName,
+      goldenSetVersion: dto.testCases ? undefined : leadGoldenSetVersion,
       totalCases: results.length,
       passed,
       failed: results.length - passed,
       passRate: results.length === 0 ? 0 : Number((passed / results.length).toFixed(2)),
+      // Accuracy, per-class precision/recall/F1, confusion matrix, branch accuracy, hot-lead miss rate, latency, cost.
+      report: evaluateLeadClassification(evaluated),
       results
     };
   }
@@ -97,23 +129,20 @@ export class AiService {
 
     return {
       workspaceId: demoWorkspaceId,
-      dailyAiCallLimit: 100,
+      dailyAiCallLimit: this.limits().calls,
+      dailyAiTokenLimit: this.limits().tokens,
       aiCallsToday: records.filter((record) => record.aiTokensUsed > 0).length,
       tokensUsedToday,
-      notes: "Usage is persisted in PostgreSQL for API-side AI test runs; worker provider usage can write the same table next."
+      notes: "Counts AI calls from the ai-worker and the API test endpoints (UsageRecord). Limits: AI_DAILY_CALL_LIMIT, AI_DAILY_TOKEN_LIMIT."
     };
   }
 
   private runMockAgent(input: Record<string, unknown>, config: AiAgentNodeConfig) {
     const prompt = buildAiPrompt(config, input);
-    const result = leadScoreResultSchema.parse({
-      leadScore: this.inferLeadScore(prompt.safeInput),
-      category: this.inferLeadScore(prompt.safeInput) >= 80 ? "high-intent" : "medium-intent",
-      summary: "The lead appears interested in automating sales and support workflows.",
-      recommendedAction: "Send a personalized follow-up email and create a sales task.",
-      personalizedEmail: "Hi there, thanks for reaching out about workflow automation. I would love to learn more.",
-      confidence: this.inferLeadScore(prompt.safeInput) >= 80 ? 0.91 : 0.72
-    });
+    const required = (config.outputSchema as { required?: unknown }).required;
+    const result = Array.isArray(required) && required.includes("subject")
+      ? buildMockLeadEmail(prompt.variables)
+      : leadScoreResultSchema.parse(buildMockLeadScore(prompt.safeInput));
     const validation = validateAiOutput(config.outputSchema as JsonSchema, result);
 
     return {
@@ -149,12 +178,18 @@ export class AiService {
     });
   }
 
-  private inferLeadScore(input: unknown): number {
-    const text = JSON.stringify(input).toLowerCase();
-    if (text.includes("urgent") || text.includes("automation") || text.includes("sales")) {
-      return 87;
+  private limits() {
+    return resolveAiQuotaLimits(process.env);
+  }
+
+  /** Rejects the request with HTTP 429 once the workspace used its daily AI call or token budget. */
+  private async assertWithinQuota() {
+    const usage = await this.usage();
+    const limits = this.limits();
+    const today = { calls: usage.aiCallsToday, tokens: usage.tokensUsedToday };
+    if (aiQuotaExceeded(today, limits)) {
+      throw new HttpException(describeAiQuota(today, limits), HttpStatus.TOO_MANY_REQUESTS);
     }
-    return 62;
   }
 
   private async recordUsage(aiTokensUsed: number) {
