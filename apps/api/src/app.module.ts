@@ -1,7 +1,10 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { ThrottlerModule } from "@nestjs/throttler";
+import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { parseAppEnv } from "@agentops/config";
+import { CsrfOriginGuard } from "./common/auth/csrf-origin.guard";
+import { JwtAuthGuard } from "./common/auth/jwt-auth.guard";
 import { DomainEventsModule } from "./common/domain-events/domain-events.module";
 import { InfrastructureModule } from "./common/infrastructure/infrastructure.module";
 import { RequestLoggingMiddleware } from "./common/http/request-logging.middleware";
@@ -21,7 +24,7 @@ import { WorkspacesModule } from "./modules/workspaces/workspaces.module";
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: parseAppEnv }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: Number(process.env.API_RATE_LIMIT_PER_MINUTE) || 120 }]),
     InfrastructureModule,
     DomainEventsModule,
     HealthModule,
@@ -35,6 +38,11 @@ import { WorkspacesModule } from "./modules/workspaces/workspaces.module";
     DashboardModule,
     NotificationsModule,
     AuditModule
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: CsrfOriginGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard }
   ]
 })
 export class AppModule implements NestModule {

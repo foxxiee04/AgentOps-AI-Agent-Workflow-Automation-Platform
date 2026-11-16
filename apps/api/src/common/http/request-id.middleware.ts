@@ -30,13 +30,15 @@ export class RequestIdMiddleware implements NestMiddleware {
     const incomingTrace = parseTraceparent(request.header(TRACEPARENT_HEADER));
     const traceId = incomingTrace?.traceId ?? createTraceId();
     const parentTraceparent = incomingTrace?.traceparent ?? createTraceparent(traceId);
-    const activeSpan = startOtelSpan(`HTTP ${request.method} ${request.path}`, {
+    // Inside middleware mounted with forRoutes("*"), request.path is relative ("/"); use the original URL.
+    const path = (request.originalUrl ?? request.url).split("?")[0] || "/";
+    const activeSpan = startOtelSpan(`HTTP ${request.method} ${normalizeSpanPath(path)}`, {
       kind: SpanKind.SERVER,
       traceparent: parentTraceparent,
       attributes: {
         "agentops.request_id": requestId,
         "http.request.method": request.method,
-        "url.path": request.path,
+        "url.path": path,
         "url.query": request.url.includes("?") ? request.url.split("?").slice(1).join("?") : undefined
       }
     });
@@ -66,4 +68,13 @@ export class RequestIdMiddleware implements NestMiddleware {
       })
     );
   }
+}
+
+/** Keeps span names low-cardinality: ids become placeholders. */
+export function normalizeSpanPath(path: string) {
+  return path
+    .replace(/\/run_[^/]+/g, "/:runId")
+    .replace(/\/wfv_[^/]+/g, "/:workflowVersionId")
+    .replace(/\/wf_[^/]+/g, "/:workflowId")
+    .replace(/\/(?:[0-9a-f]{8}-[0-9a-f-]{27,}|c[a-z0-9]{24})(?=\/|$)/gi, "/:id");
 }

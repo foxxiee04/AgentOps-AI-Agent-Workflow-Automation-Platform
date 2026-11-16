@@ -1,41 +1,16 @@
-import "reflect-metadata";
-import helmet from "helmet";
-import { ValidationPipe } from "@nestjs/common";
-import { NestFactory } from "@nestjs/core";
-import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { startOpenTelemetry } from "@agentops/observability";
-import { AppModule } from "./app.module";
-import { HttpExceptionFilter } from "./common/http/http-exception.filter";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import { createApp } from "./bootstrap";
+import { resolveTrustProxy } from "./common/http/trust-proxy";
 
 async function bootstrap() {
   startOpenTelemetry({ serviceName: "agentops-api", serviceVersion: "0.1.0" });
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  const port = Number(process.env.PORT ?? 4000);
-
-  app.enableShutdownHooks();
-  app.enableCors({
-    origin: process.env.WEB_APP_URL ?? "http://localhost:3000",
-    credentials: true
-  });
-  app.use(helmet());
-  app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true
-    })
-  );
-
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("AgentOps API")
-    .setDescription("AI Agent workflow automation platform API")
-    .setVersion("0.1.0")
-    .addBearerAuth()
-    .build();
-  SwaggerModule.setup("docs", app, SwaggerModule.createDocument(app, swaggerConfig));
-
-  await app.listen(port);
+  const app = (await createApp()) as NestExpressApplication;
+  const trustProxy = resolveTrustProxy(process.env.API_TRUST_PROXY);
+  if (trustProxy !== false) {
+    app.set("trust proxy", trustProxy);
+  }
+  await app.listen(Number(process.env.PORT ?? 4000));
 }
 
 void bootstrap();
