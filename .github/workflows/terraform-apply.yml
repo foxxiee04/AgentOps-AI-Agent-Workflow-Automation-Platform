@@ -1,0 +1,101 @@
+# Manual Terraform apply for a single environment.
+#
+# Run this from the Actions tab (workflow_dispatch) and pick dev or prod. The
+# job targets the matching GitHub environment, so the run pauses on the
+# required reviewers configured there before anything is applied. AWS access
+# uses GitHub OIDC - no static credentials are stored.
+#
+# Required repository variables (Settings > Secrets and variables > Actions > Variables):
+#   AWS_REGION                    AWS region of the remote state bucket.
+#   TF_STATE_BUCKET               S3 bucket holding Terraform state (bootstrap output).
+#   TF_LOCK_TABLE                 DynamoDB table used for state locking.
+#   TF_VARS_DEV                   Multiline contents of environments/dev/dev.tfvars.
+#   TF_VARS_PROD                  Multiline contents of environments/prod/prod.tfvars.
+#   AWS_TF_APPLY_ROLE_ARN_DEV     Role assumed to apply the dev environment.
+#   AWS_TF_APPLY_ROLE_ARN_PROD    Role assumed to apply the prod environment.
+#
+# Required GitHub environments (Settings > Environments - add required reviewers
+# to turn each one into a manual approval gate):
+#   terraform-dev
+#   terraform-prod
+#
+# There is no destroy workflow on purpose: tearing infrastructure down stays a
+# deliberate, human-run local operation.
+
+name: Terraform apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to apply"
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: terraform-${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.environment == 'dev' && vars.AWS_TF_APPLY_ROLE_ARN_DEV || vars.AWS_TF_APPLY_ROLE_ARN_PROD }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Write backend config
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        working-directory: infrastructure/terraform/environments/${{ inputs.environment }}
+        run: |
+          cat > backend.hcl <<EOF
+          bucket         = "${TF_STATE_BUCKET}"
+          key            = "agentops/${{ inputs.environment }}/terraform.tfstate"
+          region         = "${AWS_REGION}"
+          dynamodb_table = "${TF_LOCK_TABLE}"
+          encrypt        = true
+          EOF
+
+      - name: Write tfvars
+        env:
+          TFVARS: ${{ inputs.environment == 'dev' && vars.TF_VARS_DEV || vars.TF_VARS_PROD }}
+        working-directory: infrastructure/terraform/environments/${{ inputs.environment }}
+        run: printf '%s\n' "$TFVARS" > ${{ inputs.environment }}.tfvars
+
+      - name: Terraform init
+        working-directory: infrastructure/terraform/environments/${{ inputs.environment }}
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: Terraform plan
+        working-directory: infrastructure/terraform/environments/${{ inputs.environment }}
+        run: >-
+          terraform plan -input=false
+          -var-file=${{ inputs.environment }}.tfvars -out=tfplan
+
+      - name: Terraform apply
+        working-directory: infrastructure/terraform/environments/${{ inputs.environment }}
+        run: terraform apply -input=false tfplan
