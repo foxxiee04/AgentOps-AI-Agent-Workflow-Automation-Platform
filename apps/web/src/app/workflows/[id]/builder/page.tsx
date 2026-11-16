@@ -1,6 +1,8 @@
 import { AppShell } from "../../../../components/app-shell";
+import { ErrorState } from "../../../../components/data-state";
 import { WorkflowBuilder } from "../../../../features/workflow-builder/workflow-builder";
-import { fallbackWorkflows, safeApiGet, type WorkflowView } from "../../../../lib/api";
+import { fallbackWorkflows, type WorkflowView } from "../../../../lib/api";
+import { safeApiGet } from "../../../../lib/server-api";
 import { appCopy, resolveLocale, type LocaleSearchParams } from "../../../../lib/i18n";
 
 export default async function WorkflowBuilderPage({
@@ -19,7 +21,17 @@ export default async function WorkflowBuilderPage({
   return (
     <AppShell active="builder" locale={locale}>
       <div className="p-5">
-        <WorkflowBuilder workflow={workflow.data} source={workflow.source} labels={{ builder: t.builder, common: t.common }} locale={locale} />
+        {workflow.source === "error" ? (
+          <ErrorState labels={t.states} detail={workflow.error} />
+        ) : (
+          <WorkflowBuilder
+            workflow={workflow.data}
+            source={workflow.source}
+            labels={{ builder: t.builder, common: t.common }}
+            locale={locale}
+            invalidMessage={t.workflows.invalidGraph}
+          />
+        )}
       </div>
     </AppShell>
   );
