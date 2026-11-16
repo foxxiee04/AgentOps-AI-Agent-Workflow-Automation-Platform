@@ -1,0 +1,120 @@
+name: Deploy dev
+
+on:
+  # There is no dev cluster at the moment, so this only runs on demand. The
+  # whole workflow is skipped while AWS_CI_ROLE_ARN_DEV is empty.
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Image (${{ matrix.app }})
+    if: vars.AWS_CI_ROLE_ARN_DEV != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - api
+          - tools
+          - web
+          - workflow-worker
+          - ai-worker
+          - tool-worker
+          - notification-worker
+        include:
+          - app: api
+            dockerfile: infrastructure/docker/api.Dockerfile
+            target: ""
+            build-args: ""
+          - app: tools
+            dockerfile: infrastructure/docker/api.Dockerfile
+            target: tools
+            build-args: ""
+          - app: web
+            dockerfile: infrastructure/docker/web.Dockerfile
+            target: ""
+            build-args: NEXT_PUBLIC_API_URL=${{ vars.DEV_API_URL }}
+          - app: workflow-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/workflow-worker
+          - app: ai-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/ai-worker
+          - app: tool-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/tool-worker
+          - app: notification-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/notification-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN_DEV }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: ${{ matrix.build-args }}
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/dev/${{ matrix.app }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+
+  deploy:
+    name: Deploy dev
+    needs: images
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.0
+
+      - name: Install kustomize
+        run: |
+          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.6.0/kustomize_v5.6.0_linux_amd64.tar.gz" | tar xz -C /usr/local/bin
+          kustomize version
+
+      - name: Write kubeconfig
+        env:
+          KUBECONFIG_DEV: ${{ secrets.KUBECONFIG_DEV }}
+        run: |
+          printf '%s' "$KUBECONFIG_DEV" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        env:
+          DEPLOY_KAFKA_BROKERS: ${{ secrets.DEV_KAFKA_BROKERS }}
+          DEPLOY_REDIS_URL: ${{ secrets.DEV_REDIS_URL }}
+        run: bash scripts/k8s-deploy.sh dev "${{ github.sha }}" "${{ vars.DEV_ECR_REGISTRY }}" "${{ vars.DEV_API_URL }}"
