@@ -1,0 +1,3 @@
+owner              = "platform-team"
+state_bucket_name  = "agentops-terraform-state-REPLACE_ME"
+github_repository  = "REPLACE_OWNER/agentops"
