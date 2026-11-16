@@ -11,3 +11,5 @@ export function createPrismaClient(databaseUrl = process.env.DATABASE_URL) {
   const adapter = new PrismaPg({ connectionString: databaseUrl });
   return new PrismaClient({ adapter });
 }
+export * from "./processed-message-store";
+export * from "./safety";
