@@ -29,3 +29,6 @@ playwright-report
 docs
 agents
 postman
+
+# Terraform state, plans and providers never belong in an image.
+infrastructure/terraform

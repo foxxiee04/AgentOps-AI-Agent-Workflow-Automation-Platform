@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "main": "dist/main.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/main.ts",
@@ -13,6 +16,7 @@
   },
   "dependencies": {
     "@agentops/config": "workspace:*",
+    "@agentops/database": "workspace:*",
     "@agentops/events": "workspace:*",
     "@agentops/observability": "workspace:*",
     "kafkajs": "^2.2.4",
@@ -26,4 +30,3 @@
     "vitest": "^4.1.8"
   }
 }
-

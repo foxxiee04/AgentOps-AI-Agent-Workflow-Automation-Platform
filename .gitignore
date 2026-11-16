@@ -8,6 +8,7 @@ dist/
 build/
 out/
 coverage/
+reports/
 test-results/
 playwright-report/
 .env
@@ -33,5 +34,14 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+*.tfplan
+**/offline_override.tf
 .DS_Store
 Thumbs.db
+infrastructure/k8s/**/secrets.env
+
+# Playwright MCP screenshots and logs from live browser checks
+.playwright-mcp/
+
+# opencode brief queue (scripts/opencode-queue.sh)
+.opencode-queue/
