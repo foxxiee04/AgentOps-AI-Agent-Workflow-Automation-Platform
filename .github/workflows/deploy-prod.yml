@@ -1,0 +1,208 @@
+# Continuous delivery to production.
+#
+# Every push to `main` (docs and markdown ignored) builds the 7 images (api,
+# tools, web and the 4 workers), tags them with the commit id and pushes them
+# to the prod ECR repositories. When deployment is enabled it then runs
+# `scripts/k8s-deploy.sh`: database migration Job, rollout of every
+# Deployment, smoke test and automatic rollback on failure.
+#
+# A manual run (`workflow_dispatch`) can redeploy or roll back to an image tag
+# that is already in ECR; the build is skipped then.
+#
+# Both jobs target the `production` environment: the prod CI role only trusts
+# that environment (OIDC subject `environment:production`), and required
+# reviewers on it turn the run into a manual approval gate.
+#
+# Repository variables (Settings > Secrets and variables > Actions > Variables):
+#   AWS_REGION             AWS region of the EKS cluster and ECR registry.
+#   AWS_CI_ROLE_ARN_PROD   Terraform output `ci_role_arn` of environments/prod.
+#                          The whole workflow is skipped while it is empty.
+#   PROD_ECR_REGISTRY      <account>.dkr.ecr.<region>.amazonaws.com
+#   EKS_CLUSTER_NAME       Terraform output `eks_cluster_name`.
+#   PROD_WEB_HOST          Public web host, e.g. agentops.mycompany.io.
+#   PROD_API_URL           Public API URL used for the smoke test.
+#   PROD_ACME_EMAIL        Optional Let's Encrypt contact address.
+#   PROD_DEPLOY_ENABLED    "true" to deploy after the build. The runner must be
+#                          able to reach the EKS API endpoint (public access
+#                          CIDRs), otherwise leave it unset and deploy with
+#                          scripts/k8s-deploy.sh from an allowed machine.
+#
+# Repository secrets (masked in logs):
+#   PROD_KAFKA_BROKERS     Terraform output `kafka_bootstrap_brokers`.
+#   PROD_REDIS_URL         Terraform output `redis_url`.
+
+name: Deploy prod
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/**"
+      - "design/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Existing image tag (commit id) to redeploy; empty builds the current commit"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Image (${{ matrix.app }})
+    if: vars.AWS_CI_ROLE_ARN_PROD != '' && inputs.image_tag == ''
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      fail-fast: true
+      matrix:
+        app:
+          - api
+          - tools
+          - web
+          - workflow-worker
+          - ai-worker
+          - tool-worker
+          - notification-worker
+        include:
+          - app: api
+            dockerfile: infrastructure/docker/api.Dockerfile
+            target: ""
+            build-args: ""
+          - app: tools
+            dockerfile: infrastructure/docker/api.Dockerfile
+            target: tools
+            build-args: ""
+          - app: web
+            dockerfile: infrastructure/docker/web.Dockerfile
+            target: ""
+            # Fallback only: the web app reads API_PUBLIC_URL at runtime.
+            build-args: NEXT_PUBLIC_API_URL=${{ vars.PROD_API_URL }}
+          - app: workflow-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/workflow-worker
+          - app: ai-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/ai-worker
+          - app: tool-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/tool-worker
+          - app: notification-worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            target: ""
+            build-args: WORKER_PACKAGE=@agentops/notification-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN_PROD }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Prod repositories have immutable tags: a re-run of the same commit
+      # reuses the image that is already there instead of failing the push.
+      - name: Check for an existing image
+        id: existing
+        run: |
+          if aws ecr describe-images --repository-name "prod/${{ matrix.app }}" \
+               --image-ids imageTag="${{ github.sha }}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "prod/${{ matrix.app }}:${{ github.sha }} already exists, skipping the build."
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: ${{ matrix.build-args }}
+          push: true
+          tags: ${{ vars.PROD_ECR_REGISTRY }}/prod/${{ matrix.app }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+
+  deploy:
+    name: Deploy prod
+    needs: images
+    # Runs after a successful build, or on its own for a manual redeploy.
+    if: >-
+      always() &&
+      vars.AWS_CI_ROLE_ARN_PROD != '' &&
+      vars.PROD_DEPLOY_ENABLED == 'true' &&
+      (needs.images.result == 'success' || (needs.images.result == 'skipped' && inputs.image_tag != ''))
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate image tag
+        run: |
+          if ! [[ "$IMAGE_TAG" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "image_tag must be a commit id (7-40 hex characters)" >&2
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN_PROD }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.0
+
+      - name: Install kustomize
+        run: |
+          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.6.0/kustomize_v5.6.0_linux_amd64.tar.gz" | tar xz -C /usr/local/bin
+          kustomize version
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "${{ vars.EKS_CLUSTER_NAME }}" --region "${{ vars.AWS_REGION }}"
+
+      - name: Deploy
+        env:
+          DEPLOY_WEB_HOST: ${{ vars.PROD_WEB_HOST }}
+          DEPLOY_ACME_EMAIL: ${{ vars.PROD_ACME_EMAIL }}
+          DEPLOY_KAFKA_BROKERS: ${{ secrets.PROD_KAFKA_BROKERS }}
+          DEPLOY_REDIS_URL: ${{ secrets.PROD_REDIS_URL }}
+        run: bash scripts/k8s-deploy.sh prod "$IMAGE_TAG" "${{ vars.PROD_ECR_REGISTRY }}" "${{ vars.PROD_API_URL }}"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          {
+            echo "## Production deployment failed"
+            echo
+            echo "\`scripts/k8s-deploy.sh\` failed while deploying tag \`${IMAGE_TAG}\` to production."
+            echo "The script rolled every deployment back to its previous revision."
+          } >> "$GITHUB_STEP_SUMMARY"
