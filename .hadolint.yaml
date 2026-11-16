@@ -1,0 +1,4 @@
+failure-threshold: warning
+ignored:
+  # apk package pinning: alpine repositories drop old versions, so pins break rebuilds.
+  - DL3018
