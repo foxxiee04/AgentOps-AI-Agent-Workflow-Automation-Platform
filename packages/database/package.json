@@ -15,9 +15,9 @@
     "db:seed": "tsx scripts/seed-required.ts",
     "db:studio": "prisma studio --schema prisma/schema.prisma",
     "dev": "tsc -p tsconfig.json --watch",
-    "lint": "tsc -p tsconfig.json --noEmit",
+    "lint": "pnpm db:generate && tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm db:generate && tsc -p tsconfig.json --noEmit",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "db:seed:demo": "tsx scripts/seed-demo.ts"
