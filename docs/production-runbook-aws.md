@@ -1,6 +1,14 @@
 # Production Runbook (AWS EKS)
 
-How the production environment was brought up on 2026-11-16/17, what had to be fixed on the way, and how to tear it down. The environment was created as a **short-lived** stack (`ephemeral = true`): built for a few hours, then destroyed.
+How the production environment is brought up, what had to be fixed on the way, and how to tear it down. The environment is created as a **short-lived** stack (`ephemeral = true`): built for a few hours, then destroyed.
+
+## History
+
+- **2026-11-16/17 — first bring-up.** The stack was created, the problems below were fixed, and the showcase seed ran.
+- **2026-11-17 — teardown.** The stack was destroyed to stop costs. A manual RDS snapshot `agentops-prod-before-teardown-20261117` was kept.
+- **2026-11-17 — second bring-up.** The stack was brought up again the same day with the current code: `terraform apply` (54 resources, about 35 minutes; MSK is the slowest), the EKS access entry for the admin principal, the add-ons (metrics-server, ingress-nginx NLB, cert-manager, external-secrets, KEDA), the app secret, the base manifests, and then the GitHub Actions **Deploy prod** workflow, which builds the 7 images and deploys them.
+
+Each bring-up creates a new Network Load Balancer, so the public host changes every time (sslip.io embeds the load balancer IP in the name). See "After a new bring-up" for the variables and OAuth URIs to update.
 
 ## What is running
 
@@ -21,7 +29,7 @@ There is no registered domain. The hosts use [sslip.io](https://sslip.io), which
 
 Prerequisites: AWS CLI logged in, Terraform, kubectl, Docker.
 
-1. **Terraform.** In `infrastructure/terraform/environments/prod` create `terraform.tfvars` (owner, GitHub repository, `ephemeral = true`, `eks_public_access_cidrs` with your own IP) and, for a short-lived stack, a `backend_override.tf` with a local backend. Both files are gitignored.
+1. **Terraform.** In `infrastructure/terraform/environments/prod` create `terraform.tfvars` (owner, GitHub repository, `ephemeral = true`, `eks_public_access_cidrs = ["0.0.0.0/0"]`) and, for a short-lived stack, a `backend_override.tf` with a local backend. Both files are gitignored. The public endpoint is open because GitHub-hosted runners deploy to it; authentication still goes through IAM and EKS access entries.
 
    ```bash
    terraform init
@@ -29,7 +37,7 @@ Prerequisites: AWS CLI logged in, Terraform, kubectl, Docker.
    terraform apply tfplan
    ```
 
-   EKS takes about 13 minutes and MSK about 27.
+   The apply creates 54 resources in about 35 minutes; MSK is the slowest part.
 
 2. **Cluster access.**
 
@@ -48,9 +56,9 @@ Prerequisites: AWS CLI logged in, Terraform, kubectl, Docker.
      --build-arg NEXT_PUBLIC_API_URL=https://api.<host> -t <registry>/prod/web:<tag> .
    ```
 
-5. **Application secret.** Put a JSON value into `agentops/prod/app` with `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` and `ALERTMANAGER_WEBHOOK_TOKEN`. Build `DATABASE_URL` from the `rds_endpoint` output and the RDS-managed secret, and end it with `?sslmode=require&uselibpqcompat=true` (RDS requires TLS; the flag keeps the Node driver from demanding a CA bundle).
+5. **Application secret.** Put a JSON value into `agentops/prod/app` with `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `ALERTMANAGER_WEBHOOK_TOKEN`, `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. Build `DATABASE_URL` from the `rds_endpoint` output and the RDS-managed secret, and end it with `?sslmode=require&uselibpqcompat=true` (RDS requires TLS; the flag keeps the Node driver from demanding a CA bundle). External Secrets syncs this secret into the cluster; it never enters Git or Terraform state.
 
-6. **Overlay values.** Copy `infrastructure/k8s` to a working directory and replace the placeholders in `overlays/prod`: the account id, the image tags, `REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092` (output `kafka_bootstrap_brokers`), `REPLACE_WITH_ELASTICACHE_ENDPOINT` (output `redis_url`, scheme `rediss://`) and the `agentops.example.com` hosts. Add `KAFKA_TOPIC_REPLICATION_FACTOR: "2"` and `AUTH_COOKIE_DOMAIN: <web host>`.
+6. **Overlay values.** Copy `infrastructure/k8s` to a working directory and replace the placeholders in `overlays/prod`: the account id, the image tags, `REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092` (output `kafka_bootstrap_brokers`), `REPLACE_WITH_ELASTICACHE_ENDPOINT` (output `redis_url`, scheme `rediss://`) and the `agentops.example.com` hosts. Add `KAFKA_TOPIC_REPLICATION_FACTOR: "2"` and `AUTH_COOKIE_DOMAIN: <web host>`. Set `GOOGLE_OAUTH_REDIRECT_URI` in the ConfigMap to `https://api.<web host>/auth/google/callback`. The prod overlay also sets `DEMO_WORKSPACE_JOIN_ROLE: VIEWER`.
 
 7. **Migrate, then deploy.**
 
@@ -59,6 +67,8 @@ Prerequisites: AWS CLI logged in, Terraform, kubectl, Docker.
    kubectl -n agentops wait --for=condition=complete job/agentops-db-migrate --timeout=300s
    kubectl apply -k overlays/prod
    ```
+
+   The GitHub Actions **Deploy prod** workflow builds the 7 images and deploys them (migration Job first, then the Deployments). Set the repository variable `PROD_DEPLOY_ENABLED=true` to enable the deploy job, and set `PROD_WEB_HOST` / `PROD_API_URL` to the current hosts (see "After a new bring-up"). The workflow reaches the cluster through the open EKS public endpoint with an IAM role from GitHub OIDC.
 
 8. **Monitoring.**
 
@@ -69,11 +79,30 @@ Prerequisites: AWS CLI logged in, Terraform, kubectl, Docker.
    kubectl kustomize --load-restrictor LoadRestrictionsNone infrastructure/k8s/monitoring | kubectl apply --server-side -f -
    ```
 
+   Verify the scrape targets and the rules: Prometheus `/targets` shows 7 targets (2 API pods, 4 workers and Prometheus itself) and `/alerts` lists 17 alert rules in 5 groups. Then send an end-to-end test alert:
+
+   ```bash
+   kubectl -n monitoring exec deploy/alertmanager -- wget -qO- \
+     --header='Content-Type: application/json' \
+     --post-data '[{"labels":{"alertname":"AgentOpsTestAlert","severity":"info","service":"api"}}]' \
+     http://localhost:9093/api/v2/alerts
+   ```
+
+   Alertmanager posts it to the API webhook `POST /notifications/alertmanager`, which returns `201` and increments `agentops_alertmanager_notifications_total` on both API pods. `AgentOpsAlertBotInactive` (info) is expected to stay pending on a fresh stack until the first alert arrives.
+
 9. **Smoke test.**
 
    ```bash
    curl https://api.<host>/health/ready
    ```
+
+## After a new bring-up
+
+The web host changes with every new Network Load Balancer, because sslip.io hosts embed the load balancer IP. Update all of these before deploying or sharing the environment:
+
+- GitHub repository variables `PROD_WEB_HOST` (e.g. `agentops.<lb-ip-dashed>.sslip.io`) and `PROD_API_URL` (e.g. `https://api.agentops.<lb-ip-dashed>.sslip.io`).
+- The Google OAuth client in Google Cloud Console: the authorized redirect URI `https://api.<web host>/auth/google/callback` and the JavaScript origin of the web host.
+- The prod overlay: `AUTH_COOKIE_DOMAIN` and the ingress hosts, plus `GOOGLE_OAUTH_REDIRECT_URI` in the ConfigMap.
 
 ## Access
 
@@ -108,9 +137,13 @@ The showcase user is an OWNER of the demo workspace and is the account to log in
 
 ## Teardown
 
-Order matters: the load balancer is created by Kubernetes, not Terraform, and blocks the VPC deletion if it is left behind.
+Order matters: the load balancer is created by Kubernetes, not Terraform, and blocks the VPC deletion if it is left behind. If the data matters, take a manual RDS snapshot first — the 2026-11-17 teardown kept `agentops-prod-before-teardown-20261117`.
 
 ```bash
+# 0. Optional, before deleting anything: keep the database.
+aws rds create-db-snapshot --region ap-southeast-1 --db-instance-identifier <rds-id> \
+  --db-snapshot-identifier agentops-prod-before-teardown-<yyyymmdd>
+
 # 1. Remove everything that created AWS resources from inside the cluster.
 kubectl delete namespace agentops monitoring
 kubectl -n ingress-nginx delete svc ingress-nginx-controller

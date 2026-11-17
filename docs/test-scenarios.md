@@ -14,9 +14,20 @@ pnpm --filter @agentops/web test:e2e      # run the 12 scenarios
 - The specs run with one worker because the auth endpoints allow 10 requests per minute. Running the suite twice within a minute can hit that limit.
 - Each scored lead uses the AI quota (`AI_DAILY_CALL_LIMIT`, default 100 calls per day). When the quota is used up, AI steps fail with `Daily AI quota reached`; raise the limit for the API and the AI worker to keep testing.
 
-## Latest result
+## Results — 2026-11-17
 
-Run on 2026-11-17 against the local Docker stack, after the Lumen redesign: **12 passed, 0 failed** (27.5 s). Unit tests for the web app: 84 passed.
+Run on 2026-11-17 against the local stack with the new code (Moss Atelier redesign, workspace isolation), on a single run each:
+
+| Suite | Result |
+| --- | --- |
+| Web unit tests | 106 / 106 passed |
+| API, workers and packages unit tests | 310 / 310 passed (API: 194) |
+| Integration tests (real Kafka and PostgreSQL) | 10 / 10 passed |
+| Playwright end to end | 12 / 12 passed |
+
+One earlier integration run failed with `KafkaJSConnectionError: write after end` while Kafka was still starting; the rerun passed. The redesign required two selector changes: the landing language link is now clicked in the header because the footer has one too, and the login left-panel title is `aria-hidden`, so the page keeps a single heading for the test to match.
+
+Showcase seed on production: 44 runs, 15 approved, 3 rejected, 4 waiting.
 
 ## Scenarios
 
