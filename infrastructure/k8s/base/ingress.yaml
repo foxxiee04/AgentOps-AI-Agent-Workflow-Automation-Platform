@@ -93,6 +93,13 @@ spec:
                 name: agentops-api
                 port:
                   number: 4000
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: agentops-api
+                port:
+                  number: 4000
           - path: /health
             pathType: Prefix
             backend:

@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -44,7 +45,14 @@ afterAll(async () => {
 describe("versioned migrations on an empty database", () => {
   it("applies every migration", async () => {
     const applied = await client.query(`SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL ORDER BY migration_name`);
-    expect(applied.rows.map((row) => row.migration_name)).toEqual(["20261018000000_init", "20261018120000_indexes_and_constraints"]);
+    // Every migration folder in packages/database, so a new migration does not need a test edit.
+    const migrationsDir = resolve(__dirname, "../../database/prisma/migrations");
+    const expected = readdirSync(migrationsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    expect(expected.length).toBeGreaterThanOrEqual(3);
+    expect(applied.rows.map((row) => row.migration_name)).toEqual(expected);
   });
 
   it("creates the indexes used by hot queries", async () => {
