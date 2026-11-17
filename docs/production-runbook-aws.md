@@ -167,3 +167,13 @@ Afterwards check that nothing billable is left: no EKS clusters, RDS instances, 
 - Turn on `rds_multi_az`, use three MSK brokers and larger instance classes.
 - Give Prometheus, Grafana and Tempo persistent volumes (the EBS CSI driver is not installed; they use `emptyDir` today).
 - Enable VPC CNI network policy enforcement so the NetworkPolicies in the base take effect.
+
+## Platform admin console
+
+- `/admin` (web) and `/admin/*` (API) are restricted to platform administrators. The emails in `PLATFORM_ADMIN_EMAILS`
+  get the flag on their next sign-in; in production the variable is a key of the Secrets Manager secret
+  `agentops/prod/app` (synced by External Secrets), so it never appears in the repository.
+- The schema change (`isPlatformAdmin`, `disabledAt`, `lastLoginAt`, nullable `AuditLog.workspaceId`) ships as migration
+  `20261118000000_platform_admin`; `scripts/k8s-deploy.sh` runs it before rolling out the new images.
+- Reports: the overview tab offers CSV exports (users, workspaces, runs, usage) for 7, 30 or 90 days.
+
