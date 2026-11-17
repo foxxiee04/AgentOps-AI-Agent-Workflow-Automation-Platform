@@ -10,11 +10,20 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { Prisma } from "@agentops/database";
+import type { WorkspaceRole } from "@agentops/shared";
 import { DemoDataService, demoWorkspaceId } from "../../common/infrastructure/demo-data.service";
 import { PrismaService } from "../../common/infrastructure/prisma.service";
 import { recordLogin, recordRegistration } from "../../common/metrics/api-metrics";
 import { isDemoLoginEnabled } from "./demo-login";
 import type { LoginDto, RefreshTokenDto, RegisterDto } from "./dto";
+
+type AuthUserWorkspace = {
+  id: string;
+  name: string;
+  slug: string;
+  role: WorkspaceRole;
+};
 
 type AuthUser = {
   id: string;
@@ -23,6 +32,7 @@ type AuthUser = {
   avatarUrl?: string;
   provider?: "password" | "google";
   createdAt?: string;
+  workspaces: AuthUserWorkspace[];
 };
 
 type AuthSession = {
@@ -99,27 +109,12 @@ export class AuthService {
           passwordHash
         }
       });
-      const workspace = await tx.workspace.create({
-        data: {
-          id: `ws_${randomUUID()}`,
-          name: `${dto.name}'s workspace`,
-          slug: this.workspaceSlug(dto.name),
-          ownerId: createdUser.id,
-          plan: "FREE"
-        }
-      });
-      await tx.workspaceMember.create({
-        data: {
-          id: `wsm_${randomUUID()}`,
-          workspaceId: workspace.id,
-          userId: createdUser.id,
-          role: "OWNER"
-        }
-      });
+      await this.createPersonalWorkspace(tx, createdUser);
 
       return createdUser;
     });
 
+    await this.addDemoWorkspaceMembership(user.id);
     recordRegistration("password");
     return this.issueSession(user);
   }
@@ -233,20 +228,33 @@ export class AuthService {
     const claims = this.decodeGoogleIdToken(tokenResponse.id_token, config.clientId);
     const email = this.normalizeEmail(claims.email);
     const existingUser = await this.prisma.client.user.findUnique({ where: { email } });
-    const user = await this.prisma.client.user.upsert({
-      where: { email },
-      update: {
-        name: claims.name ?? claims.email.split("@")[0],
-        avatarUrl: claims.picture
-      },
-      create: {
-        id: `user_google_${claims.sub}`,
-        email,
-        name: claims.name ?? claims.email.split("@")[0],
-        avatarUrl: claims.picture,
-        passwordHash: "google-oauth-password-disabled"
+    const name = claims.name ?? claims.email.split("@")[0];
+    const user = await this.prisma.client.$transaction(async (tx) => {
+      if (existingUser) {
+        return tx.user.update({
+          where: { email },
+          data: {
+            name,
+            avatarUrl: claims.picture
+          }
+        });
       }
+
+      const createdUser = await tx.user.create({
+        data: {
+          id: `user_google_${claims.sub}`,
+          email,
+          name,
+          avatarUrl: claims.picture,
+          passwordHash: "google-oauth-password-disabled"
+        }
+      });
+      await this.createPersonalWorkspace(tx, createdUser);
+      return createdUser;
     });
+    if (!existingUser) {
+      await this.addDemoWorkspaceMembership(user.id);
+    }
     const session = await this.issueSession(user, "google");
     recordLogin("google", "success");
     if (!existingUser) {
@@ -347,7 +355,7 @@ export class AuthService {
 
     return {
       user: {
-        ...this.toAuthUser(user),
+        ...(await this.toAuthUser(user)),
         provider
       },
       accessToken,
@@ -371,13 +379,80 @@ export class AuthService {
     }
   }
 
-  private toAuthUser(user: Omit<UserRecord, "passwordHash">): AuthUser {
+  /** Creates the user's first workspace and OWNER membership inside the caller's transaction. */
+  private async createPersonalWorkspace(tx: Prisma.TransactionClient, user: { id: string; name: string }) {
+    const workspace = await tx.workspace.create({
+      data: {
+        id: `ws_${randomUUID()}`,
+        name: `${user.name}'s workspace`,
+        slug: this.workspaceSlug(user.name),
+        ownerId: user.id,
+        plan: "FREE"
+      }
+    });
+    await tx.workspaceMember.create({
+      data: {
+        id: `wsm_${randomUUID()}`,
+        workspaceId: workspace.id,
+        userId: user.id,
+        role: "OWNER"
+      }
+    });
+
+    return workspace;
+  }
+
+  /**
+   * Optional demo onboarding: when DEMO_WORKSPACE_JOIN_ROLE is set and the demo workspace exists,
+   * a newly created user also joins it with that role.
+   */
+  private async addDemoWorkspaceMembership(userId: string) {
+    const role = this.demoJoinRole();
+    if (!role) {
+      return;
+    }
+
+    const workspace = await this.prisma.client.workspace.findUnique({ where: { id: demoWorkspaceId } });
+    if (!workspace) {
+      return;
+    }
+
+    await this.prisma.client.workspaceMember.upsert({
+      where: { workspaceId_userId: { workspaceId: demoWorkspaceId, userId } },
+      update: {},
+      create: {
+        id: `wsm_${randomUUID()}`,
+        workspaceId: demoWorkspaceId,
+        userId,
+        role
+      }
+    });
+  }
+
+  private demoJoinRole(): WorkspaceRole | undefined {
+    const value = this.config.get<string>("DEMO_WORKSPACE_JOIN_ROLE") ?? process.env.DEMO_WORKSPACE_JOIN_ROLE;
+    return value === "OWNER" || value === "ADMIN" || value === "MEMBER" || value === "VIEWER" ? value : undefined;
+  }
+
+  private async toAuthUser(user: Omit<UserRecord, "passwordHash">): Promise<AuthUser> {
+    const memberships = await this.prisma.client.workspaceMember.findMany({
+      where: { userId: user.id },
+      orderBy: { joinedAt: "asc" },
+      include: { workspace: { select: { id: true, name: true, slug: true } } }
+    });
+
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       avatarUrl: user.avatarUrl ?? undefined,
-      createdAt: user.createdAt.toISOString()
+      createdAt: user.createdAt.toISOString(),
+      workspaces: memberships.map((membership) => ({
+        id: membership.workspace.id,
+        name: membership.workspace.name,
+        slug: membership.workspace.slug,
+        role: membership.role as WorkspaceRole
+      }))
     };
   }
 
