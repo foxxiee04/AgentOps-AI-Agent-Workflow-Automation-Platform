@@ -46,6 +46,8 @@ patches:
         API_PUBLIC_URL: https://api.agentops.example.com
         GOOGLE_OAUTH_REDIRECT_URI: https://api.agentops.example.com/auth/google/callback
         AUTH_COOKIE_DOMAIN: agentops.example.com
+        # New users (email or Google) can read the demo workspace next to their own.
+        DEMO_WORKSPACE_JOIN_ROLE: VIEWER
         # Endpoints come from Terraform outputs; DATABASE_URL is in the secret.
         KAFKA_BROKERS: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
         REDIS_URL: redis://REPLACE_WITH_ELASTICACHE_ENDPOINT:6379
