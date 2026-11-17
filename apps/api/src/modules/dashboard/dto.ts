@@ -10,6 +10,10 @@ export const MAX_WORKFLOW_RUN_LIMIT = 200;
 
 /** Query filters for the dashboard run list and the matching total-count endpoint. */
 export class WorkflowRunsQueryDto {
+  @IsString()
+  @MinLength(1)
+  workspaceId!: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

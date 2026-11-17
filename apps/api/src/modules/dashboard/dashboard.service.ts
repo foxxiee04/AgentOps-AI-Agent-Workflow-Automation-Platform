@@ -9,7 +9,6 @@ import {
   type WorkspaceRole
 } from "@agentops/shared";
 import { DomainEventsService } from "../../common/domain-events/domain-events.service";
-import { DemoDataService, demoWorkspaceId } from "../../common/infrastructure/demo-data.service";
 import { PrismaService } from "../../common/infrastructure/prisma.service";
 import { WorkflowsService } from "../workflows/workflows.service";
 import { DEFAULT_WORKFLOW_RUN_LIMIT, type UpdateSalesTaskDto, type WorkflowRunsQueryDto } from "./dto";
@@ -65,17 +64,16 @@ export class DashboardService {
   constructor(
     @Inject(WorkflowsService) private readonly workflowsService: WorkflowsService,
     @Inject(DomainEventsService) private readonly eventsService: DomainEventsService,
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(DemoDataService) private readonly demoData: DemoDataService
+    @Inject(PrismaService) private readonly prisma: PrismaService
   ) {}
 
-  async overview() {
-    const workflows = await this.workflowsService.findAll("ws_demo");
-    const usage = await this.usageSnapshot();
+  async overview(workspaceId: string) {
+    const workflows = await this.workflowsService.findAll(workspaceId);
+    const usage = await this.usageSnapshot(workspaceId);
     const since = this.startOfUtcDay();
     const [runsToday, failedRuns] = await Promise.all([
-      this.prisma.client.workflowRun.count({ where: { createdAt: { gte: since } } }),
-      this.prisma.client.workflowRun.count({ where: { status: "FAILED", createdAt: { gte: since } } })
+      this.prisma.client.workflowRun.count({ where: { workspaceId, createdAt: { gte: since } } }),
+      this.prisma.client.workflowRun.count({ where: { workspaceId, status: "FAILED", createdAt: { gte: since } } })
     ]);
     return {
       activeWorkflows: workflows.filter((workflow) => workflow.status === "ACTIVE").length,
@@ -90,8 +88,11 @@ export class DashboardService {
    * Paged run list for the dashboard. The response stays an array (the web app parses it that way)
    * and the total number of matching rows is returned alongside it so the UI can paginate.
    */
-  async workflowRuns(query: WorkflowRunsQueryDto = {}): Promise<{ items: DashboardWorkflowRunView[]; total: number }> {
-    const where = this.workflowRunWhere(query);
+  async workflowRuns(
+    workspaceId: string,
+    query: Partial<WorkflowRunsQueryDto> = {}
+  ): Promise<{ items: DashboardWorkflowRunView[]; total: number }> {
+    const where = this.workflowRunWhere(workspaceId, query);
     const limit = Number.isInteger(query.limit) ? (query.limit as number) : DEFAULT_WORKFLOW_RUN_LIMIT;
     const offset = Number.isInteger(query.offset) ? (query.offset as number) : 0;
 
@@ -110,19 +111,22 @@ export class DashboardService {
   }
 
   /** Total number of runs matching the same filters as {@link workflowRuns}. */
-  async countWorkflowRuns(query: WorkflowRunsQueryDto = {}): Promise<{ total: number }> {
-    const total = await this.prisma.client.workflowRun.count({ where: this.workflowRunWhere(query) });
+  async countWorkflowRuns(
+    workspaceId: string,
+    query: Partial<WorkflowRunsQueryDto> = {}
+  ): Promise<{ total: number }> {
+    const total = await this.prisma.client.workflowRun.count({ where: this.workflowRunWhere(workspaceId, query) });
     return { total };
   }
 
-  async usage() {
-    const usage = await this.usageSnapshot();
-    const workspace = await this.prisma.client.workspace.findUnique({ where: { id: demoWorkspaceId } });
+  async usage(workspaceId: string) {
+    const usage = await this.usageSnapshot(workspaceId);
+    const workspace = await this.prisma.client.workspace.findUnique({ where: { id: workspaceId } });
     return { ...usage, plan: workspace?.plan ?? "FREE" };
   }
 
   /** Latest scored leads: AI results that carry a `leadScore`, joined with the masked trigger input. */
-  async leads(workspaceId = demoWorkspaceId): Promise<LeadSummaryView[]> {
+  async leads(workspaceId: string): Promise<LeadSummaryView[]> {
     const results = await this.prisma.client.aiTaskResult.findMany({
       where: { workspaceId },
       orderBy: { createdAt: "desc" },
@@ -157,7 +161,7 @@ export class DashboardService {
   }
 
   /** Follow-up tasks created for sales by the NOTIFICATION node (type SALES_TASK). */
-  async salesTasks(workspaceId = demoWorkspaceId): Promise<DashboardSalesTaskView[]> {
+  async salesTasks(workspaceId: string): Promise<DashboardSalesTaskView[]> {
     const tasks = await this.prisma.client.notification.findMany({
       where: { workspaceId, type: "SALES_TASK" },
       orderBy: { createdAt: "desc" },
@@ -176,13 +180,19 @@ export class DashboardService {
   }
 
   /** Marks a sales task as done (or re-opens it). Requires membership of the task workspace. */
-  async updateSalesTask(id: string, dto: UpdateSalesTaskDto, userId: string): Promise<DashboardSalesTaskView> {
+  async updateSalesTask(
+    id: string,
+    dto: UpdateSalesTaskDto,
+    userId: string,
+    workspaceId: string
+  ): Promise<DashboardSalesTaskView> {
     const task = (await this.prisma.client.notification.findUnique({ where: { id } })) as NotificationRow | null;
-    if (!task || task.type !== "SALES_TASK") {
+    // A task outside the requested workspace is indistinguishable from a missing one.
+    if (!task || task.type !== "SALES_TASK" || task.workspaceId !== workspaceId) {
       throw new NotFoundException("Sales task not found");
     }
 
-    await this.assertWorkspaceMember(task.workspaceId, userId);
+    await this.assertWorkspaceMember(workspaceId, userId);
 
     const updated = (await this.prisma.client.notification.update({
       where: { id },
@@ -192,18 +202,18 @@ export class DashboardService {
     return this.toSalesTask(updated);
   }
 
-  async errors() {
+  async errors(_workspaceId: string) {
     return [];
   }
 
-  async recentActivity() {
-    return this.eventsService.listRecent();
+  async recentActivity(workspaceId: string) {
+    return this.eventsService.listRecent(workspaceId);
   }
 
-  async readiness() {
-    const workflows = await this.workflowsService.findAll("ws_demo");
+  async readiness(workspaceId: string) {
+    const workflows = await this.workflowsService.findAll(workspaceId);
     const activeWorkflows = workflows.filter((workflow) => workflow.status === "ACTIVE").length;
-    const events = await this.eventsService.listRecent();
+    const events = await this.eventsService.listRecent(workspaceId);
     // The mock provider is always available; a real model needs a non-empty OpenAI key.
     const openAiConfigured = this.hasConfiguredKey(process.env.OPENAI_API_KEY);
     const otelEnabled = process.env.OTEL_ENABLED === "true";
@@ -278,7 +288,7 @@ export class DashboardService {
 
     return {
       generatedAt: new Date().toISOString(),
-      workspaceId: "ws_demo",
+      workspaceId,
       summary: {
         ready: items.filter((item) => item.status === "ready").length,
         warning: items.filter((item) => item.status === "warning").length,
@@ -299,8 +309,9 @@ export class DashboardService {
     return typeof value === "string" && value.trim().length > 0;
   }
 
-  private workflowRunWhere(query: WorkflowRunsQueryDto) {
+  private workflowRunWhere(workspaceId: string, query: Partial<WorkflowRunsQueryDto>) {
     return {
+      workspaceId,
       ...(query.status ? { status: query.status } : {}),
       ...(query.workflowId ? { workflowId: query.workflowId } : {})
     };
@@ -353,11 +364,10 @@ export class DashboardService {
     }
   }
 
-  private async usageSnapshot() {
-    await this.demoData.ensureDemoWorkspace();
+  private async usageSnapshot(workspaceId: string) {
     const records = await this.prisma.client.usageRecord.findMany({
       where: {
-        workspaceId: demoWorkspaceId,
+        workspaceId,
         createdAt: {
           gte: this.startOfUtcDay()
         }

@@ -16,7 +16,7 @@ describe("DashboardService", () => {
     vi.stubEnv("OTEL_ENABLED", "false");
 
     const service = createService();
-    const readiness = await service.readiness();
+    const readiness = await service.readiness("ws_test");
 
     expect(statusFor(readiness.items, "workflow-publishing")).toBe("warning");
     expect(statusFor(readiness.items, "ai-provider")).toBe("warning");
@@ -33,7 +33,7 @@ describe("DashboardService", () => {
     vi.stubEnv("OTEL_ENABLED", "true");
 
     const service = createService({ activeWorkflow: true, recentEvents: [{ eventId: "evt_test" }] });
-    const readiness = await service.readiness();
+    const readiness = await service.readiness("ws_test");
 
     expect(statusFor(readiness.items, "workflow-publishing")).toBe("ready");
     expect(statusFor(readiness.items, "event-pipeline")).toBe("ready");
@@ -41,6 +41,7 @@ describe("DashboardService", () => {
     expect(statusFor(readiness.items, "observability")).toBe("ready");
     expect(statusFor(readiness.items, "production-secrets")).toBe("ready");
     expect(readiness.summary.ready).toBe(5);
+    expect(readiness.workspaceId).toBe("ws_test");
   });
 
   it("blocks production readiness when JWT secrets are placeholders", async () => {
@@ -49,7 +50,7 @@ describe("DashboardService", () => {
     vi.stubEnv("JWT_REFRESH_SECRET", "replace-me");
 
     const service = createService();
-    const readiness = await service.readiness();
+    const readiness = await service.readiness("ws_test");
 
     expect(statusFor(readiness.items, "production-secrets")).toBe("blocked");
     expect(readiness.summary.blocked).toBe(1);
@@ -65,11 +66,13 @@ describe("DashboardService", () => {
       workflowRunCount
     });
 
-    await expect(service.overview()).resolves.toMatchObject({ aiTokensUsed: 150, runsToday: 1234, failedRuns: 7 });
-    expect(workflowRunCount).toHaveBeenCalledWith({ where: { createdAt: { gte: expect.any(Date) } } });
-    expect(workflowRunCount).toHaveBeenCalledWith({ where: { status: "FAILED", createdAt: { gte: expect.any(Date) } } });
+    await expect(service.overview("ws_test")).resolves.toMatchObject({ aiTokensUsed: 150, runsToday: 1234, failedRuns: 7 });
+    expect(workflowRunCount).toHaveBeenCalledWith({ where: { workspaceId: "ws_test", createdAt: { gte: expect.any(Date) } } });
+    expect(workflowRunCount).toHaveBeenCalledWith({
+      where: { workspaceId: "ws_test", status: "FAILED", createdAt: { gte: expect.any(Date) } }
+    });
 
-    await expect(service.usage()).resolves.toEqual({
+    await expect(service.usage("ws_test")).resolves.toEqual({
       aiTokensUsed: 150,
       workflowStepsExecuted: 6,
       plan: "FREE"
@@ -87,7 +90,7 @@ describe("DashboardService AI provider readiness", () => {
     vi.stubEnv("GEMINI_API_KEY", "");
 
     const service = createService();
-    const readiness = await service.readiness();
+    const readiness = await service.readiness("ws_test");
 
     expect(statusFor(readiness.items, "ai-provider")).toBe("warning");
     expect(itemFor(readiness.items, "ai-provider").summary).toBe(
@@ -100,7 +103,7 @@ describe("DashboardService AI provider readiness", () => {
     vi.stubEnv("GEMINI_API_KEY", "gemini-placeholder-key");
 
     const service = createService();
-    const readiness = await service.readiness();
+    const readiness = await service.readiness("ws_test");
 
     expect(statusFor(readiness.items, "ai-provider")).toBe("warning");
     expect(itemFor(readiness.items, "ai-provider").summary).toBe(
@@ -113,7 +116,7 @@ describe("DashboardService AI provider readiness", () => {
     vi.stubEnv("GEMINI_API_KEY", "");
 
     const service = createService();
-    const readiness = await service.readiness();
+    const readiness = await service.readiness("ws_test");
 
     expect(statusFor(readiness.items, "ai-provider")).toBe("ready");
     expect(itemFor(readiness.items, "ai-provider").summary).toBe("At least one real AI provider key is configured.");
@@ -123,7 +126,7 @@ describe("DashboardService AI provider readiness", () => {
     vi.stubEnv("OPENAI_API_KEY", "   ");
 
     const service = createService();
-    const readiness = await service.readiness();
+    const readiness = await service.readiness("ws_test");
 
     expect(statusFor(readiness.items, "ai-provider")).toBe("warning");
   });
@@ -135,16 +138,16 @@ describe("DashboardService workflow run list", () => {
     const count = vi.fn(async () => 42);
     const service = createService({ workflowRunFindMany: findMany, workflowRunCount: count });
 
-    const result = await service.workflowRuns({ limit: 10, offset: 20, status: "FAILED", workflowId: "wf_1" });
+    const result = await service.workflowRuns("ws_test", { limit: 10, offset: 20, status: "FAILED", workflowId: "wf_1" });
 
     expect(findMany).toHaveBeenCalledWith({
-      where: { status: "FAILED", workflowId: "wf_1" },
+      where: { workspaceId: "ws_test", status: "FAILED", workflowId: "wf_1" },
       orderBy: { createdAt: "desc" },
       skip: 20,
       take: 10,
       include: { workflow: { select: { name: true } } }
     });
-    expect(count).toHaveBeenCalledWith({ where: { status: "FAILED", workflowId: "wf_1" } });
+    expect(count).toHaveBeenCalledWith({ where: { workspaceId: "ws_test", status: "FAILED", workflowId: "wf_1" } });
     expect(result.total).toBe(42);
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({
@@ -160,16 +163,16 @@ describe("DashboardService workflow run list", () => {
     const count = vi.fn(async () => 0);
     const service = createService({ workflowRunFindMany: findMany, workflowRunCount: count });
 
-    await service.workflowRuns();
+    await service.workflowRuns("ws_test");
 
     expect(findMany).toHaveBeenCalledWith({
-      where: {},
+      where: { workspaceId: "ws_test" },
       orderBy: { createdAt: "desc" },
       skip: 0,
       take: 50,
       include: { workflow: { select: { name: true } } }
     });
-    expect(count).toHaveBeenCalledWith({ where: {} });
+    expect(count).toHaveBeenCalledWith({ where: { workspaceId: "ws_test" } });
   });
 
   it("masks lead input on the dashboard run rows", async () => {
@@ -182,7 +185,7 @@ describe("DashboardService workflow run list", () => {
       ])
     });
 
-    const result = await service.workflowRuns();
+    const result = await service.workflowRuns("ws_test");
 
     expect(result.items[0].input).toEqual({ name: "Anna", email: "an***@shopabc.vn" });
   });
@@ -191,14 +194,16 @@ describe("DashboardService workflow run list", () => {
     const count = vi.fn(async () => 7);
     const service = createService({ workflowRunCount: count });
 
-    await expect(service.countWorkflowRuns({ status: "COMPLETED", workflowId: "wf_1" })).resolves.toEqual({ total: 7 });
-    expect(count).toHaveBeenCalledWith({ where: { status: "COMPLETED", workflowId: "wf_1" } });
+    await expect(service.countWorkflowRuns("ws_test", { status: "COMPLETED", workflowId: "wf_1" })).resolves.toEqual({
+      total: 7
+    });
+    expect(count).toHaveBeenCalledWith({ where: { workspaceId: "ws_test", status: "COMPLETED", workflowId: "wf_1" } });
   });
 });
 
 describe("DashboardService lead outputs", () => {
   it("lists scored leads with masked contact data and skips non-scoring AI results", async () => {
-    const leads = await createService().leads();
+    const leads = await createService().leads("ws_test");
 
     expect(leads).toEqual([
       expect.objectContaining({
@@ -213,7 +218,7 @@ describe("DashboardService lead outputs", () => {
   });
 
   it("lists sales tasks with their due date", async () => {
-    const tasks = await createService().salesTasks();
+    const tasks = await createService().salesTasks("ws_test");
     expect(tasks).toEqual([
       expect.objectContaining({ title: "Call lead back within 24 hours", dueAt: "2026-10-19T08:00:00.000Z", workflowRunId: "run_1" })
     ]);
@@ -245,7 +250,7 @@ describe("DashboardService sales tasks", () => {
       ]
     });
 
-    const tasks = await service.salesTasks();
+    const tasks = await service.salesTasks("ws_test");
 
     // Open tasks first, newest first inside each group.
     expect(tasks.map((task) => task.id)).toEqual(["notif_open_future_due", "notif_open_past_due", "notif_done"]);
@@ -257,7 +262,7 @@ describe("DashboardService sales tasks", () => {
   it("treats a task without a due date as not overdue", async () => {
     const service = createService({ notifications: [salesTaskRow({ id: "notif_no_due", metadataJson: {} })] });
 
-    const tasks = await service.salesTasks();
+    const tasks = await service.salesTasks("ws_test");
 
     expect(tasks[0]).toMatchObject({ status: "OPEN", overdue: false });
     expect(tasks[0].dueAt).toBeUndefined();
@@ -271,7 +276,7 @@ describe("DashboardService sales tasks", () => {
       notificationUpdate: update
     });
 
-    const task = await service.updateSalesTask("notif_1", { status: "DONE" }, "user_1");
+    const task = await service.updateSalesTask("notif_1", { status: "DONE" }, "user_1", "ws_test");
 
     expect(update).toHaveBeenCalledWith({ where: { id: "notif_1" }, data: { status: "DONE" } });
     expect(task).toMatchObject({ id: "notif_1", status: "DONE" });
@@ -285,7 +290,7 @@ describe("DashboardService sales tasks", () => {
       notificationUpdate: update
     });
 
-    const task = await service.updateSalesTask("notif_1", { status: "OPEN" }, "user_1");
+    const task = await service.updateSalesTask("notif_1", { status: "OPEN" }, "user_1", "ws_test");
 
     expect(update).toHaveBeenCalledWith({ where: { id: "notif_1" }, data: { status: "UNREAD" } });
     expect(task).toMatchObject({ id: "notif_1", status: "OPEN" });
@@ -294,7 +299,18 @@ describe("DashboardService sales tasks", () => {
   it("returns 404 when the sales task does not exist", async () => {
     const service = createService({ notificationById: null, workspaceMember: { role: "OWNER" } });
 
-    await expect(service.updateSalesTask("missing", { status: "DONE" }, "user_1")).rejects.toBeInstanceOf(
+    await expect(service.updateSalesTask("missing", { status: "DONE" }, "user_1", "ws_test")).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+  });
+
+  it("returns 404 when the task belongs to a different workspace", async () => {
+    const service = createService({
+      notificationById: salesTaskRow({ id: "notif_1", workspaceId: "ws_other" }),
+      workspaceMember: { role: "OWNER" }
+    });
+
+    await expect(service.updateSalesTask("notif_1", { status: "DONE" }, "user_1", "ws_test")).rejects.toBeInstanceOf(
       NotFoundException
     );
   });
@@ -305,7 +321,7 @@ describe("DashboardService sales tasks", () => {
       workspaceMember: { role: "OWNER" }
     });
 
-    await expect(service.updateSalesTask("notif_1", { status: "DONE" }, "user_1")).rejects.toBeInstanceOf(
+    await expect(service.updateSalesTask("notif_1", { status: "DONE" }, "user_1", "ws_test")).rejects.toBeInstanceOf(
       NotFoundException
     );
   });
@@ -316,7 +332,7 @@ describe("DashboardService sales tasks", () => {
       workspaceMember: null
     });
 
-    await expect(service.updateSalesTask("notif_1", { status: "DONE" }, "user_1")).rejects.toBeInstanceOf(
+    await expect(service.updateSalesTask("notif_1", { status: "DONE" }, "user_1", "ws_test")).rejects.toBeInstanceOf(
       ForbiddenException
     );
   });
@@ -327,9 +343,47 @@ describe("DashboardService sales tasks", () => {
       workspaceMember: { role: "VIEWER" }
     });
 
-    await expect(service.updateSalesTask("notif_1", { status: "DONE" }, "user_1")).rejects.toBeInstanceOf(
+    await expect(service.updateSalesTask("notif_1", { status: "DONE" }, "user_1", "ws_test")).rejects.toBeInstanceOf(
       ForbiddenException
     );
+  });
+});
+
+describe("DashboardService workspace scoping", () => {
+  it("filters usage records and lead results by the requested workspace", async () => {
+    const usageFindMany = vi.fn(async () => []);
+    const aiTaskResultFindMany = vi.fn(async () => []);
+    const service = createService({ usageFindMany, aiTaskResultFindMany });
+
+    await service.usage("ws_test");
+    await service.leads("ws_test");
+
+    expect(usageFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ workspaceId: "ws_test" }) })
+    );
+    expect(aiTaskResultFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { workspaceId: "ws_test" } }));
+  });
+
+  it("filters sales tasks and recent activity by the requested workspace", async () => {
+    const notificationFindMany = vi.fn(async () => []);
+    const listRecent = vi.fn(async () => []);
+    const service = createService({ notificationFindMany, listRecent });
+
+    await service.salesTasks("ws_test");
+    await service.recentActivity("ws_test");
+
+    expect(notificationFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workspaceId: "ws_test", type: "SALES_TASK" } })
+    );
+    expect(listRecent).toHaveBeenCalledWith("ws_test");
+  });
+
+  it("reads the plan of the requested workspace", async () => {
+    const workspaceFindUnique = vi.fn(async () => ({ plan: "PRO" }));
+    const service = createService({ workspaceFindUnique });
+
+    await expect(service.usage("ws_test")).resolves.toMatchObject({ plan: "PRO" });
+    expect(workspaceFindUnique).toHaveBeenCalledWith({ where: { id: "ws_test" } });
   });
 });
 
@@ -338,7 +392,7 @@ function workflowRunRow() {
     id: "run_1",
     workflowId: "wf_1",
     workflowVersionId: "wfv_1",
-    workspaceId: "ws_demo",
+    workspaceId: "ws_test",
     status: "COMPLETED",
     triggerType: "manual",
     inputJson: { name: "Anna" },
@@ -354,7 +408,7 @@ function workflowRunRow() {
 function salesTaskRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "notif_1",
-    workspaceId: "ws_demo",
+    workspaceId: "ws_test",
     type: "SALES_TASK",
     title: "Call lead back within 24 hours",
     body: "Anna — Shop ABC (score 87)",
@@ -369,12 +423,17 @@ function createService(
   options: {
     activeWorkflow?: boolean;
     recentEvents?: Array<{ eventId: string }>;
+    listRecent?: ReturnType<typeof vi.fn>;
     usageRecords?: Array<{ aiTokensUsed: number; workflowStepsExecuted: number }>;
     workflowRunCount?: ReturnType<typeof vi.fn>;
     workflowRunFindMany?: ReturnType<typeof vi.fn>;
     notifications?: Array<Record<string, unknown>>;
     notificationById?: Record<string, unknown> | null;
     notificationUpdate?: ReturnType<typeof vi.fn>;
+    notificationFindMany?: ReturnType<typeof vi.fn>;
+    usageFindMany?: ReturnType<typeof vi.fn>;
+    workspaceFindUnique?: ReturnType<typeof vi.fn>;
+    aiTaskResultFindMany?: ReturnType<typeof vi.fn>;
     workspaceMember?: { role: string } | null;
   } = {}
 ) {
@@ -388,18 +447,18 @@ function createService(
     listRuns: vi.fn(async () => [])
   };
   const events = {
-    listRecent: vi.fn(async () => options.recentEvents ?? [])
+    listRecent: options.listRecent ?? vi.fn(async (_workspaceId?: string) => options.recentEvents ?? [])
   };
   const prisma = {
     client: {
       usageRecord: {
-        findMany: vi.fn(async () => options.usageRecords ?? [])
+        findMany: options.usageFindMany ?? vi.fn(async () => options.usageRecords ?? [])
       },
       workspace: {
-        findUnique: vi.fn(async () => ({ plan: "FREE" }))
+        findUnique: options.workspaceFindUnique ?? vi.fn(async () => ({ plan: "FREE" }))
       },
       aiTaskResult: {
-        findMany: vi.fn(async () => [
+        findMany: options.aiTaskResultFindMany ?? vi.fn(async () => [
           {
             workflowRunId: "run_1",
             createdAt: new Date("2026-10-18T08:00:00Z"),
@@ -421,7 +480,7 @@ function createService(
         findMany: options.workflowRunFindMany ?? vi.fn(async () => [])
       },
       notification: {
-        findMany: vi.fn(async () => options.notifications ?? [salesTaskRow()]),
+        findMany: options.notificationFindMany ?? vi.fn(async () => options.notifications ?? [salesTaskRow()]),
         findUnique: vi.fn(async () => options.notificationById ?? null),
         update: options.notificationUpdate ?? vi.fn(async () => salesTaskRow())
       },
@@ -430,11 +489,7 @@ function createService(
       }
     }
   };
-  const demoData = {
-    ensureDemoWorkspace: vi.fn(async () => ({ id: "ws_demo" }))
-  };
-
-  return new DashboardService(workflows as never, events as never, prisma as never, demoData as never);
+  return new DashboardService(workflows as never, events as never, prisma as never);
 }
 
 function statusFor(items: Array<{ id: string; status: ReadinessStatus }>, id: string) {
