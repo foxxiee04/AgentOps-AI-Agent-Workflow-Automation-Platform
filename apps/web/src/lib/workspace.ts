@@ -4,11 +4,7 @@ import { redirect } from "next/navigation";
 import { ApiError } from "./api";
 import { apiGet } from "./server-api";
 import type { AuthUser, AuthWorkspace } from "../features/auth/auth-client";
-import {
-  resolveActiveWorkspace,
-  WORKSPACE_COOKIE_NAME,
-  WORKSPACE_COOKIE_MAX_AGE
-} from "../features/auth/use-active-workspace";
+import { resolveActiveWorkspace, WORKSPACE_COOKIE_MAX_AGE, WORKSPACE_COOKIE_NAME } from "./workspace-shared";
 
 export { resolveActiveWorkspace, WORKSPACE_COOKIE_NAME, WORKSPACE_COOKIE_MAX_AGE };
 
