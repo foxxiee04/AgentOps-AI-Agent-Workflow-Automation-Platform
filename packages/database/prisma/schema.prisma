@@ -65,6 +65,11 @@ model User {
   passwordHash     String
   name             String
   avatarUrl        String?
+  // Platform-wide administrator (admin console); granted via PLATFORM_ADMIN_EMAILS or by another admin.
+  isPlatformAdmin  Boolean            @default(false)
+  // Set when an admin disables the account: sign-in, refresh and API calls are refused.
+  disabledAt       DateTime?
+  lastLoginAt      DateTime?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   ownedWorkspaces  Workspace[]        @relation("WorkspaceOwner")
@@ -337,18 +342,20 @@ model Notification {
 
 model AuditLog {
   id           String    @id @default(cuid())
-  workspaceId  String
+  // Null for platform-level events (admin console actions on accounts).
+  workspaceId  String?
   actorUserId  String?
   action       String
   entityType   String
   entityId     String?
   metadataJson Json?
   createdAt    DateTime  @default(now())
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   // Audit rows outlive the actor's account.
   actor        User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
+  @@index([createdAt])
 }
 
 model ApiKey {
