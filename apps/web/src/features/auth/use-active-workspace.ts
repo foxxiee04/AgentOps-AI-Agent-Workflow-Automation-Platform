@@ -4,31 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadAuthUser, type AuthUser, type AuthWorkspace } from "./auth-client";
 
-export const WORKSPACE_COOKIE_NAME = "agentops_ws";
-export const WORKSPACE_COOKIE_MAX_AGE = 365 * 24 * 60 * 60; // 1 year in seconds
+import { resolveActiveWorkspace, WORKSPACE_COOKIE_MAX_AGE, WORKSPACE_COOKIE_NAME } from "../../lib/workspace-shared";
 
-/**
- * Resolves the active workspace from the user's workspaces and the cookie value.
- * Resolution order:
- * 1. Cookie value if it matches one of the user's workspaces
- * 2. Else the user's first workspace
- * 3. Else none (undefined)
- */
-export function resolveActiveWorkspace<T extends { id: string }>(
-  workspaces: T[] | undefined,
-  cookieValue?: string | null
-): T | undefined {
-  if (!workspaces || workspaces.length === 0) {
-    return undefined;
-  }
-  if (cookieValue) {
-    const matched = workspaces.find((w) => w.id === cookieValue);
-    if (matched) {
-      return matched;
-    }
-  }
-  return workspaces[0];
-}
+export { resolveActiveWorkspace, WORKSPACE_COOKIE_MAX_AGE, WORKSPACE_COOKIE_NAME };
 
 export function getWorkspaceCookie(): string | undefined {
   if (typeof document === "undefined") {
