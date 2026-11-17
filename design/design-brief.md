@@ -1,101 +1,137 @@
 # Design brief - AgentOps web app
 
-> **Superseded on 2026-11-17.** The app now follows the **Lumen** direction described in `apps/web/DESIGN.md` (bright pearl canvas, iris gradient accent, soft shadows, Be Vietnam Pro). The motion tokens, primitives and icon choices below are still in use; the "Terminal Ink" look (monospace everywhere, no shadows or gradients, ASCII markers) is not. The old look reference is `design/archive-terminal-ink-DESIGN.md`.
+Chosen direction: **C · Moss Atelier** (2026-11-17). Options page: `design/template-options.html`.
+It mixes the technical hairline grid and mono labels of *Agent Hero (Nova Agent)* with the moss palette, misty light
+and glass cards of *Moss Island*, plus a high-contrast serif for a studio feel.
+References: MotionSites "Agent Hero" and "Moss Island" (https://motionsites.ai/). Recreate the look in our own code;
+do not copy their assets.
 
-Chosen direction: **A - Terminal Ink** (keep `apps/web/DESIGN.md`, add calm motion and animated icons). Options page: design/template-options.html (chosen 2026-10-22).
-References: apps/web/DESIGN.md (source of truth for look), https://www.itshover.com/icons (icons, Apache-2.0, copied into `apps/web/src/icons/`), premium-motion skill (motion tokens and recipes), https://bklit.com/blocks (stat card idea only; sparklines are a later step, they need a time-series API).
+Replaces the "Lumen" look (`apps/web/DESIGN.md`, iris gradient, Be Vietnam Pro). No purple anywhere.
 
-Principle: **the look does not change**. Same cream canvas, near-black ink, monospaced text everywhere, hairline borders, 4px radius, no gradients, no card shadows, `[+] [ok] [!] [~]` markers. Motion and icons only make state changes and navigation easier to follow. Nothing loops except the single "live" cursor.
+## Tokens (CSS variables in `apps/web/src/app/globals.css`)
 
-## Tokens (already in apps/web/src/app/globals.css - keep them)
 | Token | Value | Use |
 |---|---|---|
-| --canvas | #fdfcfc | page background |
-| --surface-soft | #f8f7f7 | panels, table headers |
-| --surface-card | #ffffff | cards |
-| --ink | #201d1d | text |
-| --mute | #646262 | secondary text |
-| --accent | #0056b3 | primary buttons, active nav, links (AA on white) |
-| --hairline | rgba(15,0,0,0.12) | borders |
-| --hairline-strong | #646262 | hover/active border |
-| radius | 4px | every interactive element and card |
-| shadow | none | never |
+| `--canvas` | `#F4F3EF` | page background (warm stone) |
+| `--surface-card` | `#FCFBF8` | cards, sheets, inputs |
+| `--surface-soft` | `#EEEDE7` | sidebar, table header, hover rows |
+| `--surface-raised` | `#FFFFFF` | popovers, menus, focused card |
+| `--ink` | `#0F1A14` | headings, primary text |
+| `--body` | `#36413A` | body copy |
+| `--mute` | `#66706A` | secondary text, labels |
+| `--ash` | `#A3AAA4` | placeholders, disabled |
+| `--accent` | `#2F5D3A` | primary button fill, links, active nav, focus ring |
+| `--accent-strong` | `#244A2E` | primary hover/pressed |
+| `--accent-soft` | `#E4ECE3` | selected rows, active nav background, soft badges |
+| `--live` | `#C6F35C` | ONLY live/running indicators and tiny highlights (dot, underline, chip background with ink text) |
+| `--mist` | `#E7EBE8` | hero/auth backdrop base, glass tint |
+| `--hairline` | `rgba(15, 26, 20, 0.08)` | 1px borders, grid lines |
+| `--hairline-strong` | `rgba(15, 26, 20, 0.18)` | input borders, dividers that must read |
+| `--warning` / `--warning-soft` / `--warning-ink` | `#A3620A` / `#FBF1DF` / `#6E4205` | waiting/approval states |
+| `--danger` / `--danger-soft` / `--danger-ink` | `#B4372F` / `#FBEAE7` / `#7A1E18` | failed/errors |
+| `--success` / `--success-soft` | `#2F7A4A` / `#E5F2E8` | completed |
+| `--radius-card` | `14px` | cards, panels |
+| `--radius-control` | `10px` | buttons, inputs, selects; chips `999px`; mono tags `4px` |
+| `--shadow-sm` | `0 1px 2px rgba(15,26,20,.04), 0 8px 24px -14px rgba(15,26,20,.14)` | resting cards |
+| `--shadow-md` | `0 2px 6px rgba(15,26,20,.05), 0 28px 60px -28px rgba(15,26,20,.22)` | hover/raised |
+| `--glass` | `rgba(252, 251, 248, 0.66)` + `backdrop-filter: blur(16px) saturate(1.15)` + 1px `rgba(255,255,255,.6)` border | nav bar, floating chips, hero preview frame |
+
+All text/background pairs must meet WCAG AA (ink/body/mute on canvas and card; white on accent; ink on live).
+
+Background of `body`: canvas plus a very soft mist wash (no colour blobs):
+`radial-gradient(70rem 40rem at 85% -10%, rgba(47,93,58,.07), transparent 60%), radial-gradient(60rem 36rem at 0% 0%, rgba(198,243,92,.06), transparent 55%), var(--canvas)`, fixed. Optional 3% grain overlay (SVG noise, pointer-events none).
 
 ## Typography
-- One family: **JetBrains Mono** (Google Fonts, `next/font/google`, subsets `latin` + `vietnamese`, weights 400/500/700, `display: "swap"`, CSS variable `--font-mono`). Keep "Berkeley Mono" first in the stack only if installed locally; JetBrains Mono is the loaded default.
-- Scale (unchanged): page title 28-38px bold, section heading 16px bold, body 15px, small 12-13px; line-height 1.5; letter-spacing 0.
+
+- Display: **Playfair Display** 400/500 + italic 400 (Instrument Serif has no Vietnamese glyphs; Playfair has the
+  `vietnamese` subset). Body/UI: **Inter Tight** 400/500/600. Mono labels/data: **JetBrains Mono** 400/500.
+  Load all three with `next/font/google` in `apps/web/src/app/layout.tsx` with subsets `latin`, `latin-ext`,
+  `vietnamese`; expose as `--font-display`, `--font-sans`, `--font-mono`.
+- Scale: landing hero `clamp(48px, 7vw, 104px)`, line-height 1.02, tracking -0.025em; page title (app) 34px serif
+  line-height 1.1; h2 `clamp(32px, 4vw, 56px)` serif; h3 20px Inter Tight 600; body 15px (app) / 17px (landing),
+  line-height 1.6, max 65ch; small 13px.
+- Serif is for display only: landing headlines, auth headline, page titles, big KPI numbers. Everything else is Inter Tight.
+- Italic serif for one emphasised word per headline (e.g. "Quy trình AI *chạy thật*").
+- Mono labels: 11px, uppercase, letter-spacing 0.14em, colour `--mute`, often prefixed with a small `+` crosshair or
+  index (`01 /`). Use for eyebrows, table headers, metric labels, node types, timestamps, ids.
+
+## Signature details (apply consistently)
+
+- **Hairline grid**: landing sections sit on a 12-column hairline grid (vertical lines `--hairline` at column edges,
+  visible only on desktop ≥ 1024px), with small `+` crosshair marks (8px, 1px stroke, `--hairline-strong`) at section
+  corners. App pages: a single hairline under the page header and between sections, no heavy boxes.
+- **Live chip**: pill with `--live` background, ink text, mono 10.5px uppercase, a 6px ink dot that pulses (opacity
+  0.4→1, 1.6s) when the status is RUNNING. Only for live/running states.
+- **Status pills**: soft background + ink-coloured text (success/warning/danger/neutral), mono 11px uppercase, radius 999px.
+- **Buttons**: primary = `--accent` fill, white text, radius 10px, height 40px (app) / 48px (landing), Inter Tight 500;
+  secondary = card background + `--hairline-strong` border; ghost = text + underline on hover. No gradients on buttons.
+- **Cards**: `--surface-card`, 1px `--hairline`, `--radius-card`, `--shadow-sm`; header row = mono label left, action right.
+- **Tables**: no zebra; header row mono labels on `--surface-soft`; rows 52px; hover `--surface-soft`; numbers in mono, right aligned.
+- **Charts** (dashboard): ink and moss scale — series 1 `#2F5D3A`, series 2 `#7FA37F`, series 3 `#C9D6C6`,
+  highlight `--live` for the latest/current point only; gridlines `--hairline`; axis labels mono 11px `--mute`.
 
 ## Layout
-- Unchanged desktop layout (sidebar 240px + main). Fix: between 640 and 1023px the page overflows horizontally (seen at 800px) - make the main column `min-w-0`, tables `overflow-x-auto`, header chips wrap, sidebar collapses to the top nav already used on mobile below 1024px.
+
+- Landing container max-width 1240px, side padding 24px (16px mobile), section padding 128px desktop / 72px mobile.
+- App shell: left sidebar 248px on `--surface-soft` with hairline right border; brand (serif wordmark "AgentOps" +
+  small moss hex mark) at top; nav items Inter Tight 14px, icon 18px, active item = `--accent-soft` background +
+  `--accent` text + 2px left bar in `--accent`; workspace switcher (existing) styled as a card select at the top of
+  the sidebar; user block at the bottom. Top bar: glass, 64px, page breadcrumb in mono + language switcher + live AI
+  usage chip. Content max-width 1320px, padding 32px (16px mobile). Mobile (< 1024px): sidebar becomes a sheet.
+- Page header pattern: mono eyebrow (`+ WORKFLOWS`), serif title, one-line muted description, actions right.
+
+## Pages
+
+### 1. Landing (`src/app/page.tsx` -> `src/components/landing-page.tsx`, locales vi/en)
+- **Nav**: glass bar, serif wordmark left, links center (mono 11px uppercase), "Đăng nhập" ghost + "Bắt đầu" primary right.
+- **Hero**: left 7 cols: mono eyebrow `+ WORKFLOW AUTOMATION`, serif headline 2 lines with one italic word, 17px
+  subtext, CTAs. Right 5 cols: a floating "workflow object": 4 stacked glass node cards (Trigger → AI chấm điểm →
+  Duyệt → Tạo task) connected by a thin moss line, the AI card shows a live chip and a score count-up; whole object
+  floats (ambient, 7s, ±8px) over a slow mist gradient drift (24s). Thin hairline grid + crosshairs behind.
+  Motion: `mask-lines` on the headline (0.9s, EASE_OUT, stagger 0.08), `blur-in` on subtext (delay .3) and CTAs
+  (delay .4), node cards `stagger` (0.08) with `scale-in` 0.96→1; total ≤ 1.6s.
+- **Proof strip**: mono marquee of node types/integrations (Kafka · Postgres · OpenAI · Redis · Webhook · Approval ·
+  Sales task), edge fade, pauses on hover, off for reduced motion.
+- **How it works**: 3 numbered columns (`01 /`, `02 /`, `03 /`) on the hairline grid with serif h3; `stagger` reveal.
+- **Bento features**: 2×3 bento of cards (run timeline, human approval, AI scoring, observability, RBAC, CI/CD), each
+  with a tiny live UI fragment; `hover-lift` (y -4px, shadow-md, 0.25s).
+- **Dashboard preview**: large glass frame with a screenshot-like composed dashboard (real components, static data),
+  `scale-in` 1.04→1 on view.
+- **CTA + footer**: serif statement, primary CTA, footer with hairline top, mono small print.
+
+### 2. Auth (`src/app/login`, `src/app/register`, `src/features/auth/*`)
+- Split screen: left = mist panel with serif headline, the floating workflow object (reuse from landing, smaller) and
+  3 mono bullet points; right = card form (max 400px): serif title, Google button first (white card button with the
+  Google "G" logo, full width), divider "hoặc" in mono, email/password inputs (44px, radius 10px, hairline-strong
+  border, focus ring 3px `--accent-soft` + border `--accent`), primary submit. Errors in `--danger-ink` on `--danger-soft`.
+
+### 3. App pages (dashboard, runs, approvals, workflows, workflow builder, agents, settings)
+- Apply the shell, page header pattern, cards, tables, status pills and chart palette above. Keep every feature and
+  data flow exactly as it is; this is a visual redesign only.
+- Dashboard: KPI row of 4 cards (mono label, serif 40px number with `counter`, small delta); charts in cards; lead
+  table; sales task list; recent activity as a hairline timeline.
+- Runs: filter bar as a hairline row of selects; table; run detail timeline = vertical hairline with step nodes
+  (completed moss dot, running live chip, failed danger dot).
+- Approvals: queue cards with the drafted email in a paper-like inner panel (serif subject line), approve = primary,
+  reject = secondary danger text.
+- Workflow builder (React Flow): canvas `--canvas` with dot grid `--hairline`; nodes = cards radius 12px, mono type
+  label + Inter Tight title; edges `--accent` 1.5px; selected node ring `--accent`.
 
 ## Motion system
-- Library: `motion` (import from "motion/react"), replacing the unused `framer-motion` dependency. No Lenis (app, not a scroll story).
-- Tokens (`apps/web/src/components/motion/tokens.ts`): EASE_OUT [0.22, 1, 0.36, 1]; EASE_IN [0.64, 0, 0.78, 0]; micro 0.2s; base 0.35s; reveal 0.5s; stagger 0.05s (max 8 items staggered, the rest appear with the last one); distance 8px (terminal = small moves).
-- `MotionProvider` = `<MotionConfig reducedMotion="user">` wrapping the app in providers.tsx. With reduced motion every transform is dropped; opacity fades stay at 0.15s.
-- Primitives in `apps/web/src/components/motion/`:
-  - `Reveal` / `Stagger` + `StaggerItem` - fade + y 8px -> 0 on first mount (not on every refetch), `once` semantics.
-  - `MaskHeading` - page title rises from an overflow-hidden mask (y 100% -> 0, 0.5s EASE_OUT, starts at 0.05s; it is often the LCP text, so no longer delay).
-  - `CountUp` - animates a number from 0 (first mount) or from the previous value (updates) to the new value in 0.6s with `animate()`/`useMotionValue`; renders tabular figures; exact final value; no animation under reduced motion.
-  - `LiveCursor` - a `▍` that blinks (opacity 1/0, steps, 1.1s) next to "[~] cập nhật trực tiếp" labels; the only infinite loop allowed.
-  - `StatusFlash` - wraps a status tag; when its `status` prop changes it plays a 0.35s border/background flash (opacity of an overlay 0.6 -> 0) - used for run/step/approval statuses.
-  - `IconButton` helpers: `useIconHover()` returning `{ ref, handlers }` so a whole button/link hover/focus starts the itshover icon (`startAnimation` / `stopAnimation`).
-- Hover: no lift, no shadow. Cards/rows: border color transitions to --hairline-strong in 0.2s. Buttons: background/border 0.2s; the icon inside animates.
+- Library `motion` (`motion/react`), existing primitives in `src/components/motion/` (`tokens.ts`, `reveal.tsx`,
+  `mask-heading.tsx`, `count-up.tsx`, `motion-provider.tsx`): reuse and extend, do not add new libraries.
+- Easings: entrance `[0.22, 1, 0.36, 1]`; moves `[0.65, 0, 0.35, 1]`; exits `[0.64, 0, 0.78, 0]`.
+- Durations: micro 0.2–0.3s, reveal 0.7–0.9s (distance 20px), hero ≤ 1.6s total, stagger 0.06–0.1s.
+- App pages: page enter fade-up 12px 0.4s; cards `stagger` once on mount; no ambient loops inside the app except the
+  live chip pulse.
+- Reduced motion (`MotionConfig reducedMotion="user"`): marquee, float, gradient drift and pulse off; reveals = opacity.
 
-## Icons (apps/web/src/icons, already copied - add `"use client";` at the top of each icon file in the setup job)
-Size 16px inline / 18px nav, stroke 1.75 (pass `strokeWidth`), `currentColor`, `aria-hidden` (labels stay as text).
-| Place | Icon |
-|---|---|
-| nav [0] Bảng điều khiển | layout-dashboard-icon |
-| nav [1] Quy trình | stack-3-icon |
-| nav [2] Lượt chạy | history-circle-icon |
-| nav [3] Duyệt email | mail-filled-icon |
-| nav [4] Builder | code-xml-icon |
-| nav [5] AI Agents | brain-circuit-icon |
-| nav [6] Cài đặt | gear-icon |
-| Chạy | player-icon |
-| Publish | upload-icon |
-| Xóa | trash-icon |
-| Duyệt và gửi | send-icon |
-| Từ chối | x-icon |
-| Tạo từ mẫu lead / Test agent | sparkles-icon |
-| Đăng xuất | logout-icon |
-| Xem run / Mở builder | eye-icon |
-| task done checkbox | checked-icon (when ticked) |
-| refresh/live labels | refresh-icon |
-Keep the `[n]` index prefix in nav labels; the icon goes between the index and the label.
-
-## Screens
-### 1. App shell (components/app-shell.tsx, language-switcher.tsx, features/auth/auth-status.tsx)
-- Nav: icons as above; the active item gets a 2px accent bar on the left that slides between items with `layoutId="nav-active"` (spring visualDuration 0.35, bounce 0). Hover starts the item's icon.
-- Header: logout button with logout-icon; language switcher active chip uses `layoutId` slide.
-- Page content enters with `Reveal` (opacity + y 8px, 0.35s) on route change.
-- Responsive fix described in Layout.
-
-### 2. Dashboard (app/dashboard/page.tsx, components/metric-card.tsx, features/leads/*)
-- Page title `MaskHeading`.
-- KPI row: `Stagger` of the 4 metric cards; numbers use `CountUp`.
-- Leads table, sales tasks, recent runs, dependencies, providers, event stream: each panel `Reveal` once; table rows `Stagger` (first 8).
-- Sales task tick: checkbox toggles with checked-icon draw animation; row text gets a strike-through that grows left to right (scaleX 0 -> 1, 0.25s) and the row moves to the done group with `layout` animation.
-- Event stream: new events slide in from y -8px with `AnimatePresence` (items keyed by event id); header shows `[~] trực tiếp ▍` with `LiveCursor`.
-
-### 3. Workflows list + runs list (app/workflows/page.tsx, features/workflows/*, app/runs/page.tsx, features/runs/runs-filter.tsx)
-- Title `MaskHeading`; cards/rows `Stagger` on first mount.
-- Buttons get icons (player, upload, trash, sparkles, eye). The delete confirm state swaps the label with a 0.2s cross-fade.
-- The run status line under a card appears with `Reveal`.
-- Runs pager: table body cross-fades (0.2s) on page/filter change.
-
-### 4. Approvals + run detail (features/approvals/*, app/approvals/*, app/runs/[id]/page.tsx, features/runs/run-live.tsx, features/runs/step-timeline.tsx)
-- Approval cards `Stagger`; on decision the card collapses (height via `layout` + opacity, 0.35s) and the outcome line appears in "Vừa xử lý" with `Reveal`.
-- Edit toggle: inputs fade in (0.2s).
-- Run timeline: steps `Stagger` on first load; when a step's status changes, `StatusFlash` on its tag; the "đang cập nhật trực tiếp" label uses `LiveCursor`.
-
-### 5. Builder, agents, settings (features/workflow-builder/workflow-builder.tsx, app/agents/page.tsx, features/agents/ai-console.tsx, app/settings/page.tsx)
-- Builder: node border color transitions 0.25s when its run status changes; run/publish buttons with icons; status line `Reveal`.
-- Agents: provider list `Stagger`; "Test agent" button with sparkles-icon; result panel `Reveal` (the old result is cleared when a new run starts or fails).
-- Settings: readiness rows `Stagger`; status tags `StatusFlash` on change.
+## Imagery & assets
+- No stock photos. Visual interest comes from the composed workflow object, glass, hairline grid and type.
+- Icons: existing itshover icon set in `src/icons/`, stroke 1.5, colour inherits; animate on parent hover.
+- Brand mark: small hexagon outline in `--accent` with a `--live` leaf/dot (inline SVG), next to the serif wordmark.
 
 ## Quality budget
-- Only transform/opacity animate (plus border-color/background-color micro transitions). No layout shift (CLS < 0.05), LCP unchanged (< 2.5s on the dashboard), no animation on every 5 s refetch.
-- `prefers-reduced-motion`: no transforms, no loops except an opacity-only cursor that becomes static.
-- Keyboard: focus starts the same icon animation as hover; focus rings unchanged (accent outline).
-- Contrast AA unchanged; icons are decorative (`aria-hidden`).
+- LCP < 2.5s, CLS < 0.1; animate transform/opacity only; blur only on small elements once.
+- AA contrast, visible focus states (`--accent` ring), all controls keyboard reachable, `prefers-reduced-motion` respected.
+- Existing unit tests and e2e scenarios must keep passing (update selectors only when text/markup legitimately changed).

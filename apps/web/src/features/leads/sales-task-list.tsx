@@ -199,9 +199,9 @@ export function SalesTaskList({
   );
 
   return (
-    <div className="rounded-xl border border-[var(--hairline)] bg-white">
+    <div className="card flex h-full min-w-0 flex-col">
       <div className="border-b border-[var(--hairline)] px-4 py-3">
-        <h2 className="text-base font-bold text-[var(--ink)]">{labels.salesTasks}</h2>
+        <h2 className="text-base font-semibold text-[var(--ink)]">{labels.salesTasks}</h2>
       </div>
       {sorted.length === 0 ? (
         <p className="px-4 py-6 text-sm text-[var(--mute)]">{labels.noTasks}</p>
@@ -228,7 +228,7 @@ export function SalesTaskList({
                     {overdue ? (
                       <>
                         {" "}
-                        <span className="rounded-xl border border-[var(--danger)] px-1.5 py-0.5 text-[var(--danger-ink)]">
+                        <span className="status-pill is-danger">
                           {overdueCopy[locale]}
                         </span>
                       </>

@@ -100,34 +100,34 @@
 
 <script>
 /* ===== DATA - Claude replaces only this block ===== */
-const PROJECT = { name: "AgentOps", tagline: "Điều hành workflow AI cho đội sales: chấm điểm lead, duyệt email, giao task", eyebrow: "Chọn hướng giao diện" };
+const PROJECT = { name: "AgentOps", tagline: "Quy trình AI chạy thật, đo được từng bước", eyebrow: "Workflow automation" };
 const OPTIONS = [
   {
-    id: "A", name: "Terminal Ink (giữ DESIGN.md)", mood: "Giữ chất terminal hiện tại: chữ mono, nền kem, viền mảnh, góc 4px. Thêm chuyển động tinh gọn và icon động - ít thay đổi nhất. Vệt màu mờ trong khung xem trước chỉ là nền minh họa, A không dùng gradient.",
-    palette: { bg: "#FDFCFC", surface: "#F8F7F7", text: "#201D1D", muted: "#646262", accent: "#007AFF" },
-    fonts: { display: "JetBrains Mono", body: "JetBrains Mono" }, radius: "4px",
-    motion: ["stagger-up", "mask-reveal", "marquee"],
-    sections: ["Sidebar [0]-[6] với icon động khi hover", "Hàng KPI 4 ô: số đếm chạy lên, sparkline nét mảnh (Bklit)", "Bảng lead + task sales dạng checklist [ ]/[x]", "Bảng run gần đây, trạng thái dạng tag viền", "Event stream chạy chậm như log terminal"],
-    refs: [{ label: "DESIGN.md hiện tại (OpenCode)", url: "https://opencode.ai/" }, { label: "Bklit - stat card line", url: "https://bklit.com/blocks" }],
-    icons: "itshover cho nav + nút chính, nét 1.5px; còn lại giữ ký hiệu [+] [ok] [!]", effort: "S", cost: "Miễn phí"
+    id: "A", name: "Field Station", mood: "Theo Moss Island: sương xám, chữ xanh rêu đậm, chip lime, thẻ kính mờ; landing kể chuyện bằng cuộn trang kiểu điện ảnh.",
+    palette: { bg: "#E7EBE8", surface: "#F6F7F4", text: "#10291A", muted: "#5B6B60", accent: "#C6F35C" },
+    fonts: { display: "Inter Tight", body: "Inter Tight" }, radius: "10px",
+    motion: ["mask-reveal", "blur-in", "float", "stagger-up"],
+    sections: ["Hero: vật thể 3D bay trong sương (cụm node workflow phủ rêu) + headline mask reveal", "Cuộn kể chuyện: lead -> chấm điểm AI -> duyệt -> task (pin + scrub)", "Thẻ kính mờ: số liệu live, sparkline tự vẽ, đếm số", "Panel trắng trượt lên: tính năng + 4 chỉ số", "App: sidebar sương, thẻ paper, chip lime cho trạng thái, nhãn mono"],
+    refs: [{ label: "MotionSites - Moss Island", url: "https://motionsites.ai/" }],
+    icons: "itshover, nét mảnh, màu ink; chip lime cho trạng thái active", effort: "L", cost: "Miễn phí (ảnh 3D tự tạo)"
   },
   {
-    id: "B", name: "Ivory Control Room", mood: "Sáng, sang kiểu bảng điều khiển cao cấp: nền ngà, tiêu đề serif, số liệu mono, accent vàng champagne dùng rất tiết chế.",
-    palette: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1C1917", muted: "#78716C", accent: "#B08D57" },
-    fonts: { display: "Playfair Display", body: "Inter" }, radius: "14px",
-    motion: ["mask-reveal", "stagger-up", "scale-in", "hover-lift"],
-    sections: ["Sidebar kính mờ nhẹ, icon động, chip workspace", "Tiêu đề trang serif lớn + mask reveal", "KPI card bo 14px: NumberFlow + area sparkline (Bklit)", "Lead & approvals dạng card, bóng mềm khi hover", "Biểu đồ run theo giờ + phễu lead (Bklit)"],
-    refs: [{ label: "Bklit - Blocks (KPI, charts)", url: "https://bklit.com/blocks" }, { label: "shadcn - dashboard-01", url: "https://ui.shadcn.com/blocks" }, { label: "itshover icons", url: "https://www.itshover.com/icons" }],
-    icons: "itshover toàn bộ (nav, nút, empty state), kích hoạt khi hover cả nút", effort: "M", cost: "Miễn phí (dựng lại bằng code dự án)"
+    id: "B", name: "Nova Lab", mood: "Theo Agent Hero: nền ngà ấm, lưới hairline và dấu chữ thập kỹ thuật, nhãn mono viết hoa, điểm nhấn gradient san hô dùng thật ít.",
+    palette: { bg: "#F1EFEA", surface: "#FBFAF7", text: "#141414", muted: "#6B6862", accent: "#FF6A4D" },
+    fonts: { display: "Inter Tight", body: "Inter" }, radius: "4px",
+    motion: ["mask-reveal", "scale-in", "hover-lift", "marquee"],
+    sections: ["Hero: nhân vật agent 3D + headline mảnh cực lớn đóng khung san hô, ô lệnh kiểu prompt", "Dải nhãn mono chạy ngang (các node: Trigger, AI, Approval, Tool)", "Lưới tính năng có hairline + chữ thập ở góc", "Run timeline dạng bảng kỹ thuật", "App: lưới 12 cột hairline, bảng mono, nút vuông góc, accent san hô cho hành động chính"],
+    refs: [{ label: "MotionSites - Agent Hero (Nova Agent)", url: "https://motionsites.ai/" }],
+    icons: "itshover, stroke 1.5, hover kích hoạt từ nút cha", effort: "M", cost: "Miễn phí (ảnh 3D tự tạo)"
   },
   {
-    id: "C", name: "Sage Operations", mood: "Dịu, editorial, nhiều khoảng thở: nền đá nhạt, accent xanh xô thơm, chữ sans hiện đại, cảm giác yên tâm khi vận hành.",
-    palette: { bg: "#F4F3EE", surface: "#FBFBF8", text: "#1F2420", muted: "#6B726C", accent: "#5F7A61" },
-    fonts: { display: "Plus Jakarta Sans", body: "Inter" }, radius: "12px",
-    motion: ["blur-in", "stagger-up", "gradient-drift", "hover-lift"],
-    sections: ["Màn đăng nhập có nền gradient trôi rất chậm (duy nhất 1 hiệu ứng nền)", "Top bar + sidebar thu gọn, icon động", "KPI dạng bento 2x2 với sparkline", "Duyệt email dạng 2 cột: lead bên trái, bản nháp sửa được bên phải", "Timeline run theo bước, màu trạng thái dịu"],
-    refs: [{ label: "Magic UI - number ticker, bento", url: "https://magicui.design" }, { label: "Bklit - charts", url: "https://bklit.com/" }],
-    icons: "itshover, nét 1.75px, màu theo chữ", effort: "M", cost: "Miễn phí"
+    id: "C", name: "Moss Atelier", mood: "Kết hợp hai mẫu: khung lưới kỹ thuật của Nova + bảng màu rêu của Moss, thêm serif display để ra chất sang của một studio.",
+    palette: { bg: "#F4F3EF", surface: "#FCFBF8", text: "#0F1A14", muted: "#66706A", accent: "#2F5D3A" },
+    fonts: { display: "Instrument Serif", body: "Inter Tight" }, radius: "14px",
+    motion: ["blur-in", "gradient-drift", "stagger-up", "hover-lift"],
+    sections: ["Hero: serif lớn + vật thể 3D rêu nhỏ gọn bên phải, nền gradient sương trôi chậm", "Hairline grid với nhãn mono và chữ thập (từ Nova)", "Bento tính năng, thẻ có bóng mềm, highlight lime rất nhỏ", "Dashboard preview trong khung kính", "App: nền đá ấm, thẻ trắng ngà, accent rêu đậm, lime chỉ cho trạng thái live"],
+    refs: [{ label: "MotionSites - Moss Island", url: "https://motionsites.ai/" }, { label: "MotionSites - Agent Hero", url: "https://motionsites.ai/" }],
+    icons: "itshover, nét mảnh màu rêu", effort: "M", cost: "Miễn phí"
   }
 ];
 /* ===== END DATA ===== */

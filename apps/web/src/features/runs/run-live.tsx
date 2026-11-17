@@ -56,9 +56,9 @@ export function RunLive({
   const { ref: refreshRef, ...refreshHandlers } = useIconHover();
 
   return (
-    <div className="rounded-xl border border-[var(--hairline)] bg-[var(--surface-card)]">
+    <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] px-4 py-3">
-        <h2 className="text-base font-bold text-[var(--ink)]">{labels.steps}</h2>
+        <h2 className="text-base font-semibold text-[var(--ink)]">{labels.steps}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <span
             {...refreshHandlers}
@@ -71,9 +71,13 @@ export function RunLive({
             {active ? `● ${labels.live}` : `✓ ${labels.finished}`}
             {active ? <LiveCursor /> : null}
           </span>
-          <StatusFlash status={run.data.status}>
-            <StatusPill tone={runStatusTone[run.data.status]}>{run.data.status}</StatusPill>
-          </StatusFlash>
+           <StatusFlash status={run.data.status}>
+             {run.data.status === "RUNNING" ? (
+               <span className="live-chip is-running">{run.data.status}</span>
+             ) : (
+               <StatusPill tone={runStatusTone[run.data.status]}>{run.data.status}</StatusPill>
+             )}
+           </StatusFlash>
         </div>
       </div>
       {run.data.status === "WAITING_APPROVAL" ? (
@@ -102,7 +106,7 @@ export function RunLive({
 /** Page title for the run detail screen; keeps the mask reveal inside the client boundary. */
 export function RunDetailHeading({ children }: { children: ReactNode }) {
   return (
-    <MaskHeading className="mt-1 break-all text-3xl font-bold leading-tight text-[var(--ink)]">
+    <MaskHeading className="font-display mt-1 break-all text-[34px] font-normal leading-[1.1] text-[var(--ink)]">
       {children}
     </MaskHeading>
   );

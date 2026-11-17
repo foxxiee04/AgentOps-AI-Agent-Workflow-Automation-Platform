@@ -16,7 +16,7 @@ const appScreens: Array<{ path: string; heading: RegExp }> = [
 test("TC-NAV-01 landing page renders in English and Vietnamese", async ({ page }) => {
   await page.goto("/en");
   await expect(page.getByRole("heading", { name: "AI Agent workflow automation platform" })).toBeVisible();
-  await page.getByRole("link", { name: "Tiếng Việt" }).click();
+  await page.locator("header").getByRole("link", { name: "Tiếng Việt" }).click();
   await expect(page).toHaveURL(/\/vi$/);
   await expect(page.getByRole("heading", { name: "Nền tảng tự động hóa workflow bằng AI Agent" })).toBeVisible();
 });

@@ -45,9 +45,9 @@ export function edgeStyle(condition: string | undefined) {
   const isMutedBranch = normalized === "else" || normalized === "default" || normalized === "rejected";
   return {
     label: condition?.trim() ? condition : undefined,
-    style: { stroke: isMutedBranch ? "#9a9898" : "#646262", strokeDasharray: isMutedBranch ? "6 4" : undefined },
-    labelStyle: { fill: "#201d1d", fontWeight: 700, fontFamily: "ui-monospace, monospace" },
-    labelBgStyle: { fill: "#fdfcfc" }
+    style: { stroke: isMutedBranch ? "var(--mute)" : "var(--accent)", strokeDasharray: isMutedBranch ? "6 4" : undefined },
+    labelStyle: { fill: "var(--ink)", fontWeight: 700, fontFamily: "ui-monospace, monospace" },
+    labelBgStyle: { fill: "var(--surface-card)" }
   };
 }
 
@@ -135,16 +135,16 @@ function IconSlot({ children }: { children: ReactNode }) {
 function stepColor(status: string): { border: string; dash?: boolean; muted?: boolean } {
   switch (status) {
     case "COMPLETED":
-      return { border: "#15803d" };
+      return { border: "var(--success)" };
     case "RUNNING":
     case "WAITING_APPROVAL":
-      return { border: "#b45309" };
+      return { border: "var(--warning)" };
     case "FAILED":
-      return { border: "#dc2626" };
+      return { border: "var(--danger)" };
     case "SKIPPED":
-      return { border: "#9a9898", dash: true, muted: true };
+      return { border: "var(--ash)", dash: true, muted: true };
     default:
-      return { border: "#d9d4d4" };
+      return { border: "var(--hairline-strong)" };
   }
 }
 
@@ -282,25 +282,25 @@ export function WorkflowBuilder({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="overflow-hidden rounded-xl border border-[var(--hairline)] bg-white">
+      <section className="card overflow-hidden">
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] px-4 py-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-base font-bold text-[var(--ink-deep)]">{workflow.name}</h1>
+              <h1 className="text-base font-semibold text-[var(--ink)]">{workflow.name}</h1>
               <StatusPill tone={status === "ACTIVE" ? "success" : "warning"}>{status}</StatusPill>
               {source === "fallback" ? <StatusPill tone="warning">{copy.builder.fallback}</StatusPill> : null}
             </div>
             <p className="mt-1 text-sm text-[var(--mute)]">{workflow.description}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-xl border border-[var(--hairline-strong)] bg-white p-0.5">
+            <div className="flex rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] p-0.5">
               {(["design", "run-preview"] as const).map((item) => (
                 <button
                   key={item}
                   type="button"
                   aria-pressed={mode === item}
                   onClick={() => setMode(item)}
-                  className={`min-h-9 rounded-lg px-3 text-sm font-medium ${
+                  className={`btn min-h-9 px-3 text-sm font-medium ${
                     mode === item ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--mute)]"
                   }`}
                 >
@@ -313,7 +313,7 @@ export function WorkflowBuilder({
               {...publishIconHandlers}
               onClick={handlePublish}
               disabled={!canPublish || publishState.status === "loading"}
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink-deep)] disabled:border-[var(--hairline)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+              className="btn btn-secondary disabled:border-[var(--hairline)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
               title={!canPublish ? invalidMessage : publishState.status === "error" ? publishState.message : undefined}
             >
               <IconSlot>
@@ -330,7 +330,7 @@ export function WorkflowBuilder({
               {...runIconHandlers}
               onClick={handleRun}
               disabled={status !== "ACTIVE" || isRunning}
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-3 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+              className="btn btn-primary disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
               title={status !== "ACTIVE" ? t.publishFirst : undefined}
             >
               <IconSlot>
@@ -344,7 +344,7 @@ export function WorkflowBuilder({
         {runSuccess ? (
           <Reveal>
             <div className="border-b border-[var(--hairline)] px-4 py-2 text-sm">
-              <span className="font-mono text-[#15803d]">{t.runCreated} {runSuccess.slice(0, 12)}</span>
+              <span className="font-mono text-[var(--success)]">{t.runCreated} {runSuccess.slice(0, 12)}</span>
               <span className="mx-2 text-[var(--mute)]">·</span>
               <Link href={`/runs/${runSuccess}?lang=${locale}`} className="font-semibold text-[var(--accent)]">
                 {t.viewRun}
@@ -380,16 +380,16 @@ export function WorkflowBuilder({
             onNodeClick={(_, node) => selectNode(node.id)}
             onPaneClick={() => selectNode(undefined)}
           >
-            <Background color="#d9d4d4" />
+            <Background color="var(--hairline)" />
             <Controls />
           </ReactFlow>
         </div>
       </section>
 
-      <aside className="rounded-xl border border-[var(--hairline)] bg-white">
+      <aside className="card">
         <div className="border-b border-[var(--hairline)] px-4 py-3">
-          <p className="text-xs font-semibold uppercase text-[var(--mute)]">{copy.builder.inspector}</p>
-          <h2 className="mt-1 text-lg font-bold text-[var(--ink-deep)]">{selectedDefinitionNode ? selectedDefinitionNode.name : copy.builder.workflow}</h2>
+          <p className="mono-label">{copy.builder.inspector}</p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--ink)]">{selectedDefinitionNode ? selectedDefinitionNode.name : copy.builder.workflow}</h2>
         </div>
         <div className="divide-y divide-[var(--hairline)] text-sm">
           <InspectorRow label={copy.builder.mode} value={mode === "design" ? copy.builder.draftDesign : copy.builder.runPreview} />
@@ -445,10 +445,10 @@ export function WorkflowBuilder({
 
 function NodeLabel({ marker, title, detail }: { marker: string; title: string; detail: string }) {
   return (
-    <div className="flex min-w-[178px] items-center gap-3 rounded-xl bg-white px-3 py-2">
+    <div className="flex min-w-[178px] items-center gap-3 rounded-xl bg-[var(--surface-card)] px-3 py-2">
       <span className="font-mono text-xs font-bold text-[var(--mute)]">{marker}</span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-bold text-[var(--ink-deep)]">{title}</span>
+        <span className="block truncate text-sm font-bold text-[var(--ink)]">{title}</span>
         <span className="block truncate text-xs font-semibold text-[var(--mute)]">{detail}</span>
       </span>
     </div>
@@ -459,7 +459,7 @@ function InspectorRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 py-3">
       <p className="text-xs font-semibold uppercase text-[var(--mute)]">{label}</p>
-      <p className="mt-1 font-medium text-[var(--ink-deep)]">{value}</p>
+      <p className="mt-1 font-medium text-[var(--ink)]">{value}</p>
     </div>
   );
 }

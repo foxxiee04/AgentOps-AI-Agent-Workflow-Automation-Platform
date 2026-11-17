@@ -49,11 +49,13 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
   if (!active) {
     return (
       <AppShell active="settings" locale={locale}>
-        <div className="space-y-8 p-5">
-          <div className="border-b border-[var(--hairline)] pb-4">
-            <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.settings.eyebrow}</p>
-            <h1 className="mt-1 text-3xl font-bold leading-tight text-[var(--ink-deep)]">{t.settings.title}</h1>
-          </div>
+        <div className="space-y-8 p-5 lg:p-8">
+          <header className="page-header">
+            <div className="min-w-0">
+              <p className="mono-label">{t.settings.eyebrow}</p>
+              <h1 className="mt-1 font-display text-[34px] font-medium leading-tight text-[var(--ink)]">{t.settings.title}</h1>
+            </div>
+          </header>
           <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
         </div>
       </AppShell>
@@ -71,16 +73,18 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
 
   return (
     <AppShell active="settings" locale={locale}>
-      <div className="space-y-8 p-5">
-        <div className="border-b border-[var(--hairline)] pb-4">
-          <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.settings.eyebrow}</p>
-          <h1 className="mt-1 text-3xl font-bold leading-tight text-[var(--ink-deep)]">{t.settings.title}</h1>
-        </div>
+      <div className="space-y-8 p-5 lg:p-8">
+        <header className="page-header">
+          <div className="min-w-0">
+            <p className="mono-label">{t.settings.eyebrow}</p>
+            <h1 className="mt-1 font-display text-[34px] font-medium leading-tight text-[var(--ink)]">{t.settings.title}</h1>
+          </div>
+        </header>
 
         <section className="grid gap-6 xl:grid-cols-2">
-          <div className="rounded-xl border border-[var(--hairline)] bg-white">
+          <div className="card">
             <div className="border-b border-[var(--hairline)] px-4 py-3">
-              <h2 className="text-base font-bold text-[var(--ink-deep)]">{t.settings.apiBoundary}</h2>
+              <h2 className="text-base font-bold text-[var(--ink)]">{t.settings.apiBoundary}</h2>
             </div>
             <div className="divide-y divide-[var(--hairline)] text-sm">
               <div className="grid gap-2 px-4 py-3 md:grid-cols-[180px_1fr]">
@@ -98,9 +102,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
             </div>
           </div>
 
-          <div className="rounded-xl border border-[var(--hairline)] bg-white">
+          <div className="card">
             <div className="border-b border-[var(--hairline)] px-4 py-3">
-              <h2 className="text-base font-bold text-[var(--ink-deep)]">{t.settings.dependencies}</h2>
+              <h2 className="text-base font-bold text-[var(--ink)]">{t.settings.dependencies}</h2>
             </div>
             <div className="divide-y divide-[var(--hairline)]">
               {dependencyRows.map(([name, dependency]) => (
@@ -119,10 +123,10 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
         {readiness.source === "error" ? (
           <ErrorState labels={t.states} detail={readiness.error} />
         ) : (
-        <section className="rounded-xl border border-[var(--hairline)] bg-white">
+        <section className="card">
           <div className="border-b border-[var(--hairline)] px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-base font-bold text-[var(--ink-deep)]">{t.settings.readiness}</h2>
+              <h2 className="text-base font-bold text-[var(--ink)]">{t.settings.readiness}</h2>
               <div className="flex flex-wrap gap-2">
                 {(["ready", "warning", "blocked", "planned"] as const).map((status) => (
                   <FlashStatus key={status} status={status}>
@@ -137,7 +141,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
           <StaggerList className="divide-y divide-[var(--hairline)] text-sm">
             {readiness.data.items.map((item) => (
               <div key={item.id} className="grid gap-3 px-4 py-3 lg:grid-cols-[190px_110px_1fr]">
-                <span className="font-medium text-[var(--ink-deep)]">{item.label}</span>
+                <span className="font-medium text-[var(--ink)]">{item.label}</span>
                 <FlashStatus status={item.status}>
                   <StatusPill tone={readinessTone[item.status]}>{item.status}</StatusPill>
                 </FlashStatus>
@@ -151,9 +155,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Lo
         </section>
         )}
 
-        <section className="rounded-xl border border-[var(--hairline)] bg-white">
+        <section className="card">
           <div className="border-b border-[var(--hairline)] px-4 py-3">
-            <h2 className="text-base font-bold text-[var(--ink-deep)]">{t.settings.runtime}</h2>
+            <h2 className="text-base font-bold text-[var(--ink)]">{t.settings.runtime}</h2>
           </div>
           <div className="divide-y divide-[var(--hairline)] text-sm">
             {runtimeRows[locale].map(([label, value]) => (

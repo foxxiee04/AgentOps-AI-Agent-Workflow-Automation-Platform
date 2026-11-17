@@ -16,35 +16,47 @@ export function DataNotice({ resource, labels }: { resource: Pick<ApiResource<un
     return null;
   }
   return (
-    <div role="status" className="rounded-xl border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2 text-sm text-[var(--warning-ink)]">
-      ⚠ {labels.demoBanner}
+    <div
+      role="status"
+      className="rounded-[var(--radius-control)] border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2 text-sm text-[var(--warning-ink)]"
+    >
+      <span className="mono-label mr-2 text-[var(--warning-ink)]">⚠</span>
+      {labels.demoBanner}
     </div>
   );
 }
 
 export function ErrorState({ labels, detail }: { labels: DataStateLabels; detail?: string }) {
   return (
-    <div role="alert" className="rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-4 text-sm text-[var(--danger-ink)]">
-      <p className="font-bold">✕ {labels.errorTitle}</p>
+    <div
+      role="alert"
+      className="rounded-[var(--radius-card)] border border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-4 text-sm text-[var(--danger-ink)]"
+    >
+      <p className="flex items-center gap-2 font-semibold">
+        <span aria-hidden="true" className="mono-label text-[var(--danger-ink)]">
+          ✕
+        </span>
+        {labels.errorTitle}
+      </p>
       <p className="mt-1">{labels.errorBody}</p>
-      {detail ? <p className="mt-2 break-all font-mono text-xs">{detail}</p> : null}
+      {detail ? <p className="mt-2 break-all font-mono text-xs opacity-80">{detail}</p> : null}
     </div>
   );
 }
 
 export function EmptyState({ title, body }: { title: string; body?: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-[var(--hairline-strong)] bg-[var(--surface-soft)] px-4 py-8 text-center text-sm text-[var(--body)]">
-      <p className="font-bold text-[var(--ink)]">{title}</p>
-      {body ? <p className="mt-1">{body}</p> : null}
+    <div className="card border-dashed bg-[var(--surface-soft)] px-4 py-10 text-center">
+      <p className="font-semibold text-[var(--ink)]">{title}</p>
+      {body ? <p className="mt-1 text-sm text-[var(--mute)]">{body}</p> : null}
     </div>
   );
 }
 
 export function LoadingState({ label }: { label: string }) {
   return (
-    <div role="status" aria-live="polite" className="rounded-xl border border-[var(--hairline)] bg-[var(--surface-card)] px-4 py-6 text-sm text-[var(--mute)]">
-      <span className="font-mono">[..]</span> {label}
+    <div role="status" aria-live="polite" className="card px-4 py-6 text-sm text-[var(--mute)]">
+      <span className="font-mono text-[var(--accent)]">[..]</span> {label}
     </div>
   );
 }

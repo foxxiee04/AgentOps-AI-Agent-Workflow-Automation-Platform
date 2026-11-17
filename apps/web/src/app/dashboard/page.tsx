@@ -141,9 +141,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
 
           <div className="min-w-0 space-y-6">
             <Reveal>
-              <div className="rounded-xl border border-[var(--hairline)] bg-white transition-colors duration-200 hover:border-[var(--hairline-strong)]">
+              <div className="card transition-colors duration-200">
                 <div className="border-b border-[var(--hairline)] px-4 py-3">
-                  <h2 className="text-base font-bold text-[var(--ink-deep)]">{t.dashboard.dependencies}</h2>
+                  <h2 className="text-base font-semibold text-[var(--ink)]">{t.dashboard.dependencies}</h2>
                 </div>
                 <div className="divide-y divide-[var(--hairline)]">
                   {dependencyRows.map(([name, dependency]) => (
@@ -157,9 +157,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
             </Reveal>
 
             <Reveal>
-              <div className="rounded-xl border border-[var(--hairline)] bg-white transition-colors duration-200 hover:border-[var(--hairline-strong)]">
+              <div className="card transition-colors duration-200">
                 <div className="border-b border-[var(--hairline)] px-4 py-3">
-                  <h2 className="text-base font-bold text-[var(--ink-deep)]">{t.dashboard.providers}</h2>
+                  <h2 className="text-base font-semibold text-[var(--ink)]">{t.dashboard.providers}</h2>
                 </div>
                 <div className="divide-y divide-[var(--hairline)]">
                   {providerList.map((provider) => (
