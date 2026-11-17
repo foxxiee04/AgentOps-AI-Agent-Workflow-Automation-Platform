@@ -1,3 +1,7 @@
 # Shell scripts run inside Linux containers and CI runners: keep them LF even on Windows
 # checkouts with core.autocrlf=true, or bash fails on the carriage returns.
 *.sh text eol=lf
+
+# Design artefacts (template gallery with embedded thumbnails, options page) are documentation:
+# keep them out of GitHub's language statistics.
+design/** linguist-documentation
