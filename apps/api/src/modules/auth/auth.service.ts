@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   ServiceUnavailableException,
@@ -32,6 +33,7 @@ type AuthUser = {
   avatarUrl?: string;
   provider?: "password" | "google";
   createdAt?: string;
+  isPlatformAdmin: boolean;
   workspaces: AuthUserWorkspace[];
 };
 
@@ -81,6 +83,8 @@ type UserRecord = {
   avatarUrl: string | null;
   passwordHash: string;
   createdAt: Date;
+  isPlatformAdmin?: boolean;
+  disabledAt?: Date | null;
 };
 
 @Injectable()
@@ -176,6 +180,18 @@ export class AuthService {
     }
 
     const claims = await this.verifyAccessToken(token);
+    // One primary-key lookup per request so a disabled account loses access immediately,
+    // not only when its 15-minute access token expires.
+    const account = await this.prisma.client.user.findUnique({
+      where: { id: claims.sub },
+      select: { disabledAt: true }
+    });
+    if (!account) {
+      throw new UnauthorizedException("User no longer exists");
+    }
+    if (account.disabledAt) {
+      throw new ForbiddenException("This account has been disabled");
+    }
     return { userId: claims.sub, email: claims.email };
   }
 
@@ -190,8 +206,11 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException("User no longer exists");
     }
+    if (user.disabledAt) {
+      throw new ForbiddenException("This account has been disabled");
+    }
 
-    return this.toAuthUser(user);
+    return this.toAuthUser(await this.applyPlatformAdminBootstrap(user));
   }
 
   googleAuthorizationUrl(redirectTo?: string) {
@@ -332,7 +351,11 @@ export class AuthService {
     return argon2.verify(user.passwordHash, password);
   }
 
-  private async issueSession(user: Omit<UserRecord, "passwordHash">, provider: "password" | "google" = "password"): Promise<AuthSession> {
+  private async issueSession(input: Omit<UserRecord, "passwordHash">, provider: "password" | "google" = "password"): Promise<AuthSession> {
+    if (input.disabledAt) {
+      throw new ForbiddenException("This account has been disabled");
+    }
+    const user = await this.applyPlatformAdminBootstrap(input, { recordLogin: true });
     const accessToken = await this.jwt.signAsync(
       {
         sub: user.id,
@@ -434,6 +457,39 @@ export class AuthService {
     return value === "OWNER" || value === "ADMIN" || value === "MEMBER" || value === "VIEWER" ? value : undefined;
   }
 
+  /**
+   * Grants the platform admin flag to accounts listed in PLATFORM_ADMIN_EMAILS (comma separated) and,
+   * on sign-in, records the last login time. Never removes the flag: admins demote each other in the console.
+   */
+  private async applyPlatformAdminBootstrap<T extends Omit<UserRecord, "passwordHash">>(
+    user: T,
+    options: { recordLogin?: boolean } = {}
+  ): Promise<T> {
+    const promote = !user.isPlatformAdmin && this.platformAdminEmails().has(user.email.toLowerCase());
+    if (!promote && !options.recordLogin) {
+      return user;
+    }
+
+    const updated = await this.prisma.client.user.update({
+      where: { id: user.id },
+      data: {
+        ...(promote ? { isPlatformAdmin: true } : {}),
+        ...(options.recordLogin ? { lastLoginAt: new Date() } : {})
+      }
+    });
+    return { ...user, isPlatformAdmin: updated.isPlatformAdmin };
+  }
+
+  private platformAdminEmails(): Set<string> {
+    const raw = this.config.get<string>("PLATFORM_ADMIN_EMAILS") ?? process.env.PLATFORM_ADMIN_EMAILS ?? "";
+    return new Set(
+      raw
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => email.length > 0)
+    );
+  }
+
   private async toAuthUser(user: Omit<UserRecord, "passwordHash">): Promise<AuthUser> {
     const memberships = await this.prisma.client.workspaceMember.findMany({
       where: { userId: user.id },
@@ -447,6 +503,7 @@ export class AuthService {
       name: user.name,
       avatarUrl: user.avatarUrl ?? undefined,
       createdAt: user.createdAt.toISOString(),
+      isPlatformAdmin: user.isPlatformAdmin === true,
       workspaces: memberships.map((membership) => ({
         id: membership.workspace.id,
         name: membership.workspace.name,

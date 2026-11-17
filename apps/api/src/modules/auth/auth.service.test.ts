@@ -1,4 +1,4 @@
-import { ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
+import { ForbiddenException, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it, vi } from "vitest";
 import { metricsRegistry } from "../../common/metrics/api-metrics";
@@ -180,6 +180,36 @@ describe("AuthService workspaces", () => {
   });
 });
 
+describe("AuthService platform admin and disabled accounts", () => {
+  it("grants the platform admin flag to PLATFORM_ADMIN_EMAILS on sign-in and records the last login", async () => {
+    const { service, users } = createService({ env: { PLATFORM_ADMIN_EMAILS: " Boss@AgentOps.local , other@x.io" } });
+    const session = await service.login({ email: "boss@agentops.local", password: "password123" });
+
+    expect(session.user.isPlatformAdmin).toBe(true);
+    expect(users[0]).toMatchObject({ isPlatformAdmin: true, lastLoginAt: expect.any(Date) });
+    await expect(service.me(`Bearer ${session.accessToken}`)).resolves.toMatchObject({ isPlatformAdmin: true });
+  });
+
+  it("does not grant the flag to other accounts", async () => {
+    const { service } = createService({ env: { PLATFORM_ADMIN_EMAILS: "boss@agentops.local" } });
+    const session = await service.login({ email: "operator@agentops.local", password: "password123" });
+    expect(session.user.isPlatformAdmin).toBe(false);
+  });
+
+  it("refuses sign-in, refresh and API calls for a disabled account", async () => {
+    const { service, users } = createService();
+    const session = await service.login({ email: "operator@agentops.local", password: "password123" });
+    Object.assign(users[0] as object, { disabledAt: new Date() });
+
+    await expect(service.login({ email: "operator@agentops.local", password: "password123" })).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    await expect(service.refresh({ refreshToken: session.refreshToken })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.authenticate(`Bearer ${session.accessToken}`)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.me(`Bearer ${session.accessToken}`)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
 describe("AuthService Google sign-in", () => {
   it("creates a personal workspace with an OWNER membership on first sign-in", async () => {
     const { service, workspaces, workspaceMembers } = createService({ env: googleEnv() });
@@ -330,8 +360,8 @@ function createService(options: HarnessOptions = {}) {
       users.push(user);
       return user;
     }),
-    update: vi.fn(async ({ where, data }: { where: { email: string }; data: Record<string, unknown> }) => {
-      const user = users.find((candidate) => candidate.email === where.email);
+    update: vi.fn(async ({ where, data }: { where: { id?: string; email?: string }; data: Record<string, unknown> }) => {
+      const user = users.find((candidate) => (where.id ? candidate.id === where.id : candidate.email === where.email));
       if (!user) {
         throw new Error("User not found");
       }
