@@ -53,9 +53,10 @@ export class DomainEventsService implements OnModuleInit, OnModuleDestroy {
     return event;
   }
 
-  async listRecent(): Promise<EventEnvelope[]> {
+  async listRecent(workspaceId?: string): Promise<EventEnvelope[]> {
     if (this.prisma) {
       const events = await this.prisma.client.domainEvent.findMany({
+        where: workspaceId ? { workspaceId } : undefined,
         orderBy: { createdAt: "desc" },
         take: 20
       });
@@ -75,7 +76,8 @@ export class DomainEventsService implements OnModuleInit, OnModuleDestroy {
       }));
     }
 
-    return [...this.events].slice(-20).reverse();
+    const recent = workspaceId ? this.events.filter((event) => event.workspaceId === workspaceId) : this.events;
+    return [...recent].slice(-20).reverse();
   }
 
   /** Outbox relay: periodically re-sends events whose Kafka publish failed (kafkaPublishedAt IS NULL). */
