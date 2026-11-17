@@ -7,8 +7,9 @@ import { clsx } from "clsx";
 import { motion } from "motion/react";
 import { AuthGate } from "../features/auth/auth-gate";
 import { AuthStatus } from "../features/auth/auth-status";
+import { useActiveWorkspace } from "../features/auth/use-active-workspace";
 import { apiUrl } from "../lib/api";
-import { appCopy, type Locale } from "../lib/i18n";
+import { appCopy, type AppCopy, type Locale } from "../lib/i18n";
 import BrainCircuitIcon from "../icons/brain-circuit-icon";
 import CodeXmlIcon from "../icons/code-xml-icon";
 import GearIcon from "../icons/gear-icon";
@@ -109,9 +110,52 @@ function BrandMark() {
   );
 }
 
+function WorkspaceSwitcher({ labels }: { labels: AppCopy["shell"] }) {
+  const { workspaces, active, setActiveWorkspace } = useActiveWorkspace();
+
+  if (!workspaces || workspaces.length === 0) {
+    return null;
+  }
+
+  if (workspaces.length === 1) {
+    const single = workspaces[0];
+    return (
+      <div className="hidden items-center gap-1.5 rounded-full border border-[var(--hairline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[var(--ink-deep)] sm:inline-flex">
+        <span className="max-w-[150px] truncate">{single.name}</span>
+        <span className="rounded bg-[var(--surface-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--mute)]">
+          {single.role}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center">
+      <label htmlFor="workspace-switcher" className="sr-only">
+        {labels.switchWorkspace}
+      </label>
+      <select
+        id="workspace-switcher"
+        aria-label={labels.switchWorkspace}
+        value={active?.id ?? ""}
+        onChange={(e) => setActiveWorkspace(e.target.value)}
+        className="h-8 max-w-[200px] cursor-pointer truncate rounded-full border border-[var(--hairline)] bg-white/80 px-3 py-1 text-xs font-semibold text-[var(--ink-deep)] transition-colors hover:border-[var(--hairline-strong)] focus:border-[var(--accent)] focus:outline-none"
+      >
+        {workspaces.map((ws) => (
+          <option key={ws.id} value={ws.id}>
+            {ws.id === active?.id ? `✓ ${ws.name} (${ws.role})` : `${ws.name} (${ws.role})`}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export function AppShell({ children, active, locale }: { children: ReactNode; active?: AppSection; locale: Locale }) {
   const t = appCopy[locale];
   const pathname = usePathname();
+  const { active: currentWorkspace } = useActiveWorkspace();
+  const workspaceName = currentWorkspace?.name ?? t.shell.demoWorkspace;
 
   return (
     <div className="min-h-screen text-[var(--ink)]">
@@ -138,7 +182,7 @@ export function AppShell({ children, active, locale }: { children: ReactNode; ac
         </nav>
         <div className="lumen-dark relative overflow-hidden rounded-2xl p-4">
           <p className="text-[11px] font-semibold uppercase text-[#b9b4ff]">{t.shell.workspace}</p>
-          <p className="mt-1 truncate text-sm font-bold text-white">{t.shell.demoWorkspace}</p>
+          <p className="mt-1 truncate text-sm font-bold text-white">{workspaceName}</p>
           <p className="mt-3 flex items-center gap-2 text-xs text-[#cfcbff]">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#5df2b6] opacity-60 motion-reduce:animate-none" />
@@ -157,10 +201,11 @@ export function AppShell({ children, active, locale }: { children: ReactNode; ac
               </span>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase text-[var(--mute)]">{t.shell.workspace}</p>
-                <p className="truncate text-sm font-bold text-[var(--ink-deep)]">{t.shell.demoWorkspace}</p>
+                <p className="truncate text-sm font-bold text-[var(--ink-deep)]">{workspaceName}</p>
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+              <WorkspaceSwitcher labels={t.shell} />
               <AuthStatus locale={locale} labels={t.shell} />
               <div className="hidden max-w-[320px] truncate rounded-full border border-[var(--hairline)] bg-white/70 px-3 py-1.5 font-mono text-xs text-[var(--mute)] xl:block">
                 {t.shell.api} {apiUrl}

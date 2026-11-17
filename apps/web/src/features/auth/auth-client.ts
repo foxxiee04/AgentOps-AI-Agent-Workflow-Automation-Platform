@@ -2,12 +2,22 @@
 
 import { apiUrl, refreshBrowserSession } from "../../lib/api";
 
+export type AuthWorkspaceRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+
+export type AuthWorkspace = {
+  id: string;
+  name: string;
+  slug: string;
+  role: AuthWorkspaceRole;
+};
+
 export type AuthUser = {
   id: string;
   email: string;
   name: string;
   avatarUrl?: string;
   provider?: "password" | "google";
+  workspaces?: AuthWorkspace[];
 };
 
 export type AuthSession = {
@@ -91,6 +101,11 @@ export function setAuthUser(user: AuthUser | undefined) {
 
 export async function logout(): Promise<void> {
   clearLegacyTokenStorage();
+  try {
+    document.cookie = "agentops_ws=; Path=/; Max-Age=0; SameSite=Lax";
+  } catch {
+    // Storage or cookie access can be blocked; the cleanup is best-effort.
+  }
 
   try {
     await fetch(`${apiUrl}/auth/logout`, {
@@ -128,3 +143,5 @@ export async function authPost(path: string, body: Record<string, unknown>): Pro
 export function googleAuthHref(redirectTo: string) {
   return `${apiUrl}/auth/google?redirectTo=${encodeURIComponent(redirectTo)}`;
 }
+
+export { useActiveWorkspace, setActiveWorkspace, resolveActiveWorkspace } from "./use-active-workspace";
