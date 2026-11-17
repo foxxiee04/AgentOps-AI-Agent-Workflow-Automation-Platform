@@ -298,7 +298,8 @@ export const appCopy = {
         builder: "Builder",
         approvals: "Duyệt email",
         agents: "AI Agents",
-        settings: "Cài đặt"
+        settings: "Cài đặt",
+        admin: "Quản trị"
       }
     },
     common: {
@@ -430,6 +431,163 @@ export const appCopy = {
       readiness: "Readiness vận hành",
       runtime: "Quyết định runtime"
     },
+    admin: {
+      eyebrow: "+ ADMIN",
+      title: "Quản trị hệ thống",
+      subtitle: "Thống kê toàn nền tảng và quản lý mọi tài khoản.",
+      tabs: {
+        overview: "Tổng quan",
+        accounts: "Tài khoản",
+        workspaces: "Workspace",
+        audit: "Audit log"
+      },
+      range: {
+        label: "Khoảng thời gian",
+        d7: "7 ngày",
+        d30: "30 ngày",
+        d90: "90 ngày"
+      },
+      noPermissionTitle: "Không có quyền truy cập",
+      noPermissionBody: "Bạn cần quyền quản trị viên nền tảng để mở khu vực này.",
+      overview: {
+        generatedAt: "Tạo lúc",
+        kpis: {
+          users: "Người dùng",
+          newUsers: "+{n} mới trong kỳ",
+          active7d: "Hoạt động 7 ngày",
+          workspaces: "Workspace",
+          runs: "Lượt chạy",
+          successRate: "Tỷ lệ thành công {rate}%",
+          tokens: "AI tokens",
+          pendingApprovals: "Chờ duyệt",
+          pendingDetail: "Yêu cầu đang mở",
+          disabledDetail: "{n} tài khoản bị khóa",
+          workspaceDetail: "{workflows} workflow · {active} đang hoạt động",
+          runsDetail: "{completed} xong · {failed} lỗi",
+          tokensDetail: "{calls} lượt gọi AI"
+        },
+        charts: {
+          runsTitle: "Lượt chạy mỗi ngày",
+          runsHint: "Tổng và phần thất bại",
+          signupsTitle: "Đăng ký mỗi ngày",
+          signupsHint: "Tài khoản mới",
+          tokensTitle: "AI tokens mỗi ngày",
+          tokensHint: "Token tiêu thụ",
+          approvalsTitle: "Kết quả duyệt",
+          approvalsHint: "Trong khoảng đã chọn",
+          leadsTitle: "Phân loại lead",
+          leadsHint: "Toàn nền tảng",
+          providerTitle: "Đăng ký theo provider",
+          providerHint: "Mật khẩu và Google",
+          topTitle: "Workspace nổi bật",
+          topHint: "Theo số lượt chạy",
+          noData: "Chưa có dữ liệu",
+          approved: "Đã duyệt",
+          rejected: "Từ chối",
+          pending: "Chờ duyệt",
+          high: "Tiềm năng cao",
+          low: "Tiềm năng thấp",
+          spam: "Spam",
+          password: "Mật khẩu",
+          google: "Google",
+          columns: {
+            name: "Workspace",
+            runs: "Lượt chạy",
+            members: "Thành viên",
+            tokens: "AI tokens"
+          }
+        },
+        exportTitle: "Xuất báo cáo",
+        exportBody: "Tải CSV cho khoảng thời gian đang chọn.",
+        exportUsers: "Người dùng",
+        exportWorkspaces: "Workspace",
+        exportRuns: "Lượt chạy",
+        exportUsage: "Sử dụng AI"
+      },
+      accounts: {
+        title: "Tài khoản",
+        searchPlaceholder: "Tìm theo tên hoặc email",
+        filterLabel: "Trạng thái",
+        status: {
+          all: "Tất cả",
+          active: "Đang hoạt động",
+          disabled: "Đã khóa",
+          admin: "Quản trị"
+        },
+        columns: {
+          user: "Người dùng",
+          provider: "Provider",
+          role: "Vai trò",
+          status: "Trạng thái",
+          workspaces: "Workspace",
+          created: "Tạo lúc",
+          lastLogin: "Đăng nhập cuối",
+          actions: "Thao tác"
+        },
+        roleAdmin: "Admin",
+        statusActive: "Hoạt động",
+        statusDisabled: "Đã khóa",
+        lock: "Khóa",
+        unlock: "Mở khóa",
+        grantAdmin: "Cấp quyền admin",
+        revokeAdmin: "Thu quyền admin",
+        selfHint: "Không thể thay đổi tài khoản của chính bạn",
+        confirmTitle: "Xác nhận thay đổi",
+        confirmBody: "Bạn có chắc muốn áp dụng thay đổi cho {email}?",
+        confirm: "Xác nhận",
+        cancel: "Hủy",
+        detailTitle: "Chi tiết tài khoản",
+        memberships: "Workspace tham gia",
+        noMemberships: "Tài khoản chưa thuộc workspace nào.",
+        joined: "Tham gia",
+        close: "Đóng",
+        empty: "Không tìm thấy tài khoản phù hợp.",
+        loading: "Đang tải tài khoản...",
+        prev: "Trước",
+        next: "Sau",
+        pageInfo: "Trang {page}/{totalPages} · {total} tài khoản",
+        actionFailed: "Không cập nhật được tài khoản. Đã khôi phục trạng thái trước đó.",
+        errorSelf: "Không thể thay đổi tài khoản của chính bạn.",
+        never: "Chưa đăng nhập"
+      },
+      workspaces: {
+        title: "Workspace",
+        searchPlaceholder: "Tìm theo tên, slug hoặc chủ sở hữu",
+        columns: {
+          name: "Workspace",
+          slug: "Slug",
+          owner: "Chủ sở hữu",
+          members: "Thành viên",
+          workflows: "Workflow",
+          runs: "Lượt chạy",
+          tokens: "AI tokens",
+          created: "Tạo lúc"
+        },
+        empty: "Không tìm thấy workspace phù hợp.",
+        loading: "Đang tải workspace...",
+        prev: "Trước",
+        next: "Sau",
+        pageInfo: "Trang {page}/{totalPages} · {total} workspace"
+      },
+      audit: {
+        title: "Audit log",
+        filterPlaceholder: "Lọc theo tên hành động",
+        columns: {
+          time: "Thời gian",
+          actor: "Người thực hiện",
+          action: "Hành động",
+          entity: "Đối tượng",
+          workspace: "Workspace",
+          metadata: "Metadata"
+        },
+        empty: "Chưa có bản ghi audit phù hợp.",
+        loading: "Đang tải audit log...",
+        prev: "Trước",
+        next: "Sau",
+        pageInfo: "Trang {page}/{totalPages} · {total} bản ghi",
+        details: "Xem JSON"
+      }
+    },
     states: {
       loading: "Đang tải dữ liệu...",
       errorTitle: "Không tải được dữ liệu",
@@ -526,7 +684,8 @@ export const appCopy = {
         builder: "Builder",
         approvals: "Approvals",
         agents: "Agents",
-        settings: "Settings"
+        settings: "Settings",
+        admin: "Admin"
       }
     },
     common: {
@@ -657,6 +816,163 @@ export const appCopy = {
       dependencies: "Dependencies",
       readiness: "Operational readiness",
       runtime: "Runtime decisions"
+    },
+    admin: {
+      eyebrow: "+ ADMIN",
+      title: "Platform admin",
+      subtitle: "Whole-platform statistics and account management.",
+      tabs: {
+        overview: "Overview",
+        accounts: "Accounts",
+        workspaces: "Workspaces",
+        audit: "Audit log"
+      },
+      range: {
+        label: "Time range",
+        d7: "7 days",
+        d30: "30 days",
+        d90: "90 days"
+      },
+      noPermissionTitle: "No permission",
+      noPermissionBody: "You need platform administrator rights to open this area.",
+      overview: {
+        generatedAt: "Generated",
+        kpis: {
+          users: "Users",
+          newUsers: "+{n} new in range",
+          active7d: "Active users 7d",
+          workspaces: "Workspaces",
+          runs: "Runs",
+          successRate: "Success rate {rate}%",
+          tokens: "AI tokens",
+          pendingApprovals: "Pending approvals",
+          pendingDetail: "Open requests",
+          disabledDetail: "{n} disabled accounts",
+          workspaceDetail: "{workflows} workflows · {active} active",
+          runsDetail: "{completed} done · {failed} failed",
+          tokensDetail: "{calls} AI calls"
+        },
+        charts: {
+          runsTitle: "Runs per day",
+          runsHint: "Total with failed segment",
+          signupsTitle: "Signups per day",
+          signupsHint: "New accounts",
+          tokensTitle: "AI tokens per day",
+          tokensHint: "Tokens consumed",
+          approvalsTitle: "Approval outcomes",
+          approvalsHint: "Within the selected range",
+          leadsTitle: "Lead categories",
+          leadsHint: "Whole platform",
+          providerTitle: "Signups by provider",
+          providerHint: "Password and Google",
+          topTitle: "Top workspaces",
+          topHint: "By run count",
+          noData: "No data yet",
+          approved: "Approved",
+          rejected: "Rejected",
+          pending: "Pending",
+          high: "High intent",
+          low: "Low intent",
+          spam: "Spam",
+          password: "Password",
+          google: "Google",
+          columns: {
+            name: "Workspace",
+            runs: "Runs",
+            members: "Members",
+            tokens: "AI tokens"
+          }
+        },
+        exportTitle: "Export report",
+        exportBody: "Download CSV for the selected time range.",
+        exportUsers: "Users",
+        exportWorkspaces: "Workspaces",
+        exportRuns: "Runs",
+        exportUsage: "AI usage"
+      },
+      accounts: {
+        title: "Accounts",
+        searchPlaceholder: "Search by name or email",
+        filterLabel: "Status",
+        status: {
+          all: "All",
+          active: "Active",
+          disabled: "Disabled",
+          admin: "Admin"
+        },
+        columns: {
+          user: "User",
+          provider: "Provider",
+          role: "Role",
+          status: "Status",
+          workspaces: "Workspaces",
+          created: "Created",
+          lastLogin: "Last login",
+          actions: "Actions"
+        },
+        roleAdmin: "Admin",
+        statusActive: "Active",
+        statusDisabled: "Disabled",
+        lock: "Lock",
+        unlock: "Unlock",
+        grantAdmin: "Grant admin",
+        revokeAdmin: "Revoke admin",
+        selfHint: "You cannot change your own account",
+        confirmTitle: "Confirm change",
+        confirmBody: "Apply this change to {email}?",
+        confirm: "Confirm",
+        cancel: "Cancel",
+        detailTitle: "Account detail",
+        memberships: "Workspace memberships",
+        noMemberships: "This account does not belong to any workspace yet.",
+        joined: "Joined",
+        close: "Close",
+        empty: "No matching accounts.",
+        loading: "Loading accounts...",
+        prev: "Previous",
+        next: "Next",
+        pageInfo: "Page {page}/{totalPages} · {total} accounts",
+        actionFailed: "Could not update the account. The previous state was restored.",
+        errorSelf: "You cannot change your own account.",
+        never: "Never signed in"
+      },
+      workspaces: {
+        title: "Workspaces",
+        searchPlaceholder: "Search by name, slug, or owner",
+        columns: {
+          name: "Workspace",
+          slug: "Slug",
+          owner: "Owner",
+          members: "Members",
+          workflows: "Workflows",
+          runs: "Runs",
+          tokens: "AI tokens",
+          created: "Created"
+        },
+        empty: "No matching workspaces.",
+        loading: "Loading workspaces...",
+        prev: "Previous",
+        next: "Next",
+        pageInfo: "Page {page}/{totalPages} · {total} workspaces"
+      },
+      audit: {
+        title: "Audit log",
+        filterPlaceholder: "Filter by action name",
+        columns: {
+          time: "Time",
+          actor: "Actor",
+          action: "Action",
+          entity: "Entity",
+          workspace: "Workspace",
+          metadata: "Metadata"
+        },
+        empty: "No matching audit entries.",
+        loading: "Loading audit log...",
+        prev: "Previous",
+        next: "Next",
+        pageInfo: "Page {page}/{totalPages} · {total} entries",
+        details: "View JSON"
+      }
     },
     states: {
       loading: "Loading data...",

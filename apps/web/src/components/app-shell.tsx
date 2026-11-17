@@ -22,11 +22,13 @@ import type { AnimatedIconHandle, AnimatedIconProps } from "../icons/types";
 import { LanguageSwitcher } from "./language-switcher";
 import { EASE_OUT, Reveal, useIconHover } from "./motion";
 
-export type AppSection = "dashboard" | "workflows" | "runs" | "approvals" | "builder" | "agents" | "settings";
+export type AppSection = "dashboard" | "workflows" | "runs" | "approvals" | "builder" | "agents" | "settings" | "admin";
 
 type NavIcon = ForwardRefExoticComponent<AnimatedIconProps & RefAttributes<AnimatedIconHandle>>;
 
-const navItems: Array<{ href: string; key: AppSection; Icon: NavIcon }> = [
+type NavItem = { href: string; key: AppSection; Icon: NavIcon };
+
+const navItems: NavItem[] = [
   { href: "/dashboard", key: "dashboard", Icon: LayoutDashboardIcon },
   { href: "/workflows", key: "workflows", Icon: Stack3Icon },
   { href: "/runs", key: "runs", Icon: HistoryCircleIcon },
@@ -35,6 +37,8 @@ const navItems: Array<{ href: string; key: AppSection; Icon: NavIcon }> = [
   { href: "/agents", key: "agents", Icon: BrainCircuitIcon },
   { href: "/settings", key: "settings", Icon: GearIcon }
 ];
+
+const adminNavItem: NavItem = { href: "/admin", key: "admin", Icon: GearIcon };
 
 const NAV_SPRING = { type: "spring", visualDuration: 0.35, bounce: 0 } as const;
 const SHEET_DURATION = 0.4;
@@ -189,6 +193,7 @@ function SidebarContent({
   locale,
   t,
   active,
+  items,
   navLayoutId,
   switcherId,
   onNavigate,
@@ -197,6 +202,7 @@ function SidebarContent({
   locale: Locale;
   t: AppCopy;
   active?: AppSection;
+  items: NavItem[];
   navLayoutId: string;
   switcherId: string;
   onNavigate?: () => void;
@@ -239,7 +245,7 @@ function SidebarContent({
       </div>
 
       <nav className="mt-5 min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5" aria-label={t.shell.workspace}>
-        {navItems.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.href}
             href={withLocale(item.href, locale)}
@@ -277,8 +283,9 @@ function MenuIcon() {
 export function AppShell({ children, active, locale }: { children: ReactNode; active?: AppSection; locale: Locale }) {
   const t = appCopy[locale];
   const pathname = usePathname();
-  const { active: currentWorkspace } = useActiveWorkspace();
+  const { active: currentWorkspace, user } = useActiveWorkspace();
   const workspaceName = currentWorkspace?.name ?? t.shell.demoWorkspace;
+  const visibleNavItems = user?.isPlatformAdmin ? [...navItems, adminNavItem] : navItems;
   const prefersReduced = useReducedMotion() ?? false;
   const [sheetOpen, setSheetOpen] = useState(false);
   const sectionLabel = active ? t.shell.nav[active] : t.shell.workspace;
@@ -327,6 +334,7 @@ export function AppShell({ children, active, locale }: { children: ReactNode; ac
           locale={locale}
           t={t}
           active={active}
+          items={visibleNavItems}
           navLayoutId="nav-active"
           switcherId="workspace-switcher"
         />
@@ -362,6 +370,7 @@ export function AppShell({ children, active, locale }: { children: ReactNode; ac
               locale={locale}
               t={t}
               active={active}
+              items={visibleNavItems}
               navLayoutId="nav-active-sheet"
               switcherId="workspace-switcher-sheet"
               onNavigate={() => setSheetOpen(false)}
@@ -406,7 +415,7 @@ export function AppShell({ children, active, locale }: { children: ReactNode; ac
             aria-label={navLabel}
             className="flex gap-1 overflow-x-auto border-t border-[var(--hairline)] px-2 py-1.5 lg:hidden"
           >
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.href}
                 href={withLocale(item.href, locale)}
