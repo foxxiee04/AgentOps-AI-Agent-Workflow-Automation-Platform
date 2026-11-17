@@ -9,6 +9,7 @@ import { DomainEventsModule } from "./common/domain-events/domain-events.module"
 import { InfrastructureModule } from "./common/infrastructure/infrastructure.module";
 import { RequestLoggingMiddleware } from "./common/http/request-logging.middleware";
 import { RequestIdMiddleware } from "./common/http/request-id.middleware";
+import { AdminModule } from "./modules/admin/admin.module";
 import { AiModule } from "./modules/ai/ai.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -30,6 +31,7 @@ import { WorkspacesModule } from "./modules/workspaces/workspaces.module";
     HealthModule,
     MetricsModule,
     AuthModule,
+    AdminModule,
     WorkspacesModule,
     WorkflowsModule,
     WorkflowRunsModule,
