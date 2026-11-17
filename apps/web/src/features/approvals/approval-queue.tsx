@@ -95,7 +95,7 @@ export function ApprovalOutcomes({ outcomes, locale }: { outcomes: RecentApprova
   const copy = approvalCopy[locale];
   return (
     <section className="space-y-2" aria-label={copy.recentlyDecided}>
-      <h2 className="font-mono text-xs font-bold uppercase text-[var(--mute)]">{copy.recentlyDecided}</h2>
+       <h2 className="mono-label">{copy.recentlyDecided}</h2>
       {outcomes.map((outcome) => (
         <Reveal key={`${outcome.approvalId}-${outcome.at}`}>
           <ApprovalSuccessLine

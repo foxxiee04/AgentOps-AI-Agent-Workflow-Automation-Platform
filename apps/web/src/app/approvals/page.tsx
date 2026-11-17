@@ -13,12 +13,14 @@ export default async function ApprovalsPage({ searchParams }: { searchParams?: L
   if (!active) {
     return (
       <AppShell active="approvals" locale={locale}>
-        <div className="space-y-6 p-5">
-          <div className="border-b border-[var(--hairline)] pb-4">
-            <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.approvals.eyebrow}</p>
-            <ApprovalsHeading>{t.approvals.title}</ApprovalsHeading>
-            <p className="mt-1 text-sm text-[var(--body)]">{t.approvals.intro}</p>
-          </div>
+        <div className="space-y-6 p-5 lg:p-8">
+          <header className="page-header">
+            <div className="min-w-0">
+              <p className="mono-label">{t.approvals.eyebrow}</p>
+              <ApprovalsHeading>{t.approvals.title}</ApprovalsHeading>
+              <p className="mt-1 text-sm text-[var(--body)]">{t.approvals.intro}</p>
+            </div>
+          </header>
           <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
         </div>
       </AppShell>
@@ -27,12 +29,14 @@ export default async function ApprovalsPage({ searchParams }: { searchParams?: L
 
   return (
     <AppShell active="approvals" locale={locale}>
-      <div className="space-y-6 p-5">
-        <div className="border-b border-[var(--hairline)] pb-4">
-          <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.approvals.eyebrow}</p>
-          <ApprovalsHeading>{t.approvals.title}</ApprovalsHeading>
-          <p className="mt-1 text-sm text-[var(--body)]">{t.approvals.intro}</p>
-        </div>
+      <div className="space-y-6 p-5 lg:p-8">
+        <header className="page-header">
+          <div className="min-w-0">
+            <p className="mono-label">{t.approvals.eyebrow}</p>
+            <ApprovalsHeading>{t.approvals.title}</ApprovalsHeading>
+            <p className="mt-1 text-sm text-[var(--body)]">{t.approvals.intro}</p>
+          </div>
+        </header>
         <ApprovalQueue labels={t.approvals} states={t.states} locale={locale} workspaceId={active.id} />
       </div>
     </AppShell>

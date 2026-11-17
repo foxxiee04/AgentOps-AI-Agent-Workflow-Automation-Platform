@@ -165,20 +165,20 @@ export function ApprovalDraftPanel({
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-mono text-xs font-bold uppercase text-[var(--mute)]">{labels.email}</h3>
+        <h3 className="mono-label">{labels.email}</h3>
         {approval.status === "WAITING_APPROVAL" ? (
           <button
             type="button"
             onClick={onToggle}
             aria-pressed={editing}
-            className="min-h-9 rounded-xl border border-[var(--hairline-strong)] px-3 text-xs font-semibold"
+            className="inline-flex min-h-9 items-center rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] px-3 text-xs font-semibold text-[var(--ink)]"
           >
             {editing ? copy.close : copy.edit}
           </button>
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-[var(--hairline)] bg-[var(--surface-soft)]">
+      <div className="rounded-[var(--radius-card)] border border-[var(--hairline)] bg-[var(--surface-raised)] shadow-[var(--shadow-sm)]">
         {editing ? (
           <motion.div
             className="space-y-2 px-3 py-3"
@@ -195,7 +195,7 @@ export function ApprovalDraftPanel({
                 value={draft.subject}
                 maxLength={300}
                 onChange={(event) => onChange({ ...draft, subject: event.target.value })}
-                className="w-full rounded-xl border border-[var(--hairline-strong)] bg-white px-3 py-2 text-sm"
+                className="field w-full rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -208,14 +208,14 @@ export function ApprovalDraftPanel({
                 maxLength={10000}
                 rows={8}
                 onChange={(event) => onChange({ ...draft, body: event.target.value })}
-                className="w-full rounded-xl border border-[var(--hairline-strong)] bg-white px-3 py-2 text-sm leading-6"
+                 className="field w-full rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] px-3 py-2 text-sm leading-6"
               />
             </div>
             <button
               type="button"
               onClick={onUndo}
               disabled={!edited}
-              className="min-h-9 rounded-xl border border-[var(--hairline-strong)] px-3 text-xs font-semibold disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
+              className="inline-flex min-h-9 items-center rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] px-3 text-xs font-semibold text-[var(--ink)] disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
             >
               {copy.undo}
             </button>
@@ -224,7 +224,7 @@ export function ApprovalDraftPanel({
           <>
             <p className="border-b border-[var(--hairline)] px-3 py-2">
               <span className="text-[var(--mute)]">{labels.subject}: </span>
-              <span className="font-bold text-[var(--ink)]">{email.subject ?? "-"}</span>
+              <span className="font-display text-[var(--ink)]">{email.subject ?? "-"}</span>
             </p>
             <p className="whitespace-pre-wrap px-3 py-3 leading-6 text-[var(--ink)]" aria-label={labels.body}>
               {email.body ?? "-"}
@@ -288,7 +288,7 @@ export function ApprovalCard({
   };
 
   return (
-    <article className="rounded-xl border border-[var(--hairline)] bg-[var(--surface-card)]" aria-labelledby={`title-${approval.id}`}>
+    <article className="card" aria-labelledby={`title-${approval.id}`}>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] px-4 py-3">
         <div className="min-w-0">
           <h2 id={`title-${approval.id}`} className="truncate text-base font-bold text-[var(--ink)]">
@@ -303,7 +303,7 @@ export function ApprovalCard({
           <Link
             {...openRunHandlers}
             href={`/runs/${approval.workflowRunId}?lang=${locale}`}
-            className="inline-flex items-center gap-2 rounded-xl border border-[var(--hairline-strong)] px-3 py-1 text-sm font-semibold"
+             className="inline-flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] px-3 text-sm font-semibold text-[var(--ink)]"
           >
             <span aria-hidden="true" inert className="inline-flex shrink-0">
               <EyeIcon ref={openRunRef} size={16} strokeWidth={1.75} />
@@ -316,7 +316,7 @@ export function ApprovalCard({
       <div className="grid gap-4 px-4 py-4 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="space-y-3">
           <div>
-            <h3 className="font-mono text-xs font-bold uppercase text-[var(--mute)]">{labels.lead}</h3>
+            <h3 className="mono-label">{labels.lead}</h3>
             <dl className="mt-1 space-y-1">
               {Object.entries(lead)
                 .filter(([, value]) => value !== undefined && value !== null && value !== "")
@@ -329,7 +329,7 @@ export function ApprovalCard({
             </dl>
           </div>
           <div>
-            <h3 className="font-mono text-xs font-bold uppercase text-[var(--mute)]">{labels.assessment}</h3>
+            <h3 className="mono-label">{labels.assessment}</h3>
             <dl className="mt-1 space-y-1">
               <Row label={labels.score} value={assessment.leadScore !== undefined ? String(assessment.leadScore) : "-"} />
               <Row label={labels.category} value={assessment.category ?? "-"} />
@@ -374,7 +374,7 @@ export function ApprovalCard({
                   setProblem(undefined);
                   onCommentChange(event.target.value);
                 }}
-                className="w-full rounded-xl border border-[var(--hairline-strong)] bg-white px-3 py-2 text-sm"
+                className="field w-full rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] px-3 py-2 text-sm"
               />
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -382,7 +382,7 @@ export function ApprovalCard({
                   {...approveHandlers}
                   disabled={busy}
                   onClick={() => decide("approve")}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--mute)]"
+                   className="btn btn-primary inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-control)] bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--mute)]"
                 >
                   <span aria-hidden="true" inert className="inline-flex shrink-0">
                     <SendIcon ref={approveRef} size={16} strokeWidth={1.75} />
@@ -394,7 +394,7 @@ export function ApprovalCard({
                   {...rejectHandlers}
                   disabled={busy}
                   onClick={() => decide("reject")}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-[var(--danger)] bg-white px-4 text-sm font-semibold text-[var(--danger-ink)] disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
+                   className="btn btn-secondary inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-card)] px-4 text-sm font-semibold text-[var(--danger-ink)] disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
                 >
                   <span aria-hidden="true" inert className="inline-flex shrink-0">
                     <XIcon ref={rejectRef} size={16} strokeWidth={1.75} />
@@ -407,7 +407,7 @@ export function ApprovalCard({
           ) : null}
 
           {problem ? (
-            <p role="alert" className="rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--danger-ink)]">
+             <p role="alert" className="rounded-[var(--radius-control)] border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--danger-ink)]">
               ⚠ {problem}
             </p>
           ) : null}
@@ -436,7 +436,7 @@ export function ApprovalSuccessLine({ message, runId, locale }: { message: strin
   const { ref: openRunRef, ...openRunHandlers } = useIconHover();
 
   return (
-    <p role="status" className="rounded-xl border border-[var(--hairline)] bg-[var(--surface-card)] px-4 py-3 font-mono text-sm text-[var(--ink)]">
+    <p role="status" className="rounded-[var(--radius-control)] border border-[var(--hairline)] bg-[var(--surface-card)] px-4 py-3 font-mono text-sm text-[var(--ink)]">
       ✓ {message} ·{" "}
       <Link
         {...openRunHandlers}

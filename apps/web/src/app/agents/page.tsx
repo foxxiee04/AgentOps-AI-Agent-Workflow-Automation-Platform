@@ -18,11 +18,13 @@ export default async function AgentsPage({ searchParams }: { searchParams?: Loca
 
   return (
     <AppShell active="agents" locale={locale}>
-      <div className="space-y-8 p-5">
-        <div className="border-b border-[var(--hairline)] pb-4">
-          <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.agents.eyebrow}</p>
-          <h1 className="mt-1 text-3xl font-bold leading-tight text-[var(--ink-deep)]">{t.agents.title}</h1>
-        </div>
+      <div className="space-y-8 p-5 lg:p-8">
+        <header className="page-header">
+          <div className="min-w-0">
+            <p className="mono-label">{t.agents.eyebrow}</p>
+            <h1 className="mt-1 font-display text-[34px] font-medium leading-tight text-[var(--ink)]">{t.agents.title}</h1>
+          </div>
+        </header>
 
         <DataNotice resource={{ source: providers.source === "fallback" || usage.source === "fallback" ? "fallback" : "api" }} labels={t.states} />
 
@@ -36,14 +38,14 @@ export default async function AgentsPage({ searchParams }: { searchParams?: Loca
           <MetricCard label={t.agents.tokens} value={usage.data.tokensUsedToday} detail={usage.data.workspaceId} />
         </section>
 
-        <section className="rounded-xl border border-[var(--hairline)] bg-white">
+        <section className="card lumen-card-lift">
           <div className="border-b border-[var(--hairline)] px-4 py-3">
-            <h2 className="text-base font-bold text-[var(--ink-deep)]">{t.agents.providers}</h2>
+            <h2 className="text-base font-semibold text-[var(--ink)]">{t.agents.providers}</h2>
           </div>
           <StaggerList className="divide-y divide-[var(--hairline)]">
             {providers.data.providers.map((provider) => (
               <div key={provider.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_auto_auto] md:items-center">
-                <span className="font-medium">{provider.id}</span>
+                <span className="font-medium text-[var(--ink)]">{provider.id}</span>
                 <span className="text-[var(--mute)]">{provider.defaultModel}</span>
                 <StatusPill tone={provider.status === "ready" || provider.status === "configured" ? "success" : "warning"}>
                   {provider.status}

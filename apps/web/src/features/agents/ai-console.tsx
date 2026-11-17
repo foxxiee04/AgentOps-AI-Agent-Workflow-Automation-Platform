@@ -84,9 +84,9 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
 
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-      <section className="rounded-xl border border-[var(--hairline)] bg-white">
+      <section className="card">
         <div className="border-b border-[var(--hairline)] px-4 py-3">
-          <h2 className="text-base font-bold text-[var(--ink-deep)]">{copy.consoleTitle}</h2>
+          <h2 className="text-base font-semibold text-[var(--ink)]">{copy.consoleTitle}</h2>
         </div>
         <div className="space-y-3 p-4">
           <label className="block text-sm font-semibold text-[var(--mute)]" htmlFor="ai-input">
@@ -96,27 +96,27 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
             id="ai-input"
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            className="min-h-56 w-full rounded-xl border border-[var(--hairline)] bg-[var(--surface-soft)] p-3 font-mono text-sm text-[var(--ink-deep)] outline-none focus:border-[var(--accent)] focus:bg-white"
+            className="min-h-56 w-full rounded-[var(--radius-control)] border border-[var(--hairline-strong)] bg-[var(--surface-soft)] p-3 font-mono text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)] focus:bg-[var(--surface-card)] focus:shadow-[0_0_0_3px_var(--accent-soft)]"
           />
           <button
             type="button"
             {...testIconHandlers}
             onClick={testAgent}
             disabled={isLoading}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+            className="btn btn-primary inline-flex min-h-10 items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--accent)] px-4 text-sm font-semibold text-white disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
           >
             <span aria-hidden="true" className="inline-flex shrink-0">
               <SparklesIcon ref={testIconRef} size={16} strokeWidth={1.75} />
             </span>
             {isLoading ? copy.testing : copy.testAgent}
           </button>
-          {error ? <p className="rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-ink)]">⚠ {error}</p> : null}
+          {error ? <p className="rounded-[var(--radius-control)] border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-ink)]">⚠ {error}</p> : null}
         </div>
       </section>
 
-      <section className="rounded-xl border border-[var(--hairline)] bg-white">
+      <section className="card">
         <div className="border-b border-[var(--hairline)] px-4 py-3">
-          <h2 className="text-base font-bold text-[var(--ink-deep)]">{copy.outputTitle}</h2>
+          <h2 className="text-base font-semibold text-[var(--ink)]">{copy.outputTitle}</h2>
         </div>
         <div className="p-4">
           {result ? (
@@ -127,7 +127,7 @@ export function AiConsole({ labels = defaultLabels }: { labels?: Partial<AiConso
                   <p>[model] {result.modelName}</p>
                   <p>[schema] {result.validation.schemaValid ? copy.valid : copy.invalid}</p>
                 </div>
-                <pre className="max-h-96 overflow-auto rounded-xl bg-[var(--surface-soft)] p-3 text-xs leading-5 text-[var(--body)]">
+                 <pre className="max-h-96 overflow-auto rounded-[var(--radius-control)] bg-[var(--surface-soft)] p-3 text-xs leading-5 text-[var(--body)]">
                   {JSON.stringify(result.result, null, 2)}
                 </pre>
               </div>
