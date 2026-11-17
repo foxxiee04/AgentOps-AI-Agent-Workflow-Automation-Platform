@@ -9,12 +9,12 @@ const StaggerIndexContext = createContext(0);
 type RevealMotionProps = Omit<HTMLMotionProps<"div">, "initial" | "animate" | "variants">;
 
 export interface RevealProps extends RevealMotionProps {
-  /** Extra delay in seconds (kept short; the terminal reveal is 0.35s). */
+  /** Extra delay in seconds (kept short; the app reveal is 0.4s). */
   delay?: number;
 }
 
 /**
- * Fade + 8px rise on first mount. Runs once per mount, so background
+ * Fade + 20px rise on first mount. Runs once per mount, so background
  * refetches never replay it.
  */
 export function Reveal({ children, delay = 0, transition, ...rest }: RevealProps) {
@@ -71,7 +71,7 @@ export interface StaggerItemProps extends RevealMotionProps {
 }
 
 /**
- * One staggered child. The first 8 items get `index * 0.05s`; the rest share
+ * One staggered child. The first 8 items get `index * 0.08s`; the rest share
  * the last item's delay instead of trailing further behind.
  */
 export function StaggerItem({ children, delay = 0, transition, ...rest }: StaggerItemProps) {

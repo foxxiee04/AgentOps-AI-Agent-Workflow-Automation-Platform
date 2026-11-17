@@ -1,22 +1,30 @@
 import type { Metadata } from "next";
-import { Be_Vietnam_Pro, JetBrains_Mono } from "next/font/google";
+import { Inter_Tight, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import type { ReactNode } from "react";
 import { resolvePublicApiUrl, runtimeConfigScript } from "../lib/runtime-config";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "500", "700"],
+const playfairDisplay = Playfair_Display({
+  subsets: ["latin", "latin-ext", "vietnamese"],
+  weight: ["400", "500"],
+  style: ["normal", "italic"],
   display: "swap",
-  variable: "--font-mono"
+  variable: "--font-display"
 });
 
-const beVietnamPro = Be_Vietnam_Pro({
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "500", "600", "700", "800"],
+const interTight = Inter_Tight({
+  subsets: ["latin", "latin-ext", "vietnamese"],
+  weight: ["400", "500", "600"],
   display: "swap",
   variable: "--font-sans"
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin", "latin-ext", "vietnamese"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-mono"
 });
 
 export const metadata: Metadata = {
@@ -29,7 +37,7 @@ export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className={`${beVietnamPro.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${playfairDisplay.variable} ${interTight.variable} ${jetbrainsMono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: runtimeConfigScript({ apiUrl: resolvePublicApiUrl() }) }} />
       </head>
