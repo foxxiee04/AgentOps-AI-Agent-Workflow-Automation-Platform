@@ -1,5 +1,5 @@
 import { AppShell } from "../../components/app-shell";
-import { DataNotice, ErrorState } from "../../components/data-state";
+import { DataNotice, EmptyState, ErrorState } from "../../components/data-state";
 import { StatusPill, type StatusPillTone } from "../../components/status-pill";
 import { FlashStatus, StaggerList } from "../../features/agents/ai-console";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../../lib/api";
 import { safeApiGet } from "../../lib/server-api";
 import { appCopy, resolveLocale, type LocaleSearchParams } from "../../lib/i18n";
+import { getActiveWorkspace } from "../../lib/workspace";
 
 const runtimeRows = {
   vi: [
@@ -43,9 +44,25 @@ const readinessTone: Record<ReadinessStatus, StatusPillTone> = {
 export default async function SettingsPage({ searchParams }: { searchParams?: LocaleSearchParams }) {
   const locale = await resolveLocale(searchParams);
   const t = appCopy[locale];
+  const { active } = await getActiveWorkspace();
+
+  if (!active) {
+    return (
+      <AppShell active="settings" locale={locale}>
+        <div className="space-y-8 p-5">
+          <div className="border-b border-[var(--hairline)] pb-4">
+            <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.settings.eyebrow}</p>
+            <h1 className="mt-1 text-3xl font-bold leading-tight text-[var(--ink-deep)]">{t.settings.title}</h1>
+          </div>
+          <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
+        </div>
+      </AppShell>
+    );
+  }
+
   const [health, readiness] = await Promise.all([
     safeHealthGet<HealthReady>("/health/ready", fallbackHealth),
-    safeApiGet<DashboardReadiness>("/dashboard/readiness", fallbackReadiness)
+    safeApiGet<DashboardReadiness>(`/dashboard/readiness?workspaceId=${encodeURIComponent(active.id)}`, fallbackReadiness)
   ]);
   const dependencyRows =
     health.source === "error"

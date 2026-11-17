@@ -387,7 +387,7 @@ export function fetchRunSteps(runId: string) {
   return clientApiGet(`/workflow-runs/${encodeURIComponent(runId)}/steps`, workflowRunStepsViewSchema);
 }
 
-export function fetchPendingApprovals(workspaceId = "ws_demo") {
+export function fetchPendingApprovals(workspaceId: string) {
   return clientApiGet(`/workflow-runs/approvals?workspaceId=${encodeURIComponent(workspaceId)}`, runSchemas.approvals);
 }
 

@@ -6,6 +6,7 @@ import { WorkflowsHeading, WorkflowStagger } from "../../features/workflows/work
 import { fallbackWorkflows, type WorkflowView } from "../../lib/api";
 import { safeApiGet } from "../../lib/server-api";
 import { appCopy, resolveLocale, type LocaleSearchParams } from "../../lib/i18n";
+import { getActiveWorkspace } from "../../lib/workspace";
 
 const statusTone: Record<WorkflowView["status"], StatusPillTone> = {
   DRAFT: "warning",
@@ -17,7 +18,25 @@ const statusTone: Record<WorkflowView["status"], StatusPillTone> = {
 export default async function WorkflowsPage({ searchParams }: { searchParams?: LocaleSearchParams }) {
   const locale = await resolveLocale(searchParams);
   const t = appCopy[locale];
-  const workflows = await safeApiGet<WorkflowView[]>("/workflows?workspaceId=ws_demo", fallbackWorkflows);
+  const { active } = await getActiveWorkspace();
+
+  if (!active) {
+    return (
+      <AppShell active="workflows" locale={locale}>
+        <div className="space-y-8 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
+            <div>
+              <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.workflows.eyebrow}</p>
+              <WorkflowsHeading>{t.workflows.title}</WorkflowsHeading>
+            </div>
+          </div>
+          <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
+        </div>
+      </AppShell>
+    );
+  }
+
+  const workflows = await safeApiGet<WorkflowView[]>(`/workflows?workspaceId=${encodeURIComponent(active.id)}`, fallbackWorkflows);
 
   return (
     <AppShell active="workflows" locale={locale}>
@@ -27,7 +46,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
             <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.workflows.eyebrow}</p>
             <WorkflowsHeading>{t.workflows.title}</WorkflowsHeading>
           </div>
-          <CreateFromTemplateButton labels={t.workflows} locale={locale} />
+          <CreateFromTemplateButton labels={t.workflows} locale={locale} workspaceId={active.id} />
         </div>
 
         <DataNotice resource={workflows} labels={t.states} />

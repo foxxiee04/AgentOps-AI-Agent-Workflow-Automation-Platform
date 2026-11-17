@@ -7,6 +7,7 @@ import type { SalesTaskView } from "@agentops/shared";
 import { DURATION, EASE_OUT, useIconHover } from "../../components/motion";
 import CheckedIcon from "../../icons/checked-icon";
 import { apiUrl, readError } from "../../lib/api";
+import { getWorkspaceCookie } from "../auth/use-active-workspace";
 import type { Locale } from "../../lib/i18n";
 import { formatDateTime } from "../../lib/status";
 
@@ -57,8 +58,14 @@ export function sortSalesTasks<T extends SalesTaskItem>(tasks: T[]): T[] {
   return [...open, ...done];
 }
 
-export async function updateSalesTask(id: string, status: "OPEN" | "DONE"): Promise<SalesTaskItem> {
-  const response = await fetch(`${apiUrl}/dashboard/sales-tasks/${encodeURIComponent(id)}`, {
+export async function updateSalesTask(
+  id: string,
+  status: "OPEN" | "DONE",
+  workspaceId?: string
+): Promise<SalesTaskItem> {
+  const ws = workspaceId ?? getWorkspaceCookie();
+  const query = ws ? `?workspaceId=${encodeURIComponent(ws)}` : "";
+  const response = await fetch(`${apiUrl}/dashboard/sales-tasks/${encodeURIComponent(id)}${query}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -78,11 +85,12 @@ export const updateSalesTaskStatus = updateSalesTask;
 export default SalesTaskList;
 export async function toggleSalesTask(
   idOrTask: string | { id: string; status?: unknown },
-  currentStatus?: unknown
+  currentStatus?: unknown,
+  workspaceId?: string
 ): Promise<SalesTaskItem> {
   const id = typeof idOrTask === "string" ? idOrTask : idOrTask.id;
   const status = typeof idOrTask === "string" ? currentStatus : (currentStatus ?? idOrTask.status);
-  return updateSalesTask(id, nextSalesTaskStatus(status));
+  return updateSalesTask(id, nextSalesTaskStatus(status), workspaceId);
 }
 
 function moreLabel(more: string, hidden: number) {
@@ -147,13 +155,16 @@ export function SalesTaskList({
   tasks,
   labels,
   locale,
-  limit = DEFAULT_LIMIT
+  limit = DEFAULT_LIMIT,
+  workspaceId: propWorkspaceId
 }: {
   tasks: SalesTaskItem[];
   labels: SalesTaskLabels;
   locale: Locale;
   limit?: number;
+  workspaceId?: string;
 }) {
+  const workspaceId = propWorkspaceId ?? getWorkspaceCookie();
   const [items, setItems] = useState<SalesTaskItem[]>(() => sortSalesTasks(tasks));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const reduce = useReducedMotion() ?? false;
@@ -177,14 +188,14 @@ export function SalesTaskList({
         return nextErrors;
       });
       try {
-        const updated = await updateSalesTask(task.id, next);
+        const updated = await updateSalesTask(task.id, next, workspaceId);
         setItems((prev) => prev.map((t) => (t.id === task.id ? { ...t, ...updated } : t)));
       } catch {
         setItems((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: currentStatus } : t)));
         setErrors((prev) => ({ ...prev, [task.id]: "⚠" }));
       }
     },
-    []
+    [workspaceId]
   );
 
   return (
