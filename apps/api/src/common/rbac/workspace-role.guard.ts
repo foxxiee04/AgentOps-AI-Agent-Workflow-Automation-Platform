@@ -85,6 +85,14 @@ export class WorkspaceRoleGuard implements CanActivate {
       return id;
     }
 
+    if (scope === "workspaceQuery") {
+      const id = request.query?.workspaceId;
+      if (typeof id !== "string" || id.length === 0) {
+        throw new BadRequestException("No workspace can be resolved for this request");
+      }
+      return id;
+    }
+
     if (scope === "runParam") {
       const runId = request.params?.id;
       if (!runId) {
