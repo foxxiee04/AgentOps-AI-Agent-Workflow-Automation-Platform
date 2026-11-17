@@ -178,7 +178,7 @@ erDiagram
 
 ## 3. Web application
 
-The web app uses the **Lumen** design direction: a bright pearl canvas with a soft aurora wash, deep indigo ink, an iris gradient accent, 12-20 px radii and layered soft shadows. Body text is Be Vietnam Pro (Latin and Vietnamese); JetBrains Mono is kept for identifiers and code. Motion is short and purposeful (reveal on mount, count-up numbers, spring navigation indicator) and respects `prefers-reduced-motion`. The interface is available in English and Vietnamese.
+The web app uses the **Moss Atelier** design direction (since 2026-11-17, replacing Lumen): a warm stone canvas with a soft mist wash, ink-green text, one moss accent, hairline grids, mono labels and glass surfaces. Display lines use Playfair Display (it has Vietnamese glyphs; Instrument Serif does not), body and UI use Inter Tight, and JetBrains Mono is kept for labels, ids and data. Lime is reserved for live/running states. Motion is short and purposeful (reveal on mount, count-up numbers, mask-line headlines, live chip pulse) and respects `prefers-reduced-motion`. The interface is available in English and Vietnamese. The tokens and component rules are in `apps/web/DESIGN.md`; the full brief is `design/design-brief.md`.
 
 ### 3.1 Landing page
 
@@ -186,13 +186,13 @@ The web app uses the **Lumen** design direction: a bright pearl canvas with a so
 
 ### 3.2 Login
 
-Sessions use HttpOnly access and refresh cookies. Local demo accounts under `@agentops.local` are created on first login when `DEMO_LOGIN_ENABLED` allows it; production has it disabled.
+Sessions use HttpOnly access and refresh cookies. Local demo accounts under `@agentops.local` are created on first login when `DEMO_LOGIN_ENABLED` allows it; production has it disabled. Google sign-in uses the server authorization-code flow at `GET /auth/google` → `/auth/google/callback`; a first-time Google user gets a personal workspace with role `OWNER`. The account picker and OAuth URIs are configured per environment in Google Cloud Console.
 
 ![Login](images/app/02-login.png)
 
 ### 3.3 Dashboard
 
-Four headline metrics, run activity, run outcomes and lead quality charts, the scored-lead table (contact fields masked), the sales task list, recent runs, dependency readiness, AI providers and the live event stream.
+Four headline metrics, run activity, run outcomes and lead quality charts, the scored-lead table (contact fields masked), the sales task list, recent runs, dependency readiness, AI providers and the live event stream. Every dashboard endpoint is scoped to one workspace through `?workspaceId=` and a `VIEWER` membership. The active workspace is resolved server-side from the `agentops_ws` cookie (falling back to the user's first workspace) and can be changed with the workspace switcher in the sidebar; `GET /auth/me` returns the caller's `workspaces` with their roles.
 
 ![Dashboard](images/app/03-dashboard.png)
 
@@ -228,7 +228,7 @@ The agents screen shows providers, today's calls and tokens against the quota, a
 
 ### 3.8 Mobile
 
-Below 1024 px the sidebar becomes a horizontal navigation bar and tables scroll inside their cards.
+Below 1024 px the sidebar becomes a sheet and tables scroll inside their cards.
 
 <img src="images/app/11-mobile-dashboard.png" alt="Mobile dashboard" width="320" />
 
@@ -346,8 +346,8 @@ Seventeen rules in five groups (`infrastructure/observability/prometheus/rules/a
 
 | Control | Implementation |
 | --- | --- |
-| Authentication | argon2 password hashes; short-lived JWT access token and rotating refresh token in HttpOnly, `Secure`, `SameSite=Lax` cookies |
-| Authorization | Workspace roles OWNER, ADMIN, MEMBER, VIEWER enforced by a guard on every workspace route |
+| Authentication | argon2 password hashes; short-lived JWT access token and rotating refresh token in HttpOnly, `Secure`, `SameSite=Lax` cookies; Google sign-in through a signed-state authorization-code flow |
+| Authorization | Workspace roles OWNER, ADMIN, MEMBER, VIEWER enforced by a guard on every workspace route; all `GET /dashboard/*` calls require `workspaceId` and filter by it |
 | Rate limiting | 120 requests per minute per client, 10 per minute on auth endpoints |
 | PII | Contact fields masked in every API view and in AI prompts |
 | AI safety | Prompt-injection detection, JSON Schema validation of AI output, daily call and token quotas |
@@ -363,7 +363,7 @@ Details: [security.md](security.md).
 
 | Layer | Tooling | Scope |
 | --- | --- | --- |
-| Unit | Vitest | Graph validation, AI helpers, views, React components (84 web tests) |
+| Unit | Vitest | Graph validation, AI helpers, views, React components (106 web tests; 310 API, worker and package tests) |
 | Integration | Vitest + throwaway PostgreSQL and Kafka (`pnpm test:integration`) | API with real persistence and messaging |
 | End to end | Playwright, 12 scenarios | UI lead flow, navigation and auth gate, pipeline through the public API |
 | AI evaluation | Golden set (`pnpm eval:leads`) | Lead classification accuracy and hot-lead miss rate |
