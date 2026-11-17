@@ -141,6 +141,21 @@ Every `GET /dashboard/*` route requires `?workspaceId=` and a membership with ro
 
 Dashboard overview, run lists, usage metrics, recent activity, and readiness now read persisted workflow/run/event/usage state instead of process-local memory.
 
+## Platform Admin
+
+Every route under `/admin` requires a platform administrator (`User.isPlatformAdmin`, checked from the database on each
+request by `PlatformAdminGuard`); others get 403. `GET /auth/me` returns `isPlatformAdmin`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/admin/overview?days=7\|30\|90` | Platform totals (users, active users 7d, workspaces, workflows, runs by status, success rate, approvals, AI calls/tokens, lead categories, sales tasks), one series row per day (signups, runs, failed runs, AI tokens, approvals), top 5 workspaces by runs, signups by provider. |
+| GET | `/admin/users?q=&status=all\|active\|disabled\|admin&page=&pageSize=` | Paged accounts with provider, admin flag, status, workspaces count, created and last login time. |
+| GET | `/admin/users/:id` | One account with its workspace memberships. |
+| PATCH | `/admin/users/:id` | `{ disabled?, isPlatformAdmin? }`. Disabling revokes all refresh tokens; every change writes an `AuditLog` row with `workspaceId = null`. An admin cannot change their own account (400). |
+| GET | `/admin/workspaces?q=&page=&pageSize=` | Paged workspaces with owner, members, workflows, runs and AI tokens. |
+| GET | `/admin/audit?action=&page=&pageSize=` | Audit log across the platform, newest first. |
+| GET | `/admin/reports/{users\|workspaces\|runs\|usage}.csv?days=` | CSV download (UTF-8 with BOM, formula-injection safe). `runs` and `usage` are limited to the range. |
+
 ## Notifications And Alert Bot
 
 ```txt

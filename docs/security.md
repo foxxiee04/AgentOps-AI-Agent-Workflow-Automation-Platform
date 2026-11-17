@@ -15,6 +15,10 @@ Security is part of the MVP, not a later polish step.
 
 ## Authorization
 
+- Platform administrators: `User.isPlatformAdmin`. Accounts listed in `PLATFORM_ADMIN_EMAILS` (comma separated; in production it lives in the Secrets Manager secret `agentops/prod/app`, not in the repository) get the flag on sign-in; admins grant or revoke it for others in the admin console. The flag is never removed automatically.
+- Disabled accounts (`User.disabledAt`): sign-in, Google sign-in and refresh are refused with 403/401, all refresh tokens are revoked when the account is disabled, and the global JWT guard checks the flag on every request, so an existing session loses access immediately rather than when its 15-minute access token expires.
+- Admin console actions (disable, enable, grant, revoke) are written to `AuditLog` with `workspaceId = null` and the acting admin; admins cannot change their own account.
+
 Roles:
 
 ```txt
