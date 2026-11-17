@@ -1,10 +1,15 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { landingCopy, type Locale } from "../../lib/i18n";
-import { MaskHeading, Reveal } from "../motion";
+import { Magnetic, MaskHeading, Reveal } from "../motion";
 import { WorkflowObject } from "./workflow-object";
+
+// three.js stays out of the server bundle and off the critical path: the HTML workflow object
+// renders first and remains for reduced motion or devices without WebGL.
+const HeroSculpture = dynamic(() => import("./hero-sculpture"), { ssr: false });
 
 /** Serif headline with exactly one italicised emphasised word. */
 function Headline({ text, italic }: { text: string; italic: string }) {
@@ -54,12 +59,16 @@ export function Hero({ locale }: { locale: Locale }) {
           </Reveal>
           <Reveal delay={0.4}>
             <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link href={appHref} className="btn btn-primary min-h-12 px-6 text-[15px]">
-                {t.primaryCta}
-              </Link>
-              <Link href={builderHref} className="btn btn-secondary min-h-12 px-6 text-[15px]">
-                {t.secondaryCta}
-              </Link>
+              <Magnetic>
+                <Link href={appHref} className="btn btn-primary min-h-12 px-6 text-[15px]">
+                  {t.primaryCta}
+                </Link>
+              </Magnetic>
+              <Magnetic strength={6}>
+                <Link href={builderHref} className="btn btn-secondary min-h-12 px-6 text-[15px]">
+                  {t.secondaryCta}
+                </Link>
+              </Magnetic>
             </div>
           </Reveal>
         </div>
@@ -83,7 +92,26 @@ export function Hero({ locale }: { locale: Locale }) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            <WorkflowObject locale={locale} />
+            {reduce ? (
+              <WorkflowObject locale={locale} />
+            ) : (
+              <div className="relative">
+                <div aria-hidden="true" className="mist-mesh rounded-[var(--radius-card)]" />
+                <HeroSculpture
+                  className="relative h-[340px] w-full sm:h-[420px] lg:h-[500px]"
+                  fallback={<WorkflowObject locale={locale} />}
+                />
+                <div className="pointer-events-none absolute left-2 top-6 sm:left-4">
+                  <span className="live-chip is-running">AI AGENT · {locale === "vi" ? "Đang chạy" : "Running"}</span>
+                </div>
+                <div className="glass pointer-events-none absolute bottom-6 right-2 rounded-[12px] px-4 py-3 sm:right-4">
+                  <p className="mono-label">{locale === "vi" ? "Điểm intent" : "Intent score"}</p>
+                  <p className="font-display text-[34px] leading-none text-[var(--ink)]">
+                    87<span className="text-[15px] text-[var(--mute)]">/100</span>
+                  </p>
+                </div>
+              </div>
+            )}
           </motion.div>
         </div>
       </div>

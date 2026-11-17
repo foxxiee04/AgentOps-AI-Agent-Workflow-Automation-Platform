@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { landingCopy, type Locale } from "../lib/i18n";
-import { Reveal, Stagger, StaggerItem } from "./motion";
+import { Parallax, Reveal, ScrollProgress, Stagger, StaggerItem } from "./motion";
 import { BentoSection } from "./landing/bento";
 import { DashboardPreview } from "./landing/dashboard-preview";
 import { Hero } from "./landing/hero";
@@ -31,6 +31,7 @@ export function LandingPage({ locale }: { locale: Locale }) {
 
   return (
     <main className="min-h-screen overflow-x-clip text-[var(--body)]">
+      <ScrollProgress />
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-6">
         <div className="glass mx-auto flex min-h-16 max-w-[1240px] items-center justify-between gap-4 rounded-[var(--radius-card)] px-4 shadow-[var(--shadow-sm)] sm:px-5">
           <Link href={locale === "vi" ? "/vi" : "/en"} className="flex items-center gap-2.5">
@@ -114,9 +115,9 @@ export function LandingPage({ locale }: { locale: Locale }) {
             </h2>
           </div>
         </Reveal>
-        <div className="mt-10">
+        <Parallax className="mt-10" distance={28}>
           <DashboardPreview locale={locale} />
-        </div>
+        </Parallax>
       </section>
 
       <section className="hairline-grid relative mx-auto max-w-[1240px] px-4 pb-24 pt-4 sm:px-6">
