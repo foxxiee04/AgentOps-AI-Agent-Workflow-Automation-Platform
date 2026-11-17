@@ -48,7 +48,9 @@ GET  /auth/google
 GET  /auth/google/callback
 ```
 
-`GET /auth/google` starts the Google OAuth 2.0 server flow and redirects to Google. Configure `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` before using it locally or in deployment.
+`GET /auth/google` starts the Google OAuth 2.0 server flow and redirects to Google; `GET /auth/google/callback` finishes it and sets the session cookies. Configure `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` before using it locally or in deployment. A first-time Google user gets a personal workspace with role `OWNER`, like email registration. The `state` parameter is signed with `JWT_ACCESS_SECRET`.
+
+`GET /auth/me` (and the `user` object of login/register) returns `workspaces: [{ id, name, slug, role }]`, the caller's memberships. Clients pick the active workspace from this list; they cannot act on a workspace they are not a member of.
 
 Password auth now stores users in PostgreSQL, hashes passwords with argon2, signs access tokens as JWTs, and stores refresh tokens as hashes for rotation/revocation. Local demo logins under `@agentops.local` may be auto-created for smoke tests.
 
@@ -121,17 +123,21 @@ DELETE /webhooks/:id
 ## Dashboard
 
 ```txt
-GET /dashboard/overview
-GET /dashboard/workflow-runs
-GET /dashboard/usage
-GET /dashboard/errors
-GET /dashboard/recent-activity
-GET /dashboard/readiness
-GET /dashboard/leads          scored leads (masked contact fields, score, category, summary)
-GET /dashboard/sales-tasks    follow-up tasks created by the NOTIFICATION node
+GET   /dashboard/overview?workspaceId=
+GET   /dashboard/workflow-runs?workspaceId=
+GET   /dashboard/workflow-runs/count?workspaceId=
+GET   /dashboard/usage?workspaceId=
+GET   /dashboard/errors?workspaceId=
+GET   /dashboard/recent-activity?workspaceId=
+GET   /dashboard/readiness?workspaceId=
+GET   /dashboard/leads?workspaceId=          scored leads (masked contact fields, score, category, summary)
+GET   /dashboard/sales-tasks?workspaceId=    follow-up tasks created by the NOTIFICATION node
+PATCH /dashboard/sales-tasks/:id?workspaceId=  { "status": "DONE" | "OPEN" }
 ```
 
-`GET /dashboard/readiness` returns an operational checklist for the demo workspace, including workflow publishing, event pipeline activity, AI provider configuration, OpenTelemetry export, and production-secret readiness. Non-ready items include a concrete `action` so the frontend can display the next configuration step.
+Every `GET /dashboard/*` route requires `?workspaceId=` and a membership with role `VIEWER` or higher: the guard returns `400` when the query parameter is missing and `403` when the caller is not a member. All data is filtered by that workspace. `PATCH /dashboard/sales-tasks/:id` requires `MEMBER`. The guard uses the `workspaceQuery` scope in `apps/api/src/common/rbac/`.
+
+`GET /dashboard/readiness` returns an operational checklist for the workspace, including workflow publishing, event pipeline activity, AI provider configuration, OpenTelemetry export, and production-secret readiness. Non-ready items include a concrete `action` so the frontend can display the next configuration step.
 
 Dashboard overview, run lists, usage metrics, recent activity, and readiness now read persisted workflow/run/event/usage state instead of process-local memory.
 
