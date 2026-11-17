@@ -304,7 +304,7 @@ export class AdminService {
         entityId: row.entityId,
         actorEmail: row.actor?.email ?? null,
         workspaceName: row.workspace?.name ?? null,
-        metadata: row.metadataJson ?? null,
+        metadata: (row.metadataJson ?? null) as unknown,
         createdAt: row.createdAt.toISOString()
       })),
       total,
