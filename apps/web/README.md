@@ -16,12 +16,12 @@
 
 - Next.js App Router
 - React and TypeScript
-- Tailwind CSS and the Lumen design tokens in `apps/web/DESIGN.md`
+- Tailwind CSS and the Moss Atelier design tokens in `apps/web/DESIGN.md`
 - React Flow for the visual builder
 - TanStack Query for server-state fetching
 - Zustand for local workflow builder state
 - React Hook Form and Zod for forms
-- Framer Motion for landing-page motion
+- Motion (`motion/react`) for landing-page and app motion
 
 ## Current Implementation
 
@@ -49,7 +49,7 @@ Server pages use typed fallback data so `next build` still succeeds when the API
 - `API_INTERNAL_URL` is used for server-side calls that stay inside the cluster (for example `http://api:4000`).
 - `NEXT_PUBLIC_API_URL` is only a build-time fallback; Next.js inlines it into the client bundle.
 
-App routes rendered through `AppShell` are guarded by `GET /auth/me`. The session lives in HttpOnly cookies set by the API (`agentops_access`, `agentops_refresh`); the browser never stores tokens. Client calls use `credentials: "include"` and refresh once on 401, and server components forward the incoming Cookie header (`src/lib/server-api.ts`). See `docs/security.md`.
+App routes rendered through `AppShell` are guarded by `GET /auth/me`. The session lives in HttpOnly cookies set by the API (`agentops_access`, `agentops_refresh`); the browser never stores tokens. Client calls use `credentials: "include"` and refresh once on 401, and server components forward the incoming Cookie header (`src/lib/server-api.ts`). The active workspace is kept in the `agentops_ws` cookie: server pages resolve it with `getActiveWorkspace()` (`src/lib/workspace.ts`), using the cookie when it names one of the user's workspaces and otherwise the first membership. Shared pure helpers live in `src/lib/workspace-shared.ts` and must stay free of `"use client"` so server code can import them. The sidebar has a workspace switcher. See `docs/security.md`.
 
 ## E2E Smoke Test
 
@@ -86,5 +86,5 @@ src/
 - Keep dashboard UI dense, clear, and operational.
 - Use React Flow for builder interactions rather than hand-rolling graph behavior.
 - Validate workflow node config before sending it to the API.
-- Use `apps/web/DESIGN.md` (Lumen) as the source reference: pearl canvas, white cards with soft shadows, iris gradient for primary actions, Be Vietnam Pro for text and JetBrains Mono for code, IDs and JSON.
+- Use `apps/web/DESIGN.md` (Moss Atelier) as the source reference: warm stone canvas, hairline grid and mono labels, moss accent, lime only for live/running states, Playfair Display for display lines, Inter Tight for body and JetBrains Mono for code, ids and JSON.
 - Keep Vietnamese and English copy in `src/lib/i18n.ts`.
