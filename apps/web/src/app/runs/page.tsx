@@ -62,15 +62,15 @@ export default async function RunsPage({
   if (!active) {
     return (
       <AppShell active="runs" locale={locale}>
-        <div className="space-y-8 p-5">
-          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
-            <div>
-              <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.runs.eyebrow}</p>
-              <RunsPageHeading>{t.runs.title}</RunsPageHeading>
-            </div>
+      <div className="space-y-6 p-5 lg:p-8">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
+          <div>
+            <p className="mono-label">{t.runs.eyebrow}</p>
+            <RunsPageHeading>{t.runs.title}</RunsPageHeading>
           </div>
-          <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
         </div>
+        <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
+      </div>
       </AppShell>
     );
   }
@@ -116,10 +116,10 @@ export default async function RunsPage({
 
   return (
     <AppShell active="runs" locale={locale}>
-      <div className="space-y-8 p-5">
+      <div className="space-y-6 p-5 lg:p-8">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
           <div>
-            <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.runs.eyebrow}</p>
+            <p className="mono-label">{t.runs.eyebrow}</p>
             <RunsPageHeading>{t.runs.title}</RunsPageHeading>
           </div>
           <OpenBuilderLink href={`/workflows/wf_lead_qualification/builder?lang=${locale}`}>
@@ -132,42 +132,46 @@ export default async function RunsPage({
         {runs.source === "error" ? (
           <ErrorState labels={t.states} detail={runs.error} />
         ) : (
-        <section className="rounded-xl border border-[var(--hairline)] bg-white">
+        <section className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] px-3 py-3">
             <RunsFilter locale={locale} status={status} />
-            <span className="text-xs text-[var(--mute)]">
+            <span className="font-mono text-xs text-[var(--mute)]">
               {page}/{totalPages}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
-              <thead className="text-xs uppercase text-[var(--mute)]">
+              <thead>
                 <tr className="border-b border-[var(--hairline)]">
                   <th className="px-3 py-3 font-medium">Run</th>
                   <th className="px-3 py-3 font-medium">{t.runs.workflow}</th>
                   <th className="px-3 py-3 font-medium">{t.runs.status}</th>
                   <th className="px-3 py-3 font-medium">{t.runs.trigger}</th>
-                  <th className="px-3 py-3 font-medium">{t.runs.createdAt}</th>
+                  <th className="px-3 py-3 font-medium text-right">{t.runs.createdAt}</th>
                   <th className="px-3 py-3 font-medium">{t.common.details}</th>
                 </tr>
               </thead>
               <RunsTableBody transitionKey={`${page}-${status}`}>
                 {sortedRuns.length > 0 ? (
                   sortedRuns.map((run, index) => (
-                    <RunsRow key={run.id} index={index} className="border-b border-[var(--hairline)] last:border-b-0">
-                      <td className="px-3 py-3 font-medium">
+                    <RunsRow key={run.id} index={index} className="border-b border-[var(--hairline)] transition-colors duration-200 last:border-b-0 hover:bg-[var(--surface-soft)]">
+                      <td className="h-[52px] px-3 py-3 font-mono font-medium">
                         <Link href={`/runs/${run.id}?lang=${locale}`} className="underline decoration-[var(--hairline-strong)] underline-offset-4">
                           {run.id}
                         </Link>
                       </td>
-                      <td className="px-3 py-3">{run.workflowName || run.workflowId}</td>
-                      <td className="px-3 py-3">
-                        <StatusPill tone={runStatusTone[run.status]}>{run.status}</StatusPill>
+                      <td className="h-[52px] px-3 py-3">{run.workflowName || run.workflowId}</td>
+                      <td className="h-[52px] px-3 py-3">
+                        {run.status === "RUNNING" ? (
+                          <span className="live-chip is-running">{run.status}</span>
+                        ) : (
+                          <StatusPill tone={runStatusTone[run.status]}>{run.status}</StatusPill>
+                        )}
                       </td>
-                      <td className="px-3 py-3">{run.triggerType}</td>
-                      <td className="px-3 py-3">{formatDateTime(run.createdAt, locale)}</td>
-                      <td className="px-3 py-3">
-                        <Link href={`/runs/${run.id}?lang=${locale}`} className="font-semibold text-[var(--ink-deep)] underline decoration-[var(--hairline-strong)] underline-offset-4">
+                      <td className="h-[52px] px-3 py-3">{run.triggerType}</td>
+                      <td className="h-[52px] px-3 py-3 text-right font-mono">{formatDateTime(run.createdAt, locale)}</td>
+                      <td className="h-[52px] px-3 py-3">
+                        <Link href={`/runs/${run.id}?lang=${locale}`} className="font-semibold text-[var(--ink)] underline decoration-[var(--hairline-strong)] underline-offset-4">
                           {t.common.details}
                         </Link>
                       </td>

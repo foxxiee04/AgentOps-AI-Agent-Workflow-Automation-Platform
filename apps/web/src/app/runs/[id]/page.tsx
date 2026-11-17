@@ -27,15 +27,15 @@ export default async function RunDetailPage({
 
   return (
     <AppShell active="runs" locale={locale}>
-      <div className="space-y-6 p-5">
+      <div className="space-y-6 p-5 lg:p-8">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
           <div className="min-w-0">
-            <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.runs.eyebrow}</p>
+            <p className="mono-label">{t.runs.eyebrow}</p>
             <RunDetailHeading>{t.runs.detailTitle}</RunDetailHeading>
             <p className="mt-1 break-all font-mono text-sm text-[var(--mute)]">{id}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href={`/runs?lang=${locale}`} className="inline-flex min-h-9 items-center rounded-xl border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink)]">
+            <Link href={`/runs?lang=${locale}`} className="btn btn-secondary inline-flex items-center">
               {t.runs.backToRuns}
             </Link>
             {failed ? null : (
@@ -64,10 +64,10 @@ export default async function RunDetailPage({
               </div>
 
               <aside className="min-w-0 space-y-6">
-                <div className="rounded-xl border border-[var(--hairline)] bg-white">
-                  <div className="border-b border-[var(--hairline)] px-4 py-3">
-                    <h2 className="text-base font-bold text-[var(--ink)]">{t.runs.workflow}</h2>
-                  </div>
+                 <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+                   <div className="border-b border-[var(--hairline)] px-4 py-3">
+                     <h2 className="text-base font-semibold text-[var(--ink)]">{t.runs.workflow}</h2>
+                   </div>
                   <dl className="divide-y divide-[var(--hairline)] text-sm">
                     <RunMetaRow label={t.runs.workflow} value={run.data.workflowId} />
                     <RunMetaRow label={t.runs.version} value={run.data.workflowVersionId} />
@@ -78,10 +78,10 @@ export default async function RunDetailPage({
                   </dl>
                 </div>
 
-                <div className="rounded-xl border border-[var(--hairline)] bg-white">
-                  <div className="border-b border-[var(--hairline)] px-4 py-3">
-                    <h2 className="text-base font-bold text-[var(--ink)]">{t.timeline.input}</h2>
-                  </div>
+                 <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+                   <div className="border-b border-[var(--hairline)] px-4 py-3">
+                     <h2 className="text-base font-semibold text-[var(--ink)]">{t.timeline.input}</h2>
+                   </div>
                   <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-5 text-[var(--charcoal)]">{JSON.stringify(run.data.input, null, 2)}</pre>
                 </div>
               </aside>
@@ -96,7 +96,7 @@ export default async function RunDetailPage({
 function RunMetaRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1 px-4 py-3">
-      <dt className="text-xs font-semibold uppercase text-[var(--mute)]">{label}</dt>
+      <dt className="mono-label">{label}</dt>
       <dd className="break-all font-medium text-[var(--ink)]">{value}</dd>
     </div>
   );

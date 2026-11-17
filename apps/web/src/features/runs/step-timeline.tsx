@@ -2,8 +2,7 @@
 
 import type { WorkflowRunStepView, WorkflowStepStatus } from "@agentops/shared";
 import { Stagger, StaggerItem, StatusFlash } from "../../components/motion";
-import { StatusPill } from "../../components/status-pill";
-import { formatDuration, stepStatusTone } from "../../lib/status";
+import { formatDuration } from "../../lib/status";
 
 export type TimelineLabels = {
   input: string;
@@ -20,7 +19,8 @@ export type TimelineLabels = {
 /** Presentational step timeline: status, masked input, output, tokens, duration and error per node. */
 export function StepTimeline({ steps, labels }: { steps: WorkflowRunStepView[]; labels: TimelineLabels }) {
   return (
-    <div role="list">
+    <div role="list" className="relative">
+      <span aria-hidden="true" className="absolute left-[21px] top-2 bottom-2 w-px bg-[var(--hairline-strong)]" />
       <Stagger className="divide-y divide-[var(--hairline)]">
         {steps.map((step, index) => {
           const hasData = step.input !== undefined || step.output !== undefined;
@@ -28,12 +28,17 @@ export function StepTimeline({ steps, labels }: { steps: WorkflowRunStepView[]; 
             <StaggerItem
               key={step.id}
               role="listitem"
-              className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[56px_1fr_auto] md:items-start"
+              className="relative grid gap-4 py-4 text-sm md:grid-cols-[44px_1fr] md:items-start"
               data-step={step.nodeId}
             >
-              <span className="font-mono text-xs font-bold text-[var(--mute)]">[{String(index + 1).padStart(2, "0")}]</span>
+              <div className="relative z-10 flex justify-center pt-1">
+                <StatusFlash status={step.status}>
+                  <StepMarker status={step.status} />
+                </StatusFlash>
+              </div>
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-[var(--mute)]">[{String(index + 1).padStart(2, "0")}]</span>
                   <h3 className="font-bold text-[var(--ink)]">{step.nodeName}</h3>
                   <span className="font-mono text-xs text-[var(--mute)]">{step.nodeType}</span>
                 </div>
@@ -61,14 +66,31 @@ export function StepTimeline({ steps, labels }: { steps: WorkflowRunStepView[]; 
                 ) : null}
                 <p className="break-all font-mono text-xs text-[var(--mute)]">{step.nodeId}</p>
               </div>
-              <StatusFlash status={step.status}>
-                <StatusPill tone={stepStatusTone[step.status]}>{step.status}</StatusPill>
-              </StatusFlash>
             </StaggerItem>
           );
         })}
       </Stagger>
     </div>
+  );
+}
+
+function StepMarker({ status }: { status: WorkflowStepStatus }) {
+  if (status === "RUNNING") {
+    return <span className="live-chip is-running">{status}</span>;
+  }
+  const color =
+    status === "COMPLETED"
+      ? "var(--success)"
+      : status === "FAILED"
+        ? "var(--danger)"
+        : status === "WAITING_APPROVAL"
+          ? "var(--warning)"
+          : "var(--ash)";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+      <span className="font-mono text-[10.5px] uppercase tracking-wide text-[var(--mute)]">{status}</span>
+    </span>
   );
 }
 

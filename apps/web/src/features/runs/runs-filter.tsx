@@ -162,7 +162,7 @@ export const statusHref = buildRunsFilterUrl;
 
 export function RunsPageHeading({ children }: { children: ReactNode }) {
   return (
-    <MaskHeading className="mt-1 text-3xl font-bold leading-tight text-[var(--ink-deep)]">{children}</MaskHeading>
+    <MaskHeading className="font-display mt-1 text-[34px] font-normal leading-[1.1] text-[var(--ink)]">{children}</MaskHeading>
   );
 }
 
@@ -173,7 +173,7 @@ export function OpenBuilderLink({ href, children }: { href: string; children: Re
     <Link
       {...iconHandlers}
       href={href}
-      className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-colors duration-200"
+      className="btn btn-primary inline-flex items-center gap-2"
     >
       <span aria-hidden="true" inert className="inline-flex shrink-0">
         <EyeIcon ref={ref} size={16} strokeWidth={1.75} />
@@ -250,12 +250,12 @@ export function RunsFilter({ locale, status, currentStatus, value, lang }: RunsF
   }
 
   return (
-    <label className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-[var(--mute)]">
-      <span>Status</span>
+    <label className="inline-flex items-center gap-2">
+      <span className="mono-label">Status</span>
       <select
         value={selected}
         onChange={(event) => handleChange(event.target.value)}
-        className="rounded-xl border border-[var(--hairline)] bg-white px-2 py-1 text-sm font-normal text-[var(--ink-deep)]"
+        className="field w-auto min-w-[10rem]"
       >
         {RUN_STATUS_OPTIONS.map((option) => (
           <option key={option} value={option}>
