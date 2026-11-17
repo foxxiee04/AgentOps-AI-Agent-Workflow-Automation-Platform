@@ -6,21 +6,25 @@ import { UpdateSalesTaskDto, WorkflowRunsQueryDto } from "./dto";
 
 describe("WorkflowRunsQueryDto", () => {
   it("accepts a valid filter set and converts paging values to numbers", async () => {
-    const dto = plainToInstance(WorkflowRunsQueryDto, { limit: "25", offset: "50", status: "FAILED", workflowId: "wf_1" });
+    const dto = plainToInstance(WorkflowRunsQueryDto, {
+      limit: "25",
+      offset: "50",
+      status: "FAILED",
+      workflowId: "wf_1",
+      workspaceId: "ws_test"
+    });
 
     expect(await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).toEqual([]);
     expect(dto.limit).toBe(25);
     expect(dto.offset).toBe(50);
     expect(dto.status).toBe("FAILED");
     expect(dto.workflowId).toBe("wf_1");
+    expect(dto.workspaceId).toBe("ws_test");
   });
 
-  it("accepts an empty query", async () => {
-    const dto = plainToInstance(WorkflowRunsQueryDto, {});
-
-    expect(await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).toEqual([]);
-    expect(dto.limit).toBeUndefined();
-    expect(dto.offset).toBeUndefined();
+  it("requires a workspace id", async () => {
+    expect(await errorsFor({})).not.toHaveLength(0);
+    expect(await errorsFor({ workspaceId: "" })).not.toHaveLength(0);
   });
 
   it("rejects a limit outside 1..200", async () => {

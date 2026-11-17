@@ -23,6 +23,7 @@ import {
   fetchPendingApprovals,
   type ApprovalDecisionRequest
 } from "../../lib/api";
+import { useActiveWorkspace } from "../auth/use-active-workspace";
 import type { Locale } from "../../lib/i18n";
 import {
   ApprovalCard,
@@ -134,8 +135,20 @@ export function approvalDecisionErrorMessage(
   return labels[approvalErrorKey(error)];
 }
 
-export function ApprovalQueue({ labels, states, locale }: { labels: ApprovalQueueLabels; states: DataStateLabels; locale: Locale }) {
+export function ApprovalQueue({
+  labels,
+  states,
+  locale,
+  workspaceId: propWorkspaceId
+}: {
+  labels: ApprovalQueueLabels;
+  states: DataStateLabels;
+  locale: Locale;
+  workspaceId?: string;
+}) {
   const queryClient = useQueryClient();
+  const { active } = useActiveWorkspace();
+  const workspaceId = propWorkspaceId ?? active?.id ?? "";
   const copy = approvalCopy[locale];
   const [comments, setComments] = useState<Record<string, string>>({});
   const [cardStates, setCardStates] = useState<Record<string, ApprovalCardState>>({});
@@ -146,8 +159,9 @@ export function ApprovalQueue({ labels, states, locale }: { labels: ApprovalQueu
   const { ref: refreshRef, ...refreshHandlers } = useIconHover();
 
   const approvals = useQuery({
-    queryKey: ["approvals", "ws_demo"],
-    queryFn: () => fetchPendingApprovals("ws_demo"),
+    queryKey: ["approvals", workspaceId],
+    queryFn: () => fetchPendingApprovals(workspaceId),
+    enabled: Boolean(workspaceId),
     refetchInterval: APPROVAL_POLL_INTERVAL_MS
   });
 
@@ -204,6 +218,10 @@ export function ApprovalQueue({ labels, states, locale }: { labels: ApprovalQueu
       }
     };
   }, []);
+
+  if (!workspaceId) {
+    return <EmptyState title={labels.empty} />;
+  }
 
   if (approvals.isPending) {
     return <LoadingState label={states.loading} />;

@@ -21,4 +21,11 @@ describe("parseAppEnv", () => {
   it("still rejects malformed values", () => {
     expect(() => parseAppEnv({ ALERT_BOT_WEBHOOK_URL: "not a url" })).toThrow();
   });
+
+  it("accepts a valid DEMO_WORKSPACE_JOIN_ROLE and leaves it unset by default", () => {
+    expect(parseAppEnv({}).DEMO_WORKSPACE_JOIN_ROLE).toBeUndefined();
+    expect(parseAppEnv({ DEMO_WORKSPACE_JOIN_ROLE: "MEMBER" }).DEMO_WORKSPACE_JOIN_ROLE).toBe("MEMBER");
+    expect(parseAppEnv({ DEMO_WORKSPACE_JOIN_ROLE: "" }).DEMO_WORKSPACE_JOIN_ROLE).toBeUndefined();
+    expect(() => parseAppEnv({ DEMO_WORKSPACE_JOIN_ROLE: "SUPERUSER" })).toThrow();
+  });
 });

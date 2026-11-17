@@ -12,6 +12,7 @@ import SparklesIcon from "../../icons/sparkles-icon";
 import TrashIcon from "../../icons/trash-icon";
 import UploadIcon from "../../icons/upload-icon";
 import { ApiError, clientApiPost, type WorkflowView } from "../../lib/api";
+import { useActiveWorkspace } from "../auth/use-active-workspace";
 import type { Locale } from "../../lib/i18n";
 import { deleteWorkflow, publishWorkflow, runWorkflow } from "./workflow-client";
 
@@ -528,20 +529,28 @@ export function WorkflowCard({
 
 export function CreateFromTemplateButton({
   labels,
-  locale
+  locale,
+  workspaceId: propWorkspaceId
 }: {
   labels: { createFromTemplate: string; creating: string; createFailed: string };
   locale: Locale;
+  workspaceId?: string;
 }) {
   const router = useRouter();
   const { ref, ...iconHandlers } = useIconHover();
+  const { active } = useActiveWorkspace();
+  const workspaceId = propWorkspaceId ?? active?.id;
   const [state, setState] = useState<ActionState>({ status: "idle" });
 
   async function create() {
+    if (!workspaceId) {
+      setState({ status: "error", message: labels.createFailed });
+      return;
+    }
     setState({ status: "loading" });
     try {
       const workflow = await clientApiPost<WorkflowView>("/workflows", {
-        workspaceId: "ws_demo",
+        workspaceId,
         name: `Lead qualification ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
         description: "Score a new lead, branch on intent, draft an email for approval, and create a sales task.",
         definition: sampleLeadWorkflowDefinition

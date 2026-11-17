@@ -19,6 +19,7 @@ export const appEnvSchema = z.object({
   ALERTMANAGER_WEBHOOK_TOKEN: z.string().optional(),
   OTEL_ENABLED: z.enum(["true", "false"]).optional(),
   DEMO_LOGIN_ENABLED: z.enum(["true", "false"]).optional(),
+  DEMO_WORKSPACE_JOIN_ROLE: z.enum(["OWNER", "ADMIN", "MEMBER", "VIEWER"]).optional(),
   OTEL_DEPLOYMENT_ENVIRONMENT: z.string().min(1).optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: z.string().url().optional(),

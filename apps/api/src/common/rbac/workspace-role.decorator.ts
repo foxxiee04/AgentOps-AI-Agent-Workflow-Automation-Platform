@@ -4,7 +4,7 @@ import type { WorkspaceRole } from "@agentops/shared";
 export const WORKSPACE_ROLES_KEY = "workspaceRoles";
 export const WorkspaceRoles = (...roles: WorkspaceRole[]) => SetMetadata(WORKSPACE_ROLES_KEY, roles);
 
-export type WorkspaceScopeSource = "workspaceParam" | "workflowParamOrBody" | "runParam";
+export type WorkspaceScopeSource = "workspaceParam" | "workflowParamOrBody" | "runParam" | "workspaceQuery";
 export const WORKSPACE_SCOPE_KEY = "workspaceScope";
 
 /**
@@ -13,5 +13,6 @@ export const WORKSPACE_SCOPE_KEY = "workspaceScope";
  * - `workflowParamOrBody`: `request.params.id` is a workflow id (its workspaceId is looked up);
  *   when there is no `:id`, `request.body.workspaceId` is used.
  * - `runParam`: `request.params.id` is a workflow run id (its workspaceId is looked up).
+ * - `workspaceQuery`: `request.query.workspaceId` is the workspace id (400 when missing).
  */
 export const WorkspaceScope = (source: WorkspaceScopeSource) => SetMetadata(WORKSPACE_SCOPE_KEY, source);

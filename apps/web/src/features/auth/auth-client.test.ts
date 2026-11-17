@@ -55,4 +55,21 @@ describe("loadAuthUser", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/auth/me"), expect.objectContaining({ credentials: "include" }));
   });
+
+  it("loads user with workspaces array from /auth/me", async () => {
+    stubBrowser("agentops_session=1");
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        id: "user_2",
+        email: "bob@example.com",
+        name: "Bob",
+        workspaces: [{ id: "ws_my", name: "My Workspace", slug: "my-workspace", role: "OWNER" }]
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = await loadAuthUser(true);
+    expect(user?.workspaces).toHaveLength(1);
+    expect(user?.workspaces?.[0]?.id).toBe("ws_my");
+  });
 });

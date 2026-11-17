@@ -2,7 +2,7 @@ import { z } from "zod";
 import { leadSummaryViewSchema, salesTaskViewSchema, type LeadSummaryView, type SalesTaskView } from "@agentops/shared";
 import { AppShell } from "../../components/app-shell";
 import { MetricCard } from "../../components/metric-card";
-import { DataNotice, ErrorState } from "../../components/data-state";
+import { DataNotice, EmptyState, ErrorState } from "../../components/data-state";
 import { Reveal, Stagger, StaggerItem } from "../../components/motion";
 import { StatusPill } from "../../components/status-pill";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../../lib/api";
 import { safeApiGet } from "../../lib/server-api";
 import { appCopy, resolveLocale, type LocaleSearchParams } from "../../lib/i18n";
+import { getActiveWorkspace } from "../../lib/workspace";
 import { LeadTable, SalesTaskList } from "../../features/leads/lead-panels";
 import { DashboardHeader, EventStream, RecentRunsTable } from "../../features/leads/dashboard-panels";
 import { DashboardCharts } from "../../features/leads/dashboard-charts";
@@ -37,16 +38,35 @@ const dashboardSalesTaskSchema = salesTaskViewSchema.extend({
 export default async function DashboardPage({ searchParams }: { searchParams?: LocaleSearchParams }) {
   const locale = await resolveLocale(searchParams);
   const t = appCopy[locale];
+  const { active } = await getActiveWorkspace();
+
+  if (!active) {
+    return (
+      <AppShell active="dashboard" locale={locale}>
+        <div className="space-y-6 p-5 lg:p-8">
+          <DashboardHeader
+            eyebrow={t.dashboard.eyebrow}
+            title={t.dashboard.title}
+            builderHref={`/workflows/wf_lead_qualification/builder?lang=${locale}`}
+            builderLabel={t.common.openBuilder}
+          />
+          <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
+        </div>
+      </AppShell>
+    );
+  }
+
+  const wsParam = `workspaceId=${encodeURIComponent(active.id)}`;
   const [overview, runs, health, providers, activity] = await Promise.all([
-    safeApiGet<DashboardOverview>("/dashboard/overview", fallbackOverview),
-    safeApiGet<WorkflowRunViewItem[]>("/dashboard/workflow-runs", fallbackRuns as WorkflowRunViewItem[]),
+    safeApiGet<DashboardOverview>(`/dashboard/overview?${wsParam}`, fallbackOverview),
+    safeApiGet<WorkflowRunViewItem[]>(`/dashboard/workflow-runs?${wsParam}`, fallbackRuns as WorkflowRunViewItem[]),
     safeHealthGet<HealthReady>("/health/ready", fallbackHealth),
     safeApiGet<AiProviders>("/ai/providers", fallbackProviders),
-    safeApiGet<RecentActivity[]>("/dashboard/recent-activity", fallbackActivity)
+    safeApiGet<RecentActivity[]>(`/dashboard/recent-activity?${wsParam}`, fallbackActivity)
   ]);
   const [leads, salesTasks] = await Promise.all([
-    safeApiGet<LeadSummaryView[]>("/dashboard/leads", [], z.array(leadSummaryViewSchema)),
-    safeApiGet<DashboardSalesTaskView[]>("/dashboard/sales-tasks", [], z.array(dashboardSalesTaskSchema))
+    safeApiGet<LeadSummaryView[]>(`/dashboard/leads?${wsParam}`, [], z.array(leadSummaryViewSchema)),
+    safeApiGet<DashboardSalesTaskView[]>(`/dashboard/sales-tasks?${wsParam}`, [], z.array(dashboardSalesTaskSchema))
   ]);
 
   const dependencyRows =
@@ -104,7 +124,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: L
             <LeadTable leads={leads.source === "error" ? [] : leads.data} labels={t.dashboard} locale={locale} />
           </Reveal>
           <Reveal className="min-w-0">
-            <SalesTaskList tasks={salesTasks.source === "error" ? [] : salesTasks.data} labels={t.dashboard} locale={locale} />
+            <SalesTaskList tasks={salesTasks.source === "error" ? [] : salesTasks.data} labels={t.dashboard} locale={locale} workspaceId={active.id} />
           </Reveal>
         </section>
 

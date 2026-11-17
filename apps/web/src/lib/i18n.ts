@@ -129,6 +129,9 @@ export const appCopy = {
     shell: {
       workspace: "Không gian làm việc",
       demoWorkspace: "AgentOps Demo",
+      noWorkspace: "Chưa có workspace",
+      switchWorkspace: "Chuyển workspace",
+      noWorkspacesMessage: "Bạn chưa thuộc không gian làm việc nào. Vui lòng liên hệ quản trị viên.",
       api: "API",
       logout: "Đăng xuất",
       signedIn: "Đã đăng nhập",
@@ -354,6 +357,9 @@ export const appCopy = {
     shell: {
       workspace: "Workspace",
       demoWorkspace: "AgentOps Demo",
+      noWorkspace: "No workspace",
+      switchWorkspace: "Switch workspace",
+      noWorkspacesMessage: "You do not belong to any workspace yet. Please contact an administrator.",
       api: "API",
       logout: "Logout",
       signedIn: "Signed in",

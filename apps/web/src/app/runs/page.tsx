@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
-import { DataNotice, ErrorState } from "../../components/data-state";
+import { DataNotice, EmptyState, ErrorState } from "../../components/data-state";
 import { StatusPill } from "../../components/status-pill";
 import { runStatusTone } from "../../lib/status";
 import { fallbackRuns, sortWorkflowRunsNewestFirst, type WorkflowRunView } from "../../lib/api";
 import { safeApiGet } from "../../lib/server-api";
 import { appCopy, normalizeLocale, type Locale } from "../../lib/i18n";
+import { getActiveWorkspace } from "../../lib/workspace";
 import {
   OpenBuilderLink,
   RunsFilter,
@@ -56,6 +57,23 @@ export default async function RunsPage({
   const resolved = searchParams ? await searchParams : undefined;
   const locale = normalizeLocale(resolved?.lang);
   const t = appCopy[locale];
+  const { active } = await getActiveWorkspace();
+
+  if (!active) {
+    return (
+      <AppShell active="runs" locale={locale}>
+        <div className="space-y-8 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
+            <div>
+              <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.runs.eyebrow}</p>
+              <RunsPageHeading>{t.runs.title}</RunsPageHeading>
+            </div>
+          </div>
+          <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
+        </div>
+      </AppShell>
+    );
+  }
 
   const requestedPage = Math.max(1, Number(readParam(resolved?.page)) || 1);
   const status = normalizeStatus(resolved?.status);
@@ -63,11 +81,13 @@ export default async function RunsPage({
   const offset = (requestedPage - 1) * 50;
 
   const listParams = new URLSearchParams();
+  listParams.set("workspaceId", active.id);
   listParams.set("limit", "50");
   listParams.set("offset", String(offset));
   if (status !== "ALL") listParams.set("status", status);
 
   const countParams = new URLSearchParams();
+  countParams.set("workspaceId", active.id);
   if (status !== "ALL") countParams.set("status", status);
 
   const listPath = `/dashboard/workflow-runs?${listParams.toString()}`;

@@ -218,6 +218,47 @@ describe("WorkspaceRoleGuard", () => {
     expect(harness.request.user).toMatchObject({ workspaceId: "ws_from_query" });
   });
 
+  it("resolves the workspace from the workspaceId query parameter", async () => {
+    const harness = createHarness({
+      roles: ["VIEWER"],
+      scope: "workspaceQuery",
+      query: { workspaceId: "ws_from_query" },
+      headers: { authorization: "Bearer t" },
+      membership: { role: "VIEWER" }
+    });
+
+    await expect(harness.guard.canActivate(harness.context)).resolves.toBe(true);
+    expect(harness.client.workspaceMember.findUnique).toHaveBeenCalledWith({
+      where: { workspaceId_userId: { workspaceId: "ws_from_query", userId: "user_1" } }
+    });
+    expect(harness.request.user).toMatchObject({ workspaceId: "ws_from_query", role: "VIEWER" });
+  });
+
+  it("returns 400 when the workspaceId query parameter is missing", async () => {
+    const harness = createHarness({
+      roles: ["VIEWER"],
+      scope: "workspaceQuery",
+      headers: { authorization: "Bearer t" },
+      membership: { role: "VIEWER" }
+    });
+
+    await expect(harness.guard.canActivate(harness.context)).rejects.toBeInstanceOf(BadRequestException);
+    expect(harness.client.workspaceMember.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("forbids a non-member of the queried workspace with 403", async () => {
+    const harness = createHarness({
+      roles: ["VIEWER"],
+      scope: "workspaceQuery",
+      query: { workspaceId: "ws_other" },
+      headers: { authorization: "Bearer t" },
+      membership: null
+    });
+
+    await expect(harness.guard.canActivate(harness.context)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(harness.request.user).toBeUndefined();
+  });
+
   it("returns 404 for an unknown workflow", async () => {
     const harness = createHarness({
       roles: ["MEMBER"],
