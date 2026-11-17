@@ -17,6 +17,7 @@ export type AuthUser = {
   name: string;
   avatarUrl?: string;
   provider?: "password" | "google";
+  isPlatformAdmin?: boolean;
   workspaces?: AuthWorkspace[];
 };
 
