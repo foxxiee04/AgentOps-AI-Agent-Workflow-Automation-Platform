@@ -40,31 +40,33 @@ const copy: Record<
   }
 };
 
+const series1 = "#2F5D3A";
+const series2 = "#7FA37F";
+const series3 = "#C9D6C6";
+
 const statusColor: Record<string, string> = {
-  COMPLETED: "#10b981",
-  WAITING_APPROVAL: "#f59e0b",
-  RUNNING: "#5b4bff",
-  PENDING: "#a3a6bd",
-  CANCELLED: "#8b8fa8",
-  FAILED: "#e5486f"
+  COMPLETED: "var(--success)",
+  WAITING_APPROVAL: "var(--warning)",
+  RUNNING: "var(--live)",
+  PENDING: "var(--ash)",
+  CANCELLED: "var(--mute)",
+  FAILED: "var(--danger)"
 };
 
 const categoryColor: Record<string, string> = {
-  "high-intent": "linear-gradient(90deg,#5b4bff,#a855f7)",
-  "low-intent": "linear-gradient(90deg,#38a8ff,#7cc8ff)",
-  spam: "linear-gradient(90deg,#ff8aa8,#e5486f)"
+  "high-intent": series1,
+  "low-intent": series2,
+  spam: series3
 };
 
 const BUCKETS = 16;
 
-/** Splits the time span covered by the runs into equal buckets so the chart needs no clock. */
 function activityBuckets(runs: WorkflowRunView[]) {
   const times = runs.map((run) => Date.parse(run.createdAt)).filter((time) => Number.isFinite(time));
   const buckets = Array.from({ length: BUCKETS }, () => ({ total: 0, attention: 0 }));
   if (times.length === 0) {
     return buckets;
   }
-  // Start at the 10th percentile so a few old runs do not squeeze everything into the last bar.
   const sorted = [...times].sort((left, right) => left - right);
   const min = sorted[Math.floor(sorted.length * 0.1)] ?? sorted[0] ?? 0;
   const span = Math.max((sorted[sorted.length - 1] ?? min) - min, 1);
@@ -86,9 +88,9 @@ function activityBuckets(runs: WorkflowRunView[]) {
 
 function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="lumen-card flex h-full min-w-0 flex-col p-5">
+    <section className="card flex h-full min-w-0 flex-col p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-bold text-[var(--ink-deep)]">{title}</h2>
+        <h2 className="text-base font-semibold text-[var(--ink)]">{title}</h2>
         {hint ? <p className="truncate text-xs text-[var(--mute)]">{hint}</p> : null}
       </div>
       <div className="mt-4 flex flex-1 flex-col justify-end">{children}</div>
@@ -115,7 +117,6 @@ export function DashboardCharts({ runs, leads, locale }: { runs: WorkflowRunView
   });
   const totalLeads = Math.max(1, leads.length);
 
-  // Donut geometry: one stroked circle per status, offset by the running total.
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
@@ -127,21 +128,31 @@ export function DashboardCharts({ runs, leads, locale }: { runs: WorkflowRunView
           <p className="py-8 text-sm text-[var(--mute)]">{t.empty}</p>
         ) : (
           <div className="flex h-36 items-end gap-1.5" role="img" aria-label={`${t.activity}: ${totalRuns} ${t.runs}`}>
-            {buckets.map((bucket, index) => (
-              <div key={index} className="flex h-full flex-1 flex-col justify-end">
-                <div
-                  className="relative w-full overflow-hidden rounded-md bg-gradient-to-t from-[#5b4bff] to-[#b79bff]"
-                  style={{ height: `${Math.max(bucket.total > 0 ? 8 : 3, (bucket.total / peak) * 100)}%`, opacity: bucket.total > 0 ? 1 : 0.18 }}
-                >
-                  {bucket.attention > 0 ? (
-                    <div
-                      className="absolute inset-x-0 bottom-0 bg-[#ffb648]"
-                      style={{ height: `${(bucket.attention / Math.max(1, bucket.total)) * 100}%` }}
-                    />
-                  ) : null}
+            {buckets.map((bucket, index) => {
+              const isLast = index === buckets.length - 1;
+              return (
+                <div key={index} className="flex h-full flex-1 flex-col justify-end">
+                  <div
+                    className="relative w-full overflow-hidden rounded-md"
+                    style={{
+                      height: `${Math.max(bucket.total > 0 ? 8 : 3, (bucket.total / peak) * 100)}%`,
+                      opacity: bucket.total > 0 ? 1 : 0.18,
+                      background: isLast && bucket.total > 0 ? "var(--live)" : series2
+                    }}
+                  >
+                    {bucket.attention > 0 ? (
+                      <div
+                        className="absolute inset-x-0 bottom-0"
+                        style={{
+                          height: `${(bucket.attention / Math.max(1, bucket.total)) * 100}%`,
+                          background: series1
+                        }}
+                      />
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
@@ -152,7 +163,7 @@ export function DashboardCharts({ runs, leads, locale }: { runs: WorkflowRunView
         ) : (
           <div className="flex items-center gap-5">
             <svg viewBox="0 0 100 100" className="h-36 w-36 shrink-0 -rotate-90" role="img" aria-label={t.outcomes}>
-              <circle cx="50" cy="50" r={radius} fill="none" stroke="#eeeef6" strokeWidth="11" />
+              <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--surface-soft)" strokeWidth="11" />
               {statuses.map(([status, count]) => {
                 const length = (count / totalRuns) * circumference;
                 const dash = `${Math.max(length - 1.5, 0.5)} ${circumference}`;
@@ -163,7 +174,7 @@ export function DashboardCharts({ runs, leads, locale }: { runs: WorkflowRunView
                     cy="50"
                     r={radius}
                     fill="none"
-                    stroke={statusColor[status] ?? "#a3a6bd"}
+                    stroke={statusColor[status] ?? "var(--ash)"}
                     strokeWidth="11"
                     strokeLinecap="round"
                     strokeDasharray={dash}
@@ -179,7 +190,8 @@ export function DashboardCharts({ runs, leads, locale }: { runs: WorkflowRunView
                 transform="rotate(90 50 50)"
                 textAnchor="middle"
                 dominantBaseline="central"
-                className="fill-[var(--ink-deep)] text-[20px] font-extrabold"
+                className="fill-[var(--ink)] text-[20px] font-extrabold"
+                style={{ fontFamily: "var(--font-display-stack)" }}
               >
                 {totalRuns}
               </text>
@@ -188,10 +200,10 @@ export function DashboardCharts({ runs, leads, locale }: { runs: WorkflowRunView
               {statuses.map(([status, count]) => (
                 <li key={status} className="flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2">
-                    <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: statusColor[status] ?? "#a3a6bd" }} />
-                    <span className="truncate text-xs font-semibold text-[var(--body)]">{status}</span>
+                    <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: statusColor[status] ?? "var(--ash)" }} />
+                    <span className="mono-label truncate text-[var(--body)]">{status}</span>
                   </span>
-                  <span className="font-bold tabular-nums text-[var(--ink-deep)]">{count}</span>
+                  <span className="font-bold tabular-nums text-[var(--ink)]">{count}</span>
                 </li>
               ))}
             </ul>
@@ -209,10 +221,10 @@ export function DashboardCharts({ runs, leads, locale }: { runs: WorkflowRunView
                 <div className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="font-semibold text-[var(--ink)]">{t.categories[category] ?? category}</span>
                   <span className="text-xs text-[var(--mute)]">
-                    <span className="font-bold tabular-nums text-[var(--ink-deep)]">{count}</span> · {t.avgScore} {avg}
+                    <span className="font-bold tabular-nums text-[var(--ink)]">{count}</span> · {t.avgScore} {avg}
                   </span>
                 </div>
-                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#eeeef6]">
+                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[var(--surface-soft)]">
                   <div className="h-full rounded-full" style={{ width: `${(count / totalLeads) * 100}%`, background: categoryColor[category] }} />
                 </div>
               </li>

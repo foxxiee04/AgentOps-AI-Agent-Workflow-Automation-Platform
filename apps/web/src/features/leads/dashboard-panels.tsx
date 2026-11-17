@@ -40,10 +40,10 @@ export function DashboardHeader({
   const { ref: iconRef, onMouseEnter, onMouseLeave, onFocus, onBlur } = useIconHover();
 
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
       <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase text-[var(--accent)]">{eyebrow}</p>
-        <MaskHeading className="mt-1 text-3xl font-extrabold leading-tight tracking-tight text-[var(--ink-deep)] md:text-4xl">{title}</MaskHeading>
+        <p className="mono-label">{eyebrow}</p>
+        <MaskHeading className="mt-1 font-display text-[34px] leading-[1.1] text-[var(--ink)]">{title}</MaskHeading>
       </div>
       <Link
         href={builderHref}
@@ -51,7 +51,7 @@ export function DashboardHeader({
         onMouseLeave={onMouseLeave}
         onFocus={onFocus}
         onBlur={onBlur}
-        className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white"
+        className="btn btn-primary"
       >
         <EyeIcon ref={iconRef} size={16} strokeWidth={1.75} aria-hidden="true" />
         {builderLabel}
@@ -70,7 +70,7 @@ function ViewRunLink({ href, label }: { href: string; label: string }) {
       onMouseLeave={onMouseLeave}
       onFocus={onFocus}
       onBlur={onBlur}
-      className="inline-flex items-center gap-1.5 font-semibold text-[var(--ink-deep)] underline decoration-[var(--hairline-strong)] underline-offset-4"
+      className="inline-flex items-center gap-1.5 font-semibold text-[var(--ink)] underline decoration-[var(--hairline-strong)] underline-offset-4"
     >
       <EyeIcon ref={iconRef} size={16} strokeWidth={1.75} aria-hidden="true" />
       {label}
@@ -95,19 +95,19 @@ export function RecentRunsTable({
   const reduce = useReducedMotion() ?? false;
 
   return (
-    <div className="rounded-xl border border-[var(--hairline)] bg-white">
+    <div className="card flex h-full min-w-0 flex-col">
       <div className="border-b border-[var(--hairline)] px-4 py-3">
-        <h2 className="text-base font-bold text-[var(--ink-deep)]">{title}</h2>
+        <h2 className="text-base font-semibold text-[var(--ink)]">{title}</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="text-xs uppercase text-[var(--mute)]">
+          <thead className="bg-[var(--surface-soft)]">
             <tr className="border-b border-[var(--hairline)]">
-              <th className="px-3 py-3 font-medium">Run</th>
-              <th className="px-3 py-3 font-medium">Workflow</th>
-              <th className="px-3 py-3 font-medium">Status</th>
-              <th className="px-3 py-3 font-medium">Trigger</th>
-              <th className="px-3 py-3 font-medium">{detailsLabel}</th>
+              <th className="mono-label px-3 py-3 text-left">Run</th>
+              <th className="mono-label px-3 py-3 text-left">Workflow</th>
+              <th className="mono-label px-3 py-3 text-left">Status</th>
+              <th className="mono-label px-3 py-3 text-left">Trigger</th>
+              <th className="mono-label px-3 py-3 text-right">{detailsLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -122,9 +122,9 @@ export function RecentRunsTable({
                     ease: EASE_OUT,
                     delay: reduce ? 0 : staggerDelay(index)
                   }}
-                  className="border-b border-[var(--hairline)] transition-colors duration-200 last:border-b-0 hover:bg-[var(--surface-soft)]"
+                  className="h-[52px] border-b border-[var(--hairline)] transition-colors duration-200 last:border-b-0 hover:bg-[var(--surface-soft)]"
                 >
-                  <td className="px-3 py-3 font-medium">
+                  <td className="px-3 py-3 font-mono font-medium text-[var(--ink)]">
                     <Link href={`/runs/${run.id}?lang=${locale}`} className="underline decoration-[var(--hairline-strong)] underline-offset-4">
                       {run.id}
                     </Link>
@@ -134,7 +134,7 @@ export function RecentRunsTable({
                     <StatusPill tone={runStatusTone[run.status]}>{run.status}</StatusPill>
                   </td>
                   <td className="px-3 py-3">{run.triggerType}</td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3 text-right">
                     <ViewRunLink href={`/runs/${run.id}?lang=${locale}`} label={detailsLabel} />
                   </td>
                 </motion.tr>
@@ -170,9 +170,9 @@ export function EventStream({
   const visible = events.slice(0, 6);
 
   return (
-    <section className="rounded-xl border border-[var(--hairline)] bg-white">
+    <section className="card flex h-full min-w-0 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--hairline)] px-4 py-3">
-        <h2 className="text-base font-bold text-[var(--ink-deep)]">{title}</h2>
+        <h2 className="text-base font-semibold text-[var(--ink)]">{title}</h2>
         <span
           className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--mute)]"
           onMouseEnter={onMouseEnter}
@@ -184,7 +184,8 @@ export function EventStream({
           ● {liveCopy[locale]} <LiveCursor />
         </span>
       </div>
-      <div className="divide-y divide-[var(--hairline)]">
+      <div className="relative px-4 py-4">
+        <span aria-hidden="true" className="absolute left-[1.35rem] top-4 bottom-4 w-px bg-[var(--hairline)]" />
         {visible.length > 0 ? (
           <AnimatePresence initial={false}>
             {visible.map((event) => (
@@ -196,10 +197,13 @@ export function EventStream({
                   duration: reduce ? DURATION.reducedFade : DURATION.base,
                   ease: EASE_OUT
                 }}
-                className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_auto]"
+                className="relative flex items-start gap-4 py-3 pl-8"
               >
-                <span>{event.type}</span>
-                <span className="font-mono text-[var(--mute)]">{event.eventId}</span>
+                <span aria-hidden="true" className="absolute left-[1.05rem] top-[1.15rem] h-2 w-2 rounded-full bg-[var(--accent)]" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-[var(--body)]">{event.type}</p>
+                </div>
+                <span className="shrink-0 font-mono text-xs text-[var(--mute)]">{event.eventId}</span>
               </motion.div>
             ))}
           </AnimatePresence>

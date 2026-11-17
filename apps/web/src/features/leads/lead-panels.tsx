@@ -50,9 +50,9 @@ export function LeadTable({
   const visible = leads.slice(0, limit);
   const hidden = leads.length - visible.length;
   return (
-    <div className="rounded-xl border border-[var(--hairline)] bg-white">
+    <div className="card flex h-full min-w-0 flex-col">
       <div className="border-b border-[var(--hairline)] px-4 py-3">
-        <h2 className="text-base font-bold text-[var(--ink)]">{labels.leads}</h2>
+        <h2 className="text-base font-semibold text-[var(--ink)]">{labels.leads}</h2>
       </div>
       {leads.length === 0 ? (
         <p className="px-4 py-6 text-sm text-[var(--mute)]">{labels.noLeads}</p>
@@ -60,12 +60,12 @@ export function LeadTable({
         <>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
-              <thead className="text-xs uppercase text-[var(--mute)]">
+              <thead className="bg-[var(--surface-soft)]">
                 <tr className="border-b border-[var(--hairline)]">
-                  <th scope="col" className="px-3 py-3 font-medium">{labels.lead}</th>
-                  <th scope="col" className="px-3 py-3 font-medium">{labels.score}</th>
-                  <th scope="col" className="px-3 py-3 font-medium">{labels.category}</th>
-                  <th scope="col" className="px-3 py-3 font-medium">{labels.summary}</th>
+                  <th scope="col" className="mono-label px-3 py-3 text-left">{labels.lead}</th>
+                  <th scope="col" className="mono-label px-3 py-3 text-right">{labels.score}</th>
+                  <th scope="col" className="mono-label px-3 py-3 text-left">{labels.category}</th>
+                  <th scope="col" className="mono-label px-3 py-3 text-left">{labels.summary}</th>
                 </tr>
               </thead>
               <tbody>
@@ -79,7 +79,7 @@ export function LeadTable({
                       ease: EASE_OUT,
                       delay: reduce ? 0 : staggerDelay(index)
                     }}
-                    className="border-b border-[var(--hairline)] align-top transition-colors duration-200 last:border-b-0 hover:bg-[var(--surface-soft)]"
+                    className="h-[52px] border-b border-[var(--hairline)] align-top transition-colors duration-200 last:border-b-0 hover:bg-[var(--surface-soft)]"
                   >
                     <td className="px-3 py-3">
                       <Link href={`/runs/${lead.workflowRunId}?lang=${locale}`} className="font-bold underline underline-offset-4">
@@ -87,7 +87,7 @@ export function LeadTable({
                       </Link>
                       <p className="text-xs text-[var(--mute)]">{[lead.company, lead.email].filter(Boolean).join(" · ")}</p>
                     </td>
-                    <td className="px-3 py-3 font-mono font-bold">{lead.leadScore}</td>
+                    <td className="px-3 py-3 text-right font-mono font-bold text-[var(--ink)]">{lead.leadScore}</td>
                     <td className="px-3 py-3">
                       <StatusPill tone={categoryTone[lead.category] ?? "neutral"}>{lead.category}</StatusPill>
                     </td>
