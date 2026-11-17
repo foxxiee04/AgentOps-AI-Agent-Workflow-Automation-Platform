@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { landingCopy, type Locale } from "../../lib/i18n";
-import { Stagger, StaggerItem, useIconHover } from "../motion";
+import { Spotlight, Stagger, StaggerItem, TiltCard, useIconHover } from "../motion";
 import BrainCircuitIcon from "../../icons/brain-circuit-icon";
 import CodeXmlIcon from "../../icons/code-xml-icon";
 import EyeIcon from "../../icons/eye-icon";
@@ -116,7 +116,9 @@ function BentoCard({ feature, index }: { feature: BentoFeature; index: number })
   const Icon = icons[index % icons.length];
 
   return (
-    <article className="card group h-full p-6 transition-[transform,box-shadow,border-color] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:border-[var(--hairline-strong)] hover:shadow-[var(--shadow-md)] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+    <TiltCard className="rounded-[var(--radius-card)]">
+    <Spotlight className="h-full rounded-[var(--radius-card)]">
+    <article className="card group h-full p-6 transition-[box-shadow,border-color] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-[var(--hairline-strong)] hover:shadow-[var(--shadow-md)] motion-reduce:transition-none">
       <div className="flex items-center justify-between" {...iconHandlers}>
         <Icon ref={iconRef} size={20} className="text-[var(--accent)]" aria-hidden="true" />
         <span className="mono-label text-[10px]">{feature.tag}</span>
@@ -125,11 +127,13 @@ function BentoCard({ feature, index }: { feature: BentoFeature; index: number })
       <p className="mt-2 text-[15px] leading-[1.6] text-[var(--body)]">{feature.body}</p>
       <div
         aria-hidden="true"
-        className="mt-5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-soft)]/60 p-3"
+        className="mt-5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-soft)]/60 p-3 [transform:translateZ(28px)]"
       >
         <Fragment index={index} />
       </div>
     </article>
+    </Spotlight>
+    </TiltCard>
   );
 }
 

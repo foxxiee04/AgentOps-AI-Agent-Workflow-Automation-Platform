@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { clsx } from "clsx";
-import { CountUp } from "./motion";
+import { CountUp, Spotlight, TiltCard } from "./motion";
 
 export type MetricTone = "iris" | "sky" | "violet" | "rose";
 
@@ -29,6 +29,8 @@ export function MetricCard({
   const isNumeric = typeof value === "number";
 
   return (
+    <TiltCard className="rounded-[var(--radius-card)]" maxDeg={3} glare={false}>
+    <Spotlight className="h-full rounded-[var(--radius-card)]">
     <div className="card lumen-card-lift h-full p-5">
       <div className="flex items-start justify-between gap-3">
         <p className="mono-label">{label}</p>
@@ -48,5 +50,7 @@ export function MetricCard({
       </p>
       <p className="mt-2 text-[13px] leading-snug text-[var(--mute)]">{detail}</p>
     </div>
+    </Spotlight>
+    </TiltCard>
   );
 }
