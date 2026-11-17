@@ -66,7 +66,85 @@ export const landingCopy = {
       "> tool-worker POST /follow-up",
       "> notification-worker queued sales task",
       "[ok] workflow completed"
-    ]
+    ],
+    moss: {
+      heroEyebrow: "Workflow automation",
+      heroItalic: "AI Agent",
+      nodes: [
+        { type: "Trigger", title: "Lead qua API / webhook", meta: "12:04:31 · lead_2841" },
+        { type: "AI Agent", title: "Chấm điểm intent", meta: "openai · draft email" },
+        { type: "Human", title: "Người duyệt email", meta: "approvals · 1 đang chờ" },
+        { type: "Task", title: "Tạo task cho sales", meta: "completed · 0.8s" }
+      ],
+      scoreLabel: "Intent score",
+      runningLabel: "Đang chạy",
+      marquee: ["Kafka", "Postgres", "OpenAI", "Redis", "Webhook", "Approval", "Sales task"],
+      howEyebrow: "Cách hoạt động",
+      howTitle: "Từ lead đến task sales, ba bước",
+      steps: [
+        {
+          title: "Lead đi vào hệ thống",
+          body: "Lead mới vào qua API hoặc webhook. AgentOps lưu event vào Kafka và mở một run được theo dõi từng bước."
+        },
+        {
+          title: "AI chấm điểm và viết email",
+          body: "AI Agent đọc dữ liệu lead, chấm điểm intent trên thang 100 và viết nháp email follow-up. Output được validate bằng JSON Schema."
+        },
+        {
+          title: "Người duyệt, task được tạo",
+          body: "Email chỉ được gửi sau khi con người duyệt. Run tiếp tục tạo task cho sales và lưu lại toàn bộ lịch sử."
+        }
+      ],
+      bentoEyebrow: "Vận hành",
+      bentoTitle: "Lớp điều hành cho AI Agent",
+      bento: [
+        {
+          tag: "Run timeline",
+          title: "Theo dõi run từng bước",
+          body: "Mỗi run có timeline step-by-step: node nào đã chạy, AI trả ra gì, đang chờ duyệt ở đâu."
+        },
+        {
+          tag: "Human approval",
+          title: "Con người chốt trước khi gửi",
+          body: "Email do AI viết nằm trong hàng duyệt; duyệt hoặc từ chối ngay trong workspace."
+        },
+        {
+          tag: "AI scoring",
+          title: "Output có cấu trúc",
+          body: "Điểm intent, phân loại và tóm tắt được validate bằng JSON Schema trước khi chuyển sang bước sau."
+        },
+        {
+          tag: "Observability",
+          title: "Metrics, logs, traces",
+          body: "Prometheus, Grafana và Tempo sẵn sàng cho mọi run, event và token usage."
+        },
+        {
+          tag: "RBAC",
+          title: "Phân quyền theo workspace",
+          body: "OWNER, ADMIN, MEMBER — quyền riêng cho từng workspace, kèm audit log."
+        },
+        {
+          tag: "CI/CD",
+          title: "Triển khai lên AWS EKS",
+          body: "Pipeline build → test → deploy Kubernetes, health checks và readiness tích hợp sẵn."
+        }
+      ],
+      previewEyebrow: "Bên trong sản phẩm",
+      previewTitle: "Bảng điều khiển chạy được ngay ngày mai",
+      previewKpis: [
+        ["128", "runs hôm nay", "+12%"],
+        ["84.2k", "AI tokens", "+4%"],
+        ["6", "đang chờ duyệt", "live"],
+        ["99.9%", "uptime", "30 ngày"]
+      ],
+      previewHead: ["Lead", "Điểm", "Phân loại", "Trạng thái"],
+      statuses: { completed: "Hoàn tất", running: "Đang chạy", waiting: "Chờ duyệt" },
+      ctaEyebrow: "Bắt đầu",
+      ctaTitle: "Đưa quy trình AI đầu tiên vào chạy thật",
+      ctaBody: "Đăng nhập để chạy workflow mẫu, hoặc tạo tài khoản mới trong một phút.",
+      registerCta: "Tạo tài khoản",
+      footerNote: "AgentOps — nền tảng tự động hóa workflow bằng AI Agent. Kafka · Postgres · Redis · OpenAI · AWS EKS."
+    }
   },
   en: {
     localeName: "English",
@@ -120,7 +198,85 @@ export const landingCopy = {
       "> tool-worker POST /follow-up",
       "> notification-worker queued sales task",
       "[ok] workflow completed"
-    ]
+    ],
+    moss: {
+      heroEyebrow: "Workflow automation",
+      heroItalic: "workflow",
+      nodes: [
+        { type: "Trigger", title: "Lead via API / webhook", meta: "12:04:31 · lead_2841" },
+        { type: "AI Agent", title: "Score intent", meta: "openai · draft email" },
+        { type: "Human", title: "Approve the email", meta: "approvals · 1 waiting" },
+        { type: "Task", title: "Create sales task", meta: "completed · 0.8s" }
+      ],
+      scoreLabel: "Intent score",
+      runningLabel: "Running",
+      marquee: ["Kafka", "Postgres", "OpenAI", "Redis", "Webhook", "Approval", "Sales task"],
+      howEyebrow: "How it works",
+      howTitle: "From lead to sales task in three steps",
+      steps: [
+        {
+          title: "A lead arrives",
+          body: "New leads enter through the API or a webhook. AgentOps stores the event in Kafka and opens a run that is tracked step by step."
+        },
+        {
+          title: "AI scores and drafts",
+          body: "The AI agent reads the lead, scores intent on a 0–100 scale and drafts a follow-up email. Output is validated with JSON Schema."
+        },
+        {
+          title: "A human approves",
+          body: "The email is only sent after a human approves it. The run then creates the sales task and stores the full history."
+        }
+      ],
+      bentoEyebrow: "Operations",
+      bentoTitle: "The operating layer for AI Agents",
+      bento: [
+        {
+          tag: "Run timeline",
+          title: "Every run, step by step",
+          body: "Each run has a step timeline: which node ran, what the AI returned, and where it is waiting for approval."
+        },
+        {
+          tag: "Human approval",
+          title: "A human decides before sending",
+          body: "AI-drafted emails sit in the approval queue; approve or reject right inside the workspace."
+        },
+        {
+          tag: "AI scoring",
+          title: "Structured output",
+          body: "Intent score, category, and summary are validated with JSON Schema before the next step runs."
+        },
+        {
+          tag: "Observability",
+          title: "Metrics, logs, traces",
+          body: "Prometheus, Grafana, and Tempo are ready for every run, event, and token usage."
+        },
+        {
+          tag: "RBAC",
+          title: "Permissions per workspace",
+          body: "OWNER, ADMIN, MEMBER — separate roles for each workspace, with an audit log."
+        },
+        {
+          tag: "CI/CD",
+          title: "Deploys to AWS EKS",
+          body: "A build → test → deploy Kubernetes pipeline, with health checks and readiness built in."
+        }
+      ],
+      previewEyebrow: "Inside the product",
+      previewTitle: "A dashboard you can run tomorrow",
+      previewKpis: [
+        ["128", "runs today", "+12%"],
+        ["84.2k", "AI tokens", "+4%"],
+        ["6", "waiting approval", "live"],
+        ["99.9%", "uptime", "30 days"]
+      ],
+      previewHead: ["Lead", "Score", "Category", "Status"],
+      statuses: { completed: "Completed", running: "Running", waiting: "Waiting" },
+      ctaEyebrow: "Get started",
+      ctaTitle: "Put your first AI workflow to work",
+      ctaBody: "Sign in to run the sample workflow, or create an account in under a minute.",
+      registerCta: "Create account",
+      footerNote: "AgentOps — AI Agent workflow automation platform. Kafka · Postgres · Redis · OpenAI · AWS EKS."
+    }
   }
 } satisfies Record<Locale, unknown>;
 
