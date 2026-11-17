@@ -49,11 +49,17 @@ export function CountUp({ value, duration = DURATION.count, format, className, s
 
   const settled = reduce || display === value;
   const shown = settled ? value : display;
-  const text = format ? format(shown) : String(Math.round(shown));
+  // Thousands grouped with a narrow no-break space (2 086 376): same output on the server and the client,
+  // and readable in both Vietnamese and English.
+  const text = format ? format(shown) : groupThousands(Math.round(shown));
 
   return (
     <span {...rest} className={className} style={{ fontVariantNumeric: "tabular-nums", ...style }}>
       {text}
     </span>
   );
+}
+
+export function groupThousands(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }

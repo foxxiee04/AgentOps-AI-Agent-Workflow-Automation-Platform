@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CountUp } from "./count-up";
+import { CountUp, groupThousands } from "./count-up";
 import { LiveCursor } from "./live-cursor";
 import { MaskHeading } from "./mask-heading";
 import { MotionProvider } from "./motion-provider";
@@ -10,7 +10,12 @@ import { useIconHover } from "./use-icon-hover";
 
 describe("motion primitives", () => {
   it("CountUp renders the exact final value", () => {
-    expect(renderToStaticMarkup(<CountUp value={1284} />)).toContain(">1284<");
+    expect(renderToStaticMarkup(<CountUp value={1284} />)).toContain(">1 284<");
+  });
+
+  it("groups thousands with a narrow no-break space", () => {
+    expect(groupThousands(7)).toBe("7");
+    expect(groupThousands(2086376)).toBe("2 086 376");
   });
 
   it("CountUp renders the value through the supplied formatter", () => {

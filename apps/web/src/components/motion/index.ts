@@ -8,3 +8,4 @@ export * from "./count-up";
 export * from "./live-cursor";
 export * from "./status-flash";
 export * from "./use-icon-hover";
+export * from "./pointer-fx";
