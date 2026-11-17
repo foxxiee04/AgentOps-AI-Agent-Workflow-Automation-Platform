@@ -22,28 +22,28 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
 
   if (!active) {
     return (
-      <AppShell active="workflows" locale={locale}>
-        <div className="space-y-8 p-5">
-          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
-            <div>
-              <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.workflows.eyebrow}</p>
-              <WorkflowsHeading>{t.workflows.title}</WorkflowsHeading>
-            </div>
+    <AppShell active="workflows" locale={locale}>
+      <div className="space-y-6 p-5 lg:p-8">
+        <div className="page-header">
+          <div>
+            <p className="mono-label">{t.workflows.eyebrow}</p>
+            <WorkflowsHeading>{t.workflows.title}</WorkflowsHeading>
           </div>
-          <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
         </div>
-      </AppShell>
-    );
+        <EmptyState title={t.states.emptyTitle} body={t.shell.noWorkspacesMessage} />
+      </div>
+    </AppShell>
+  );
   }
 
   const workflows = await safeApiGet<WorkflowView[]>(`/workflows?workspaceId=${encodeURIComponent(active.id)}`, fallbackWorkflows);
 
-  return (
+    return (
     <AppShell active="workflows" locale={locale}>
-      <div className="space-y-8 p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--hairline)] pb-4">
+      <div className="space-y-6 p-5 lg:p-8">
+        <div className="page-header">
           <div>
-            <p className="text-sm font-semibold uppercase text-[var(--mute)]">{t.workflows.eyebrow}</p>
+            <p className="mono-label">{t.workflows.eyebrow}</p>
             <WorkflowsHeading>{t.workflows.title}</WorkflowsHeading>
           </div>
           <CreateFromTemplateButton labels={t.workflows} locale={locale} workspaceId={active.id} />
@@ -56,7 +56,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
         ) : workflows.data.length === 0 ? (
           <EmptyState title={t.states.emptyTitle} body={t.workflows.empty} />
         ) : (
-        <WorkflowStagger className="divide-y divide-[var(--hairline)] rounded-xl border border-[var(--hairline)] bg-white">
+        <WorkflowStagger className="card divide-y divide-[var(--hairline)] overflow-hidden">
           {workflows.data.map((workflow) => (
             <WorkflowCard
               key={workflow.id}
@@ -70,11 +70,11 @@ export default async function WorkflowsPage({ searchParams }: { searchParams?: L
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-bold text-[var(--ink-deep)]">{workflow.name}</h2>
+                  <h2 className="text-base font-semibold text-[var(--ink)]">{workflow.name}</h2>
                   <StatusPill tone={statusTone[workflow.status]}>{workflow.status}</StatusPill>
                 </div>
                 <p className="mt-1 max-w-3xl text-sm text-[var(--body)]">{workflow.description}</p>
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs font-medium text-[var(--mute)]">
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs text-[var(--mute)]">
                   <span>[{t.workflows.nodes}] {workflow.definition.nodes.length}</span>
                   <span>[{t.workflows.edges}] {workflow.definition.edges.length}</span>
                   <span>[{t.workflows.workspace}] {workflow.workspaceId}</span>

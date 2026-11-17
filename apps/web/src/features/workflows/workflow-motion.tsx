@@ -5,7 +5,7 @@ import { MaskHeading, Stagger, StaggerItem } from "../../components/motion";
 
 export function WorkflowsHeading({ children }: { children: ReactNode }) {
   return (
-    <MaskHeading className="mt-1 text-3xl font-bold leading-tight text-[var(--ink-deep)]">{children}</MaskHeading>
+    <MaskHeading className="mt-1 font-display text-[34px] leading-[1.1] text-[var(--ink)]">{children}</MaskHeading>
   );
 }
 

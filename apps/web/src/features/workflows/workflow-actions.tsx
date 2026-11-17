@@ -164,7 +164,7 @@ export function RunWorkflowControl({
       {...iconHandlers}
       onClick={onRun}
       disabled={disabled || state.status === "loading"}
-      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-3 text-sm font-semibold text-white transition-colors duration-200 disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+      className="btn btn-primary disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
       title={disabled ? hint : undefined}
     >
       <IconSlot>
@@ -295,7 +295,7 @@ export function PublishWorkflowButton({
         {...iconHandlers}
         disabled
         aria-describedby={`publish-blocked-${workflowId}`}
-        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-[var(--hairline)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--mute)] transition-colors duration-200"
+        className="btn btn-secondary border-[var(--hairline)] bg-[var(--surface-soft)] text-[var(--mute)]"
         title={invalidMessage}
       >
         <IconSlot>
@@ -328,7 +328,7 @@ export function PublishWorkflowButton({
       {...iconHandlers}
       onClick={publish}
       disabled={state.status === "loading"}
-      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink)] transition-colors duration-200 disabled:border-[var(--hairline)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
+      className="btn btn-secondary disabled:border-[var(--hairline)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--ash)]"
     >
       <IconSlot>
         <UploadIcon ref={ref} size={16} strokeWidth={1.75} />
@@ -359,8 +359,8 @@ export function DeleteWorkflowControl({
       disabled={phase === "deleting"}
       className={
         phase === "confirming"
-          ? "inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] px-3 text-sm font-semibold text-[var(--danger-ink)] transition-colors duration-200 disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
-          : "inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--danger-ink)] transition-colors duration-200 disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
+          ? "btn border border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-ink)] disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
+          : "btn btn-secondary text-[var(--danger-ink)] disabled:border-[var(--hairline)] disabled:text-[var(--mute)]"
       }
     >
       <IconSlot>
@@ -480,7 +480,7 @@ export function WorkflowCard({
   }, [status]);
 
   return (
-    <article className="bg-white px-4 py-4">
+    <article className="bg-[var(--surface-card)] px-4 py-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         {children}
         {archived ? (
@@ -492,7 +492,7 @@ export function WorkflowCard({
             <Link
               {...iconHandlers}
               href={`/workflows/${workflowId}/builder?lang=${locale}`}
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-[var(--hairline-strong)] bg-white px-3 text-sm font-semibold text-[var(--ink)] transition-colors duration-200"
+              className="btn btn-secondary"
             >
               <IconSlot>
                 <EyeIcon ref={ref} size={16} strokeWidth={1.75} />
@@ -568,7 +568,7 @@ export function CreateFromTemplateButton({
         {...iconHandlers}
         onClick={create}
         disabled={state.status === "loading"}
-        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors duration-200 disabled:bg-[var(--surface-soft)] disabled:text-[var(--mute)]"
+        className="btn btn-primary disabled:bg-[var(--surface-soft)] disabled:text-[var(--mute)]"
       >
         <IconSlot>
           <SparklesIcon ref={ref} size={16} strokeWidth={1.75} />
