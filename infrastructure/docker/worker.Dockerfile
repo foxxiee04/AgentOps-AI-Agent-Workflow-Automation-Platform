@@ -38,7 +38,11 @@ RUN rm -rf /out/node_modules/.pnpm/prisma@* /out/node_modules/.pnpm/@prisma+stud
 
 # hadolint ignore=DL3006
 FROM ${NODE_IMAGE} AS runner
-RUN apk add --no-cache tini
+# The app runs with plain `node`: drop the npm/corepack CLIs bundled in the base image (their own
+# dependencies carry CVEs that the Trivy gate reports) to shrink the runtime attack surface.
+RUN apk add --no-cache tini \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 ENV NODE_ENV=production WORKER_METRICS_PORT=9100
 WORKDIR /app
 COPY --from=builder --chown=node:node /out ./
