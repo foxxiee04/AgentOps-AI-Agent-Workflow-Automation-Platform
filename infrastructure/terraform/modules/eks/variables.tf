@@ -44,9 +44,11 @@ variable "node_instance_types" {
 }
 
 variable "node_min" {
+  # t3.medium fits 17 pods per node. Two nodes are full with the app, monitoring and add-ons (EBS CSI), which
+  # leaves no room for the extra pods of a rolling update, so the default is three.
   description = "Minimum number of nodes in the managed node group."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "node_max" {
@@ -58,7 +60,7 @@ variable "node_max" {
 variable "node_desired" {
   description = "Desired number of nodes in the managed node group."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "secrets_arn_prefix" {

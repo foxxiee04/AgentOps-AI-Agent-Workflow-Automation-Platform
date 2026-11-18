@@ -24,7 +24,7 @@ The production stack is designed as an ephemeral environment (`ephemeral = true`
 | Resource | Implementation | Details |
 | --- | --- | --- |
 | **Region** | `ap-southeast-1` (Singapore) | Multi-AZ deployment across 2 Availability Zones |
-| **EKS Cluster** | Kubernetes 1.31 (`agentops-prod`) | 2 x `t3.medium` worker nodes deployed in private subnets |
+| **EKS Cluster** | Kubernetes 1.31 (`agentops-prod`) | 3 x `t3.medium` worker nodes in private subnets (17 pods per node; two were not enough for rolling updates) |
 | **Relational Database** | AWS RDS PostgreSQL 16 | `db.t4g.micro`, automated encryption, TLS enforced |
 | **Caching Layer** | AWS ElastiCache Redis 7 | `cache.t4g.micro`, in-transit encryption (TLS) enabled |
 | **Message Streaming** | AWS MSK (Managed Kafka 3.9.x) | 2 x `kafka.t3.small` brokers across 2 Availability Zones |

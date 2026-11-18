@@ -18,7 +18,7 @@ AgentOps targets three distinct operational environments:
 | --- | --- | --- | --- | --- |
 | **Local** | Docker Compose + native Node 22 | Local development, inner-loop coding, debugging | In-container PostgreSQL 16, Redis 7, Kafka 4.3 (KRaft), Prometheus, Tempo, Grafana | Web: `http://localhost:3000`<br/>API: `http://localhost:4000` |
 | **Dev** | AWS EC2 (t3.medium) running k3s | Ephemeral pull request validation and feature testing | In-cluster PostgreSQL, Redis, Kafka (`components/in-cluster-data`) | Gated on demand via `deploy-dev.yml` |
-| **Production** | AWS EKS 1.31 (2x t3.medium) in `ap-southeast-1` | Live production platform, showcase demo runs | Managed RDS PostgreSQL 16, ElastiCache Redis (TLS), MSK Kafka 3.9.x | Web: `https://agentops.<lb-ip-dashed>.sslip.io`<br/>API: `https://api.agentops.<lb-ip-dashed>.sslip.io` |
+| **Production** | AWS EKS 1.31 (3x t3.medium) in `ap-southeast-1` | Live production platform, showcase demo runs | Managed RDS PostgreSQL 16, ElastiCache Redis (TLS), MSK Kafka 3.9.x | Web: `https://agentops.<lb-ip-dashed>.sslip.io`<br/>API: `https://api.agentops.<lb-ip-dashed>.sslip.io` |
 
 ### Resource Naming Conventions
 

@@ -246,7 +246,7 @@ flowchart TB
     NLB --> ING["Kubernetes Ingress<br/>agentops + api hosts"]
     ING --> WEBS["agentops-web<br/>2-6 pods"]
     ING --> APIS["agentops-api<br/>2-6 pods"]
-    subgraph EKS["EKS 1.31 - 2 x t3.medium"]
+    subgraph EKS["EKS 1.31 - 3 x t3.medium"]
         WEBS
         APIS
         WF["workflow-worker<br/>KEDA 1-6"]

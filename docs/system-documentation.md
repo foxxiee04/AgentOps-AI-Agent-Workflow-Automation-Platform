@@ -250,7 +250,7 @@ flowchart TB
         end
 
         subgraph PrivateSubnets["Private Subnets (2 AZs)"]
-            subgraph EKS["EKS Cluster: agentops-prod (2x t3.medium)"]
+            subgraph EKS["EKS Cluster: agentops-prod (3x t3.medium)"]
                 ingress[ingress-nginx<br/>cert-manager + Let's Encrypt]
                 webp[agentops-web Pods (2 replicas)]
                 apip[agentops-api Pods (HPA 2-6 replicas)]

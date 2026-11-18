@@ -51,7 +51,7 @@ flowchart LR
 
 ### 5. Production Infrastructure (AWS ap-southeast-1)
 - [x] Infrastructure-as-Code: Modular **Terraform** managing 54 AWS resources.
-- [x] Managed Compute: **AWS EKS 1.31** with dual `t3.medium` worker nodes.
+- [x] Managed Compute: **AWS EKS 1.31** with three `t3.medium` worker nodes.
 - [x] Managed Data: **AWS RDS PostgreSQL 16** (`db.t4g.micro`) and **ElastiCache Redis 7** (`cache.t4g.micro`, in-transit TLS).
 - [x] Managed Messaging: **Amazon MSK** Kafka provisioned with 2 brokers.
 - [x] Ingress & TLS: `ingress-nginx` with AWS Network Load Balancer (NLB), automated TLS via `cert-manager` and Let's Encrypt.
