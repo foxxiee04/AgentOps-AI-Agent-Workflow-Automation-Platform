@@ -2,6 +2,7 @@
   "name": "agentops-platform",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "AI Agent workflow automation platform scaffold.",
   "packageManager": "pnpm@11.5.2",
   "scripts": {
