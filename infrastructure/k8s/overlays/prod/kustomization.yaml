@@ -48,6 +48,8 @@ patches:
         AUTH_COOKIE_DOMAIN: agentops.example.com
         # New users (email or Google) can read the demo workspace next to their own.
         DEMO_WORKSPACE_JOIN_ROLE: VIEWER
+        # AI nodes configured with the mock provider run on OpenAI (key in the agentops/prod/app secret).
+        AI_PROVIDER_OVERRIDE: openai
         # Endpoints come from Terraform outputs; DATABASE_URL is in the secret.
         KAFKA_BROKERS: REPLACE_WITH_MSK_BOOTSTRAP_BROKERS:9092
         REDIS_URL: redis://REPLACE_WITH_ELASTICACHE_ENDPOINT:6379
