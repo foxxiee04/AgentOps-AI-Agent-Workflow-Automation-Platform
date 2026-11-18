@@ -25,6 +25,9 @@ postman/*secret*
 postman/*.local.postman_environment.json
 !postman/AgentOps.local.postman_environment.json
 **/.terraform/*
+**/.terraform.bak*/
+# Per-environment backend settings (bucket names); see backend.hcl.example.
+**/backend.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
