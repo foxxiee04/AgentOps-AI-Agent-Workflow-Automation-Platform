@@ -1,7 +1,12 @@
-import { Body, Controller, Get, Inject, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Req } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import type { AuthenticatedCaller } from "../../common/auth/jwt-auth.guard";
 import { AiService } from "./ai.service";
 import { EvaluateAgentDto, TestAgentDto } from "./dto";
+
+type RequestWithAuth = {
+  auth?: AuthenticatedCaller;
+};
 
 @ApiTags("ai")
 @Controller("ai")
@@ -24,8 +29,8 @@ export class AiController {
   }
 
   @Get("tasks/:id")
-  task(@Param("id") id: string) {
-    return { id, status: "mock_completed" };
+  task(@Param("id") id: string, @Req() request: RequestWithAuth) {
+    return this.aiService.getTask(id, request.auth);
   }
 
   @Get("usage")

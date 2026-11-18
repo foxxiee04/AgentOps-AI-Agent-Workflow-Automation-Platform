@@ -1,8 +1,9 @@
-import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   aiAgentNodeConfigSchema,
   aiQuotaExceeded,
   describeAiQuota,
+  hasRoleAtLeast,
   resolveAiQuotaLimits,
   buildAiPrompt,
   buildMockLeadEmail,
@@ -15,11 +16,13 @@ import {
   evaluateLeadClassification,
   leadGoldenSetVersion,
   type EvaluatedCase,
+  type WorkspaceRole,
   leadScoreResultSchema,
   validateAiOutput,
   type AiAgentNodeConfig,
   type JsonSchema
 } from "@agentops/shared";
+import type { AuthenticatedCaller } from "../../common/auth/jwt-auth.guard";
 import { DemoDataService, demoWorkspaceId } from "../../common/infrastructure/demo-data.service";
 import { PrismaService } from "../../common/infrastructure/prisma.service";
 import type { EvaluateAgentDto, TestAgentDto } from "./dto";
@@ -134,6 +137,46 @@ export class AiService {
       aiCallsToday: records.filter((record) => record.aiTokensUsed > 0).length,
       tokensUsedToday,
       notes: "Counts AI calls from the ai-worker and the API test endpoints (UsageRecord). Limits: AI_DAILY_CALL_LIMIT, AI_DAILY_TOKEN_LIMIT."
+    };
+  }
+
+  async getTask(id: string, auth?: AuthenticatedCaller) {
+    const task = await this.prisma.client.aiTaskResult.findUnique({
+      where: { id }
+    });
+
+    if (!task) {
+      throw new NotFoundException("AI task not found");
+    }
+
+    if (!auth?.userId) {
+      throw new ForbiddenException("Workspace membership required");
+    }
+
+    const membership = await this.prisma.client.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: task.workspaceId,
+          userId: auth.userId
+        }
+      }
+    });
+
+    if (!membership || !hasRoleAtLeast(membership.role as WorkspaceRole, "VIEWER")) {
+      throw new ForbiddenException("Workspace membership required");
+    }
+
+    return {
+      id: task.id,
+      workflowRunId: task.workflowRunId,
+      nodeId: task.nodeId,
+      provider: task.provider,
+      modelName: task.modelName,
+      inputTokens: task.inputTokens,
+      outputTokens: task.outputTokens,
+      output: (task.outputJson ?? null) as unknown,
+      errorMessage: task.errorMessage ?? null,
+      createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : String(task.createdAt)
     };
   }
 
