@@ -1,96 +1,144 @@
-# Security
+# Security Architecture & Threat Model
 
-Security is part of the MVP, not a later polish step.
+Security is an architectural baseline in AgentOps, integrated directly into the synchronous API control plane, asynchronous Kafka execution pipeline, and infrastructure deployment manifests.
 
-## Auth
+## Threat Model Summary
 
-- Use password hashing with argon2 or bcrypt.
-- Use JWT access tokens and refresh-token rotation.
-- Store refresh tokens hashed.
-- Add logout and token revocation behavior.
-- The web app never sees tokens. The API sets them as HttpOnly cookies: `agentops_access` (JWT, `Path=/`, 15 minutes) and `agentops_refresh` (`Path=/auth`, 30 days), both `SameSite=Lax` and `Secure` unless `APP_ENV=local`. Login/register/refresh responses to the web origin carry only `{ user }`; clients without that Origin (Postman, k6, integration tests) still get `accessToken`/`refreshToken` in JSON and use `Authorization: Bearer`. Set `AUTH_COOKIE_DOMAIN` (e.g. `.example.com`) when web and API are on sibling subdomains so server-rendered pages receive the cookie.
-- Google sign-in uses the server authorization-code flow: `GET /auth/google` redirects to Google and `GET /auth/google/callback` finishes the exchange. The OAuth `state` parameter is signed with `JWT_ACCESS_SECRET` (no separate secret is needed). A first-time Google user gets a personal workspace with role `OWNER`, exactly like email registration; returning users keep their memberships. Configure `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` and `GOOGLE_OAUTH_REDIRECT_URI` (locally `http://localhost:4000/auth/google/callback`; production `https://api.<web host>/auth/google/callback`). In production the client id and secret live in the Secrets Manager secret `agentops/prod/app` and reach the API through External Secrets; the redirect URI is plain configuration in the ConfigMap. In Google Cloud Console the OAuth client must list the redirect URI and the JavaScript origin for every environment, and while the consent screen is in "Testing" only the listed test users can sign in.
-- Optional demo onboarding: when `DEMO_WORKSPACE_JOIN_ROLE` (`OWNER`, `ADMIN`, `MEMBER` or `VIEWER`) is set and the `ws_demo` workspace exists, a newly created user (email or Google) also joins it with that role. The production overlay sets `VIEWER`, so a new Google user can read the demo data next to their empty personal workspace. Unset or invalid values add no membership.
-- Facebook OAuth is intentionally not in the MVP path yet; add it only if the target segment needs consumer/social acquisition rather than B2B workspace login.
+```mermaid
+flowchart TD
+    subgraph Threats["Threat Vectors"]
+        T1["Cross-Tenant Data Access<br/>(Tenant Isolation)"]
+        T2["Session Hijacking & CSRF<br/>(Ambient Cookies)"]
+        T3["Prompt Injection & Exfiltration<br/>(Adversarial Lead Input)"]
+        T4["Privilege Escalation<br/>(Admin & Disabled Accounts)"]
+        T5["Supply Chain & Secrets Leak<br/>(Static Keys, CVEs)"]
+    end
 
-## Authorization
+    subgraph Defenses["Architectural Defenses"]
+        D1["WorkspaceRoleGuard + ?workspaceId= Scoping"]
+        D2["HttpOnly Cookies + CsrfOriginGuard"]
+        D3["PII Redaction + Injection Guardrails + JSON Schema"]
+        D4["PlatformAdminGuard + Instant Revocation DB Check"]
+        D5["GitHub OIDC + External Secrets + Trivy + npm Removal"]
+    end
 
-- Platform administrators: `User.isPlatformAdmin`. Accounts listed in `PLATFORM_ADMIN_EMAILS` (comma separated; in production it lives in the Secrets Manager secret `agentops/prod/app`, not in the repository) get the flag on sign-in; admins grant or revoke it for others in the admin console. The flag is never removed automatically.
-- Disabled accounts (`User.disabledAt`): sign-in, Google sign-in and refresh are refused with 403/401, all refresh tokens are revoked when the account is disabled, and the global JWT guard checks the flag on every request, so an existing session loses access immediately rather than when its 15-minute access token expires.
-- Admin console actions (disable, enable, grant, revoke) are written to `AuditLog` with `workspaceId = null` and the acting admin; admins cannot change their own account.
-
-Roles:
-
-```txt
-OWNER
-ADMIN
-MEMBER
-VIEWER
+    T1 --> D1
+    T2 --> D2
+    T3 --> D3
+    T4 --> D4
+    T5 --> D5
 ```
 
-Rules:
+| Asset / Boundary | Threat Vector | Impact | Mitigating Controls |
+| --- | --- | --- | --- |
+| **Workspace Tenant Boundary** | Malicious workspace member attempts to read or execute workflows in another workspace. | Cross-tenant data breach; unauthorized execution. | Global `WorkspaceRoleGuard` enforcing membership queries from PostgreSQL; mandatory `?workspaceId=` query param on all `/dashboard/*` routes. |
+| **Browser Authentication** | Cross-Site Scripting (XSS) stealing tokens; Cross-Site Request Forgery (CSRF) forging state changes. | Account takeover; unauthorized approvals or workflow deletions. | `HttpOnly`, `SameSite=Lax`, `Secure` cookies for access/refresh tokens; `CsrfOriginGuard` enforcing strict Origin verification on all state-changing cookie requests. |
+| **AI Ingestion Pipeline** | Adversarial prompt injection contained in inbound lead messages (`{{message}}`). | Hijacked classification; forced high-intent score; leaked system instructions. | Pre-execution regex PII masking; `applyLeadScoringGuardrail` injection detector; strict JSON Schema validation via AJV; workspace daily call/token quotas. |
+| **Platform Administration** | Privilege escalation; disabled accounts retaining access; administrative self-lockout. | Unauthorized platform-wide access; persistent compromised sessions. | `PlatformAdminGuard` checking `User.isPlatformAdmin` per request; DB lookup on `User.disabledAt` terminating active JWTs instantly; self-change prevention; `AuditLog` tracking. |
+| **Infrastructure & CI/CD** | Base image vulnerabilities; static AWS credential leakage; unauthorized cluster access. | Host compromise; cloud account takeover; lateral movement. | Non-root containers with read-only root filesystems; removal of bundled `npm`/`corepack` CLIs; Trivy CRITICAL/HIGH gate in CI; AWS IAM OIDC federation (no static AWS keys). |
 
-- OWNER manages billing/workspace settings.
-- ADMIN publishes and deletes workflows.
-- MEMBER creates and runs workflows.
-- VIEWER can only view dashboards and run history.
+---
 
-## API Security
+## Implemented Security Controls
 
-- Validate all inputs.
-- Enable rate limiting.
-- Configure CORS intentionally.
-- Use Helmet or equivalent HTTP hardening.
-- Add audit logs for sensitive changes.
+### 1. Authentication & Session Management
+- **Password Hashing:** Passwords are hashed with argon2 using memory-hard parameters.
+- **Stateless Access JWTs:** Signed using `JWT_ACCESS_SECRET` with a 15-minute expiration time.
+- **Refresh Token Rotation:** 30-day refresh tokens are generated as cryptographically secure random identifiers (`rfr_...`) and stored in PostgreSQL as SHA-256 hashes (`createHash("sha256").update(secret + token)`). Token revocation occurs on explicit logout or account deactivation.
+- **HttpOnly Cookie Transport:**
+  - `agentops_access`: JWT, 15m lifetime, `Path=/`, `HttpOnly`, `SameSite=Lax`, `Secure` (in non-local environments).
+  - `agentops_refresh`: Opaque token, 30d lifetime, `Path=/auth`, `HttpOnly`, `SameSite=Lax`, `Secure`.
+  - The frontend never reads or stores authentication tokens in `localStorage` or JavaScript-accessible cookies.
+- **Google OAuth 2.0:** Server-side authorization-code flow (`GET /auth/google` -> `GET /auth/google/callback`). The `state` parameter is an HMAC-SHA256 signature generated with `JWT_ACCESS_SECRET` containing the redirect target. On first sign-in:
+  - Creates a dedicated personal workspace with role `OWNER`.
+  - Grants read access to the demo workspace (`ws_demo`) with role `VIEWER` when `DEMO_WORKSPACE_JOIN_ROLE` is set.
 
-## Webhook/HTTP Node Security
+### 2. Immediate Session Revocation & Disabled Accounts
+- **Per-Request Database Check:** Inside `JwtAuthGuard` (via `AuthService.authenticate()`), every request executes a fast primary key lookup against `User.disabledAt`.
+- If an account is flagged as disabled:
+  - The request is immediately rejected with `403 Forbidden` (`This account has been disabled`).
+  - Active 15-minute access JWTs become useless instantly without waiting for expiration.
+  - All associated refresh tokens in `AuthRefreshToken` are updated with `revokedAt = NOW()`.
 
-- Allow only GET and POST in the MVP.
-- Use a maximum timeout of 10 seconds.
-- Retry at most 3 times.
-- Validate URLs and block private/internal IP ranges when implementing real outbound calls.
+### 3. CSRF Protection (CsrfOriginGuard)
+- Mounted globally between `ThrottlerGuard` and `JwtAuthGuard`.
+- Inspects state-changing requests (`POST`, `PUT`, `PATCH`, `DELETE`).
+- **Rules:**
+  - Safe methods (`GET`, `HEAD`, `OPTIONS`) are permitted.
+  - Bearer token authentication (`Authorization: Bearer <token>`) bypasses Origin checking (allowing automated API scripts and CLI tools).
+  - Cookie-authenticated requests and requests targeting `/auth/*` MUST supply an `Origin` (or fallback `Referer`) matching the configured `WEB_APP_URL` origin.
+  - Cookie-carrying writes with missing or mismatched Origin headers are rejected with `403 Forbidden`.
 
-## AI Security
+### 4. Role-Based Access Control (RBAC)
+- Workspace permissions define four hierarchical tiers:
+  - `OWNER`: Workspace administration, member role modifications, billing.
+  - `ADMIN`: Publishing immutable workflow versions, deleting workflows, member invites.
+  - `MEMBER`: Creating and updating workflows, initiating workflow runs, deciding human approvals.
+  - `VIEWER`: Read-only access to dashboards, workflow graphs, and run timelines.
+- Roles are verified against the PostgreSQL `WorkspaceMember` table on every request via `WorkspaceRoleGuard`. Client-supplied roles in headers or bodies are never trusted.
 
-- Mask sensitive data where possible.
-- Never send secrets to AI providers.
-- Validate model output.
-- Track usage and quota.
-- Make prompt/output storage configurable.
+### 5. Workspace Isolation on Analytics & Dashboards
+- All routes under `/dashboard/*` enforce strict workspace isolation:
+  - Every call requires a valid `?workspaceId=<id>` query parameter (missing parameter returns `400 Bad Request`).
+  - The caller must hold membership with at least `VIEWER` role (unauthorized caller returns `403 Forbidden`).
+  - All returned metrics, workflow run histories, scored leads, and sales tasks are filtered strictly by that `workspaceId`.
+  - `PATCH /dashboard/sales-tasks/:id?workspaceId=` requires `MEMBER` role.
 
-## Implemented controls (2026-10-19)
+### 6. Platform Administration Guardrails
+- Endpoints under `/admin/*` require `User.isPlatformAdmin === true` verified by `PlatformAdminGuard`.
+- Initial administrators are bootstrapped via `PLATFORM_ADMIN_EMAILS` (stored in AWS Secrets Manager).
+- **Self-Modification Block:** Administrators cannot disable their own account or revoke their own admin privileges (`400 Bad Request`).
+- **Audit Logging:** Every administrative action is recorded in `AuditLog` with `workspaceId = null`.
+- **CSV Formula Injection Sanitization:** Exported CSV reports (`/admin/reports/*`) include a UTF-8 BOM (`\uFEFF`) and sanitize active formula prefixes (`=`, `+`, `-`, `@`, `\t`, `\r`) with single quotes.
 
-These controls are in place as of this date:
+### 7. AI Node Guardrails & Data Sanitization
+- **PII Masking:** Before constructing prompts, regex transforms mask customer contact data:
+  - Email: `alex.mercer@company.com` -> `al***@company.com`
+  - Phone: `+1-555-0199` -> `[PHONE_REDACTED]`
+  - Secrets / Keys: `ak_live_...` -> `[REDACTED]`
+- **Prompt Injection Defense:** `applyLeadScoringGuardrail` evaluates inputs for injection markers, falling back to safe classifications.
+- **Output Validation:** Model outputs are validated against strict JSON Schemas using AJV with `additionalProperties: false`.
+- **Retries & Dead Letters:** Invalid outputs trigger up to `retryLimit` retries (default: 1). Exhausted retries route to the `dead-letter-events` Kafka topic and emit `workflow-step-failed`, failing the run cleanly.
+- **Daily Workspace Quotas:** `AI_DAILY_CALL_LIMIT` (default: 100) and `AI_DAILY_TOKEN_LIMIT` (default: 200,000) are enforced per workspace, returning HTTP 429 when exhausted.
 
-- Every API route requires a valid access token via the global `JwtAuthGuard`, read from `Authorization: Bearer` or else the HttpOnly `agentops_access` cookie; only routes marked `@Public()` are exempt: health (`/health/live`, `/health/ready`), `/metrics`, `POST /auth/login|register|refresh|logout`, `GET /auth/google` and `/auth/google/callback`, `POST /webhooks/:workflowId`, and `POST /notifications/alertmanager`, which checks a shared `ALERTMANAGER_WEBHOOK_TOKEN` with a constant-time comparison (no token is accepted only when `APP_ENV=local`).
-- Workspace authorization resolves the workspace (workspace `:id`, workflow's workspace, or `workspaceId` from body/query) and checks the caller's `WorkspaceMember` role: VIEWER reads, MEMBER create/update/run, ADMIN publish/delete/invite, OWNER member role changes. Lists (`GET /workflows`, `GET /workspaces`) are scoped to the caller's workspaces. Unauthenticated -> 401; not a member or insufficient role -> 403.
-- Dashboard endpoints are workspace-isolated: every `GET /dashboard/*` route uses the `workspaceQuery` scope in `apps/api/src/common/rbac/`, requires `?workspaceId=` and a membership with role `VIEWER` or higher (400 without the query parameter, 403 when the caller is not a member), and filters all data by that workspace. `PATCH /dashboard/sales-tasks/:id?workspaceId=` requires `MEMBER`. Before this change the dashboard returned data from all workspaces.
-- `GET /auth/me` (and the user object of login/register) returns `workspaces: [{ id, name, slug, role }]`, so clients resolve the active workspace from the caller's memberships rather than trusting a client-supplied id.
-- Authorization is derived from the JWT subject plus workspace membership; the client-supplied role header is no longer trusted. VIEWER gets 403 on approval.
-- The approval endpoint requires `MEMBER` or higher, returns `409` on a duplicate decision (idempotent, first decision wins), and writes an audit log row per decision.
-- A global API rate limit applies (`API_RATE_LIMIT_PER_MINUTE`, default 120 per IP per minute), plus `AUTH_RATE_LIMIT_PER_MINUTE` (default 10) on login/register/refresh; health and metrics are not throttled. Limits are per API replica (in-memory), so set `API_TRUST_PROXY` to the hop count (e.g. `1` behind ingress-nginx, never `true`) to rate-limit per client IP.
-- Browser sessions use HttpOnly cookies set by the API (see Auth); logout revokes the refresh token and clears both cookies. Server components forward the incoming Cookie header to the API; browser fetches use `credentials: "include"` and retry once after a cookie refresh on 401. Nothing auth-related is kept in localStorage or JS-readable cookies.
-- CSRF: the global `CsrfOriginGuard` (between the throttler and `JwtAuthGuard`) checks POST/PUT/PATCH/DELETE requests that carry an auth cookie or target `/auth/*`. The `Origin` header (or the `Referer` origin) must equal the `WEB_APP_URL` origin; a cookie-carrying write with neither header is rejected with 403. Requests with a Bearer header skip the check, and so do cookie-less calls such as webhooks. CORS allows credentials only for the `WEB_APP_URL` origin.
-- Passwords are hashed with argon2 and refresh tokens are stored hashed.
-- PII is masked before AI calls, and masked PII is returned in API responses and shown in the UI.
-- A prompt-injection guardrail is applied to AI inputs.
-- AI output is validated against a JSON Schema.
-- Daily AI call and token quotas are enforced per workspace (`AI_DAILY_CALL_LIMIT` / `AI_DAILY_TOKEN_LIMIT`).
-- Worker logs are redacted.
-- No secrets are baked into images or manifests; secrets come from External Secrets.
-- Containers run as non-root with a read-only root filesystem.
-- NetworkPolicies restrict pod-to-pod traffic.
-- CI uses GitHub OIDC for AWS access (no static AWS keys).
-- CI runs gitleaks, Trivy, and `pnpm audit`.
+### 8. Container & Pipeline Supply Chain Security
+- **Image Hardening:** Multi-stage Dockerfiles explicitly remove the bundled `npm` and `corepack` binaries from runtime images, eliminating High and Critical CVEs present in default Node.js distributions.
+- **Runtime Privilege Minimization:** Pods run as non-root user `node` (UID `10001`), mount read-only root filesystems, drop all Linux capabilities (`ALL`), and prohibit privilege escalation.
+- **Automated CI Security Gates:**
+  - `pnpm audit --prod`: Checks production dependencies for known advisories.
+  - `gitleaks`: Scans commit history for hardcoded tokens, keys, and credentials.
+  - `Trivy`: Container vulnerability scanner pinned by commit SHA, failing builds on any `CRITICAL` or `HIGH` CVE.
+- **Cloud IAM via GitHub OIDC:** CI/CD workflows authenticate to AWS using short-lived GitHub Actions OIDC tokens restricted to `repo:<owner>/agentops:environment:production`, eliminating static AWS access keys.
 
-## Known gaps
+---
 
-- Access JWTs are stateless: logout revokes the refresh token and clears the cookies, but an access token copied before logout stays valid until it expires (at most 15 minutes). There is no server-side denylist or per-session revocation list yet.
-- An XSS bug can no longer read tokens, but it can still send requests as the signed-in user from the web origin while the page is open. Keep a strict Content-Security-Policy on the web app.
-- Server components cannot set cookies, so a server-rendered page whose access cookie has expired redirects to `/login`; the login page then restores the session from the refresh cookie and returns to the dashboard (not to the original page).
-- The CSRF check trusts exactly one origin (`WEB_APP_URL`). Additional front-ends, or Swagger "Try it out" with cookies instead of a Bearer token, are rejected.
-- AI usage, audit and notification endpoints require a valid token but are not yet filtered by a single active workspace the way `GET /dashboard/*` is.
-- The Terraform apply roles use `AdministratorAccess`; add a permissions boundary.
-- MSK traffic is plaintext inside the VPC. Enable TLS and/or client encryption in transit.
-- No WAF in front of the ingress.
-- Redis is not used for distributed rate limiting across API replicas; each replica enforces the limit independently, so the effective global rate is multiplied by the replica count.
+## Known Architectural Gaps
+
+AgentOps maintains an honest accounting of current architectural limitations and deferred security scope:
+
+1. **Stateless Access JWT Expiration Window:**
+   While account deactivation is checked immediately in the database, explicit user logout revokes only the refresh token and clears browser cookies. An access JWT copied prior to logout remains cryptographically valid until its 15-minute expiration time. There is currently no distributed token denylist in Redis.
+
+2. **Non-Workspace Scoped Endpoints:**
+   While `/dashboard/*` endpoints strictly require and enforce `?workspaceId=`, the `/ai/usage`, `/notifications`, and `/notifications/mark-all-read` routes require valid authentication but return unscoped or process-global data.
+
+3. **In-Memory Notification Store:**
+   The `NotificationsService` maintains alert records in an in-memory process array rather than PostgreSQL. When multiple API pod replicas run behind the Service load balancer, notification state is partitioned across replicas.
+
+4. **NetworkPolicy Enforcement Disabled on EKS:**
+   Although Kubernetes `NetworkPolicy` manifests are defined in `infrastructure/k8s/base/network-policies.yaml`, packet filtering is not enforced on the AWS EKS cluster because the Amazon VPC CNI Network Policy agent (or Calico) has not been installed.
+
+5. **Ephemeral Monitoring Storage (emptyDir):**
+   In-cluster Prometheus, Alertmanager, Grafana, and Tempo pods utilize Kubernetes `emptyDir` volumes rather than persistent AWS EBS volumes (`gp3`). Telemetry history, Prometheus metrics, and Tempo traces are lost if monitoring pods restart.
+
+6. **In-Memory Rate Limiting:**
+   The `@nestjs/throttler` storage provider operates in process memory rather than coordinating across replicas via Redis. Consequently, the effective cluster-wide rate limit is multiplied by the number of active API replicas (e.g., 2 to 6 replicas).
+
+7. **Plaintext MSK Traffic within VPC:**
+   Kafka brokers provisioned via Amazon MSK communicate over plaintext listeners within the private VPC subnets. In-transit TLS between worker pods and Kafka brokers is planned but not currently enabled.
+
+8. **Absence of Ingress WAF:**
+   The public ingress-nginx controller is exposed through an AWS Network Load Balancer (NLB) without AWS WAF (Web Application Firewall) inspection for Layer 7 exploits.
+
+9. **Broad Terraform Execution Permissions:**
+   Infrastructure automation roles currently use `AdministratorAccess` without fine-grained IAM permission boundaries.
