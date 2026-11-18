@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Injectable, NestMiddleware } from "@nestjs/common";
 import {
-  createTraceId,
   createTraceparent,
   parseTraceparent,
   recordSpanException,
@@ -28,13 +27,14 @@ export class RequestIdMiddleware implements NestMiddleware {
     const incomingRequestId = request.header(REQUEST_ID_HEADER);
     const requestId = incomingRequestId?.trim() || randomUUID();
     const incomingTrace = parseTraceparent(request.header(TRACEPARENT_HEADER));
-    const traceId = incomingTrace?.traceId ?? createTraceId();
-    const parentTraceparent = incomingTrace?.traceparent ?? createTraceparent(traceId);
     // Inside middleware mounted with forRoutes("*"), request.path is relative ("/"); use the original URL.
     const path = (request.originalUrl ?? request.url).split("?")[0] || "/";
     const activeSpan = startOtelSpan(`HTTP ${request.method} ${normalizeSpanPath(path)}`, {
       kind: SpanKind.SERVER,
-      traceparent: parentTraceparent,
+      // Only continue a caller's trace. Without an incoming traceparent this span is the trace root: inventing a
+      // parent id here left every trace in Tempo waiting for a root span that never arrives.
+      traceparent: incomingTrace?.traceparent,
+      root: true,
       attributes: {
         "agentops.request_id": requestId,
         "http.request.method": request.method,
@@ -42,7 +42,7 @@ export class RequestIdMiddleware implements NestMiddleware {
         "url.query": request.url.includes("?") ? request.url.split("?").slice(1).join("?") : undefined
       }
     });
-    const activeTraceparent = activeSpan.traceparent ?? parentTraceparent;
+    const activeTraceparent = activeSpan.traceparent ?? createTraceparent(activeSpan.traceId);
 
     request.requestId = requestId;
     request.traceId = activeSpan.traceId;
