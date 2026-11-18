@@ -31,7 +31,12 @@ FROM deps AS builder
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} NEXT_TELEMETRY_DISABLED=1
 COPY . .
-RUN pnpm --filter @agentops/web... build
+# next/font downloads Google Fonts at build time; retry so a transient network error on the CI runner
+# does not fail the release.
+RUN for attempt in 1 2 3; do \
+      pnpm --filter @agentops/web... build && exit 0; \
+      echo "web build failed (attempt $attempt), retrying" >&2; sleep 15; \
+    done; exit 1
 
 # hadolint ignore=DL3006
 FROM ${NODE_IMAGE} AS runner
