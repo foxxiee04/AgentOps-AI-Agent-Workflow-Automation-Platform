@@ -9,6 +9,7 @@ import {
 import { aiAgentNodeConfigSchema, applyLeadScoringGuardrail, estimateAiCostUsd, type AiProvider } from "@agentops/shared";
 import { withOtelSpan, type AiCallRecord, type AiMetrics } from "@agentops/observability";
 import { AiOutputValidationError, createProvider, executeAgentTask, type AiProviderClient } from "./ai-task.executor";
+import { applyProviderOverride } from "./provider-override";
 import { AiQuotaExceededError, type AiUsageGuard } from "./usage-guard";
 
 export type AgentTaskDeps = {
@@ -20,7 +21,8 @@ export type AgentTaskDeps = {
 export async function handleAgentTaskRequested(rawEvent: unknown, deps: AgentTaskDeps = {}): Promise<EventEnvelope> {
   const event = eventEnvelopeSchema.parse(rawEvent);
   const payload = agentTaskRequestedPayloadSchema.parse(event.payload);
-  const parsedConfig = aiAgentNodeConfigSchema.safeParse(payload.config);
+  const nodeConfig = applyProviderOverride(payload.config);
+  const parsedConfig = aiAgentNodeConfigSchema.safeParse(nodeConfig);
   const provider = parsedConfig.success ? parsedConfig.data.modelProvider : "unknown";
   const model = parsedConfig.success ? parsedConfig.data.modelName : "unknown";
   const startedAt = Date.now();
@@ -50,7 +52,7 @@ export async function handleAgentTaskRequested(rawEvent: unknown, deps: AgentTas
       "ai.call",
       { attributes: { "gen_ai.system": provider, "gen_ai.request.model": model, "agentops.node_id": payload.nodeId, "agentops.workflow_run_id": event.workflowRunId } },
       async (span) => {
-        const executed = await executeAgentTask({ input: payload.input, config: payload.config }, deps.providerFactory ?? createProvider);
+        const executed = await executeAgentTask({ input: payload.input, config: nodeConfig }, deps.providerFactory ?? createProvider);
         span.setAttribute("gen_ai.usage.input_tokens", executed.tokenUsage.inputTokens);
         span.setAttribute("gen_ai.usage.output_tokens", executed.tokenUsage.outputTokens);
         span.setAttribute("agentops.ai.attempts", executed.attempts);
