@@ -1,176 +1,169 @@
-# Deployment
+# Deployment and CI/CD Pipeline
 
-Deployment is planned in layers: local infrastructure, containers, Kubernetes, Terraform, then CI/CD automation.
+AgentOps implements an automated, multi-environment deployment pipeline designed for containerized workloads across local development, temporary environments, and managed production Kubernetes.
 
-## Local
+Related documentation:
+- [AWS Kubernetes Deployment](aws-kubernetes-deployment.md): Terraform architecture, EKS add-ons, and networking.
+- [Production Runbook (AWS)](production-runbook-aws.md): Step-by-step bring-up, DNS/host change checklist, and teardown.
+- [Operations Runbook](runbook.md): Incident response playbooks and operational procedures.
+- [Local Runbook](local-runbook.md): Local development setup and Docker Compose instructions.
 
-- Use `docker-compose.yml` for PostgreSQL, Redis, Kafka, and observability.
-- Use `docker-compose.apps.yml` together with `docker-compose.yml` for the full local product stack.
-- Start the full seeded local stack with `pnpm local:docker`.
-- Reset Docker volumes and reseed the full local stack with `pnpm compose:apps:reset`.
-- Keep local ports stable: web `3000`, API `4000`, PostgreSQL host `55432`, Kafka external `9094`, Prometheus `9090`, Alertmanager `9093`, Grafana `3001`, Tempo `3200`, OTLP gRPC `4317`, and OTLP HTTP `4318`.
+---
 
-## Naming
+## 1. Environments Overview
 
-| Resource | Pattern | Example |
+AgentOps targets three distinct operational environments:
+
+| Environment | Infrastructure | Purpose | Data Services | Host / Access |
+| --- | --- | --- | --- | --- |
+| **Local** | Docker Compose + native Node 22 | Local development, inner-loop coding, debugging | In-container PostgreSQL 16, Redis 7, Kafka 4.3 (KRaft), Prometheus, Tempo, Grafana | Web: `http://localhost:3000`<br/>API: `http://localhost:4000` |
+| **Dev** | AWS EC2 (t3.medium) running k3s | Ephemeral pull request validation and feature testing | In-cluster PostgreSQL, Redis, Kafka (`components/in-cluster-data`) | Gated on demand via `deploy-dev.yml` |
+| **Production** | AWS EKS 1.31 (2x t3.medium) in `ap-southeast-1` | Live production platform, showcase demo runs | Managed RDS PostgreSQL 16, ElastiCache Redis (TLS), MSK Kafka 3.9.x | Web: `https://agentops.<lb-ip-dashed>.sslip.io`<br/>API: `https://api.agentops.<lb-ip-dashed>.sslip.io` |
+
+### Resource Naming Conventions
+
+| Resource Type | Scope / Convention | Example |
 | --- | --- | --- |
-| Local container | `agentops-local-<service>` | `agentops-local-kafka` |
-| Local volume | `agentops_local_<service>_data` | `agentops_local_redis_data` |
+| Local container | `agentops-local-<service>` | `agentops-local-kafka`, `agentops-local-api` |
+| Local volume | `agentops_local_<service>_data` | `agentops_local_postgres_data` |
 | Local network | `agentops_local_net` | `agentops_local_net` |
-| Local app image | `agentops/<app>:local` | `agentops/ai-worker:local` |
-| ECR repository | `<env-name>/<app>` | `agentops-dev/ai-worker` |
+| Local container image | `agentops/<app>:local` | `agentops/workflow-worker:local` |
+| ECR repository | `<env>/<app>` | `prod/api`, `prod/ai-worker`, `prod/tools` |
+| Kubernetes namespace | `agentops` (apps), `monitoring` (observability) | `agentops`, `monitoring` |
 
-Local infrastructure containers:
+---
 
-```txt
-agentops-local-postgres
-agentops-local-redis
-agentops-local-kafka
-agentops-local-prometheus
-agentops-local-alertmanager
-agentops-local-grafana
-agentops-local-tempo
+## 2. Container Images and Tagging
+
+The platform packages seven distinct container images from the monorepo:
+
+| Image Name | Source Dockerfile | Build Target / Args | Responsibility |
+| --- | --- | --- | --- |
+| `api` | `infrastructure/docker/api.Dockerfile` | Default runtime | NestJS modular monolith API, auth, workflow runner |
+| `tools` | `infrastructure/docker/api.Dockerfile` | `target: tools` | Workspace CLI tools, Prisma migration Job, database seed |
+| `web` | `infrastructure/docker/web.Dockerfile` | `NEXT_PUBLIC_API_URL` | Next.js 16 App Router UI, visual React Flow builder |
+| `workflow-worker` | `infrastructure/docker/worker.Dockerfile` | `WORKER_PACKAGE=@agentops/workflow-worker` | Graph traversal, conditional branching evaluation |
+| `ai-worker` | `infrastructure/docker/worker.Dockerfile` | `WORKER_PACKAGE=@agentops/ai-worker` | AI task execution, schema validation, token tracking |
+| `tool-worker` | `infrastructure/docker/worker.Dockerfile` | `WORKER_PACKAGE=@agentops/tool-worker` | Tool execution (sales tasks, CRM integrations) |
+| `notification-worker` | `infrastructure/docker/worker.Dockerfile` | `WORKER_PACKAGE=@agentops/notification-worker` | Mock email delivery, sales task creation, notifications |
+
+### Image Security and Hardening
+
+- **Base Image**: Multi-stage builds based on `node:22-alpine` using `pnpm 11.5.2`.
+- **Privilege Separation**: Non-root execution under UID 1000 (`node`), with process supervision by `tini` as PID 1.
+- **Vulnerability Mitigation**: Production runtime images explicitly remove the bundled `npm` and `corepack` CLIs to eliminate upstream High-severity CVEs.
+- **Font Build Retries**: The `web` image build incorporates retry logic (up to 3 attempts) to accommodate Google Fonts network downloads via `next/font`.
+- **Health Checks**: Containers implement built-in health checks (`/health/live` on port 4000 for API, port 9100 for workers, `/en` on port 3000 for Web).
+
+### Tagging Strategy
+
+- **Pull Requests**: Tagged as `agentops/<app>:pr-${{ github.sha }}` for ephemeral container validation and vulnerability scanning.
+- **Production Releases**: Tagged with the immutable Git commit SHA (`<registry>/prod/<app>:${{ github.sha }}`). Re-running a deployment against the same commit verifies existence in ECR and reuses the existing digest without rebuilding.
+- **Local Development**: Built and tagged with the `:local` suffix (`agentops/<app>:local`).
+
+---
+
+## 3. CI/CD Pipeline Architecture
+
+Automation is driven by GitHub Actions workflows located in `.github/workflows/`:
+
+```mermaid
+flowchart TD
+    subgraph PR["Pull Request Flow (ci.yml)"]
+        Q[Quality<br/>lint, typecheck, test, build] --> E[Lead Golden Set Eval<br/>accuracy >= 0.90]
+        Q --> INT[Integration Tests<br/>Real Kafka + Postgres]
+        Q --> SEC[Security Scans<br/>pnpm audit, gitleaks]
+        Q --> INF[Infra Validation<br/>ci-lint, hadolint, kubeconform, tf:validate]
+        Q --> IMG[Image Scans<br/>Build 6 images + Trivy CRITICAL/HIGH gate]
+    end
+
+    subgraph PROD["Production Deployment (deploy-prod.yml)"]
+        M[Merge push to main] --> G1{OIDC CI Role<br/>environment: production}
+        G1 --> BUILD[Build & Push 7 Images to ECR<br/>Tagged with git commit SHA]
+        BUILD --> K8S[Execute scripts/k8s-deploy.sh]
+        K8S --> MIGRATE[Run db-migrate Job<br/>agentops/tools image]
+        MIGRATE --> ROLLOUT[Deploy 6 Workloads<br/>rollout status --timeout=180s]
+        ROLLOUT --> SMOKE[Smoke Test Ingress<br/>/health/ready and /health/live]
+        SMOKE -- Failure --> UNDO[Automatic Rollback<br/>kubectl rollout undo on all Deployments]
+        SMOKE -- Success --> DONE[Production Active]
+    end
+
+    PR -. Merge to main .-> M
 ```
 
-## Containers
+### Workflow Descriptions
 
-Each app image is a multi-stage build (node:22-alpine + pnpm 11.5.2) that ships only the app's `dist/` and production `node_modules`. Runners use non-root `node` (uid 1000), `tini` as PID 1, and a HEALTHCHECK on `/health/live` (api `:4000`, workers `:9100`, web `:3000/en`). `api.Dockerfile --target tools` builds the full workspace with dev deps for the compose `setup` service and the Kubernetes `agentops-db-migrate` Job. See `infrastructure/docker/README.md`.
+1. **`ci.yml` (PR Checks)**:
+   - **Quality**: Turbo caching, ESLint, TypeScript typecheck, Vitest unit test suite, Turbo build, and lead evaluation golden set (`pnpm eval:leads`).
+   - **Integration**: Starts throwaway Postgres (`:55433`) and Kafka (`:9095`) via Docker Compose profile `test`, executes full pipeline integration suite (`pnpm test:integration`).
+   - **Security**: Scans production dependencies via `pnpm audit --prod --audit-level high` and scans repository history for secrets via `gitleaks`.
+   - **Infra**: Validates GitHub workflows (`actionlint`), shell scripts (`shellcheck`), Dockerfiles (`hadolint`), Kubernetes manifests (`kubeconform` against Kubernetes 1.31 schemas), and Terraform offline plan (`pnpm tf:validate`).
+   - **Images**: Builds container images and scans with Trivy (`trivy-action` pinned to commit `ed142fd0673e97e23eac54620cfb913e5ce36c25`), failing on unfixed CRITICAL or HIGH vulnerabilities.
 
-## Kubernetes
+2. **`deploy-prod.yml` (Production Deployment)**:
+   - Triggers on direct pushes to `main` (excluding Markdown and documentation paths) or manual dispatch (`workflow_dispatch`).
+   - Targets GitHub environment `production`, enforcing OIDC trust constraints (`AWS_CI_ROLE_ARN_PROD` trusts only `environment:production`).
+   - Builds and pushes 7 application images tagged with the commit SHA.
+   - Invokes `scripts/k8s-deploy.sh` to execute database migrations, apply Kustomize overlays, verify rollouts, and smoke test health endpoints.
 
-Manifests are kustomize base + components + overlays. Workloads: `agentops-api` (4000), `agentops-web` (3000), `workflow-worker`, `ai-worker`, `tool-worker`, `notification-worker` (metrics 9100). `components/in-cluster-data/` provides Postgres, Redis, and Kafka for dev/k3s; `overlays/prod` uses managed MSK/ElastiCache.
+3. **Gated Workflows**:
+   - `deploy-dev.yml` and `terraform-plan.yml` are gated: they evaluate environment variable availability (`AWS_CI_ROLE_ARN_DEV`) and skip execution gracefully when running without dedicated dev infrastructure.
 
-Validate with `pnpm k8s:validate` (kustomize v5.6.0 + kubeconform v0.6.7). Deploy order:
+---
 
-1. Install ingress-nginx, cert-manager, and External Secrets (plus KEDA for prod, see [Autoscaling](#autoscaling)).
-2. Create the secret in AWS Secrets Manager.
-3. `kubectl apply -k infrastructure/k8s/jobs/db-migrate` with the overlay's image.
-4. `kubectl apply -k infrastructure/k8s/overlays/<env>`.
+## 4. Kubernetes Deployment Flow (`scripts/k8s-deploy.sh`)
 
-## Autoscaling
-
-Load-test facts (1000 leads, 20 VUs, mock AI provider):
-
-| Worker replicas | Drain rate |
-| --- | --- |
-| 1 | 8.2 runs/s |
-| 3 | 12.2 runs/s |
-
-Intake is about 30 req/s, so a single replica - and even three - cannot keep up and Kafka lag grows. Two scalers exist:
-
-- **CPU HPA** (`infrastructure/k8s/base/hpa.yaml`): every worker requests `50m` CPU (the `ai-worker` requests `100m`) and scales at 75% utilization. CPU is only a proxy for the backlog: a worker can be idle on CPU while its topic lags, and a CPU spike does not mean messages are waiting. The API keeps a CPU HPA (2-6 replicas in prod) because it serves HTTP traffic.
-- **KEDA lag scaling** (`infrastructure/k8s/components/keda-autoscaling/`, prod only): one `ScaledObject` per worker with a Kafka trigger per consumed topic, `lagThreshold: "50"`, `minReplicaCount: 1`, `maxReplicaCount: 6`, `pollingInterval: 15`, `cooldownPeriod: 120`, and a 120s scale-down stabilization window. KEDA creates the HPA itself, so the component deletes the four worker HPAs from the base; the API HPA stays CPU-based.
-
-KEDA must be installed in the cluster before the prod overlay is applied:
+Production deployments are orchestrated by `scripts/k8s-deploy.sh` using Kustomize overlays:
 
 ```bash
-helm repo add kedacore https://kedacore.github.io/charts
-helm install keda kedacore/keda --namespace keda --create-namespace
+scripts/k8s-deploy.sh <env> <tag> <registry> <api_url>
 ```
 
-Partitions cap the useful replica count: a partition is consumed by exactly one consumer in a group, so the useful replicas of a worker are bounded by the partition count (3 by default, 6 in prod once the topics are increased).
+### Deployment Stages
 
-To raise the partition count of an existing cluster:
+1. **Manifest Preparation**: Copies `infrastructure/k8s` into an isolated temporary directory. Populates environment placeholders (`DEPLOY_WEB_HOST`, `DEPLOY_KAFKA_BROKERS`, `DEPLOY_REDIS_URL`, `DEPLOY_ACME_EMAIL`) dynamically without mutating Git-tracked files.
+2. **Placeholder Assertion**: Renders the complete Kustomize manifest and asserts that no unresolved tokens (such as `REPLACE_WITH_MSK_BOOTSTRAP_BROKERS` or `000000000000`) remain. If any placeholder is found, execution aborts before making Kubernetes API calls.
+3. **Database Migration Job**: Deploys `infrastructure/k8s/jobs/db-migrate` using the newly built `tools` image. Waits up to 300 seconds for job completion (`kubectl wait --for=condition=complete job/agentops-db-migrate`). If the migration fails, logs are output and the deployment halts immediately without modifying running workloads.
+4. **Workload Rollout**: Records current Deployment image revisions for rollback tracking, then applies the rendered manifests. Monitors rollout progression across all six Deployments (`agentops-api`, `agentops-web`, `workflow-worker`, `ai-worker`, `tool-worker`, `notification-worker`) with a 180-second timeout per workload.
+5. **Ingress Smoke Testing**: Executes automated curl probes against `$api_url/health/ready` (retried up to 10 times with 6s delays) and `$api_url/health/live`.
+
+---
+
+## 5. Rollback Procedures
+
+### Automatic Rollback
+
+If any Deployment fails to reach ready status within 180 seconds, or if the ingress health probes return non-200 responses, `scripts/k8s-deploy.sh` initiates an immediate automatic rollback:
 
 ```bash
-KAFKA_BROKERS=<msk-brokers> KAFKA_TOPIC_PARTITIONS=6 KAFKA_TOPIC_ALLOW_INCREASE=true pnpm kafka:bootstrap
+# Executed automatically by scripts/k8s-deploy.sh upon failure
+for deploy in agentops-api agentops-web workflow-worker ai-worker tool-worker notification-worker; do
+  kubectl -n agentops rollout undo "deploy/$deploy"
+  kubectl -n agentops rollout status "deploy/$deploy" --timeout=180s
+done
 ```
 
-`KAFKA_TOPIC_PARTITIONS` (default 3) sets the partition count for new topics. `KAFKA_TOPIC_ALLOW_INCREASE=true` is opt-in: the bootstrap script increases existing topics up to the target and logs each change; it never decreases partitions. Increasing partitions is irreversible (Kafka cannot shrink a topic), and per-key ordering is unaffected because messages are keyed by workflow run id, so every run stays on a single partition. The prod overlay records the intent in the `agentops-config` ConfigMap (`KAFKA_TOPIC_PARTITIONS: "6"`), but the count only changes when the bootstrap script runs against the cluster.
+The script exits with status code 1 and writes `ROLLED BACK` to standard error.
 
-## Health Checks
+### Manual Application Rollback
 
-The API exposes:
+When rolling back to an earlier stable release:
 
-```txt
-GET /health/live
-GET /health/ready
-```
+1. **Via GitHub Actions (Preferred)**:
+   - Navigate to **Actions** > **Deploy prod** > **Run workflow**.
+   - Input the previous known-good commit SHA into `image_tag`.
+   - The workflow skips rebuilding and rolls out the verified images from ECR.
 
-`/health/live` reports API process liveness. `/health/ready` uses NestJS Terminus to verify PostgreSQL, Redis, and Kafka before the API is considered ready for traffic.
+2. **Via Command Line**:
+   ```bash
+   # Roll back individual services:
+   kubectl -n agentops rollout undo deploy/agentops-api
+   kubectl -n agentops rollout undo deploy/workflow-worker
+   kubectl -n agentops rollout status deploy/agentops-api
+   ```
 
-Worker health should include process liveness and dependency readiness where practical.
+### Database Rollback Strategy
 
-## Metrics And Alerting
-
-The API exposes:
-
-```txt
-GET /metrics
-```
-
-Each worker exposes:
-
-```txt
-GET /metrics
-GET /health/live
-```
-
-Default worker metrics ports:
-
-| Worker | Env var | Port |
-| --- | --- | --- |
-| workflow-worker | `WORKFLOW_WORKER_METRICS_PORT` | `4101` |
-| ai-worker | `AI_WORKER_METRICS_PORT` | `4102` |
-| tool-worker | `TOOL_WORKER_METRICS_PORT` | `4103` |
-| notification-worker | `NOTIFICATION_WORKER_METRICS_PORT` | `4104` |
-
-Local Prometheus scrapes the API and workers through Docker host networking:
-
-```txt
-host.docker.internal:4000
-host.docker.internal:4101
-host.docker.internal:4102
-host.docker.internal:4103
-host.docker.internal:4104
-```
-
-API metrics include HTTP request counters/histograms, workflow run totals, alert bot notifications, process gauges, and Kafka consumer lag. Worker metrics include consumed messages, processing duration, processing errors, last-message timestamps, and process gauges.
-
-Alertmanager posts firing/resolved alerts to the API alert bot endpoint:
-
-```txt
-POST /notifications/alertmanager
-```
-
-Set `ALERT_BOT_WEBHOOK_URL` to forward those alerts to an external bot webhook. Keep bot tokens and chat-specific URLs out of source control.
-
-HTTP requests carry `x-request-id` and W3C `traceparent`. API-published Kafka events carry `requestId`, `traceId`, `traceparent`, and downstream `parentEventId` so logs, traces, and workflow execution can be correlated by `requestId`, `workflowRunId`, and `eventId`.
-
-OpenTelemetry trace export is opt-in:
-
-```txt
-OTEL_ENABLED=true
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
-```
-
-The local Docker Compose stack includes Tempo. Grafana has a provisioned Tempo datasource so exported API and worker spans can be queried by trace ID.
-
-## Terraform
-
-Recommended personal-project path:
-
-```txt
-AWS EC2 + k3s + Security Group + Elastic IP optional + S3 state bucket optional
-```
-
-More expensive advanced path:
-
-```txt
-AWS EKS + VPC + Node Group + ECR + RDS + ElastiCache + ALB
-```
-
-## CI/CD
-
-GitHub Actions workflows live in `.github/workflows/`; see `.github/workflows/README.md` for the workflow list and the required repository variables, secret, environments, and branch protection.
-
-The flow is:
-
-1. **PR -> main checks.** A pull request must pass `ci.yml` (quality, integration, security, infra, image scans). Terraform changes also get a `terraform-plan.yml` comment per environment.
-2. **Dev auto deploy.** A merge to `main` triggers `deploy-dev.yml`: build and push the commit-tagged images to `dev/<app>`, run the migration Job, roll out, smoke test, and automatically roll back on failure.
-3. **Manual prod promotion with approval.** `deploy-prod.yml` is dispatched with a tested tag, pauses on the `production` environment's required reviewers, promotes the images without rebuilding, and deploys with the same script.
-4. **Rollback.** `scripts/k8s-deploy.sh` rolls every Deployment back to its previous revision if a rollout or smoke test fails.
-
-Terraform is applied separately with `terraform-apply.yml` (manual, per-environment approval).
-
-Validate the workflow files locally with `pnpm ci:lint` (actionlint + shellcheck).
+- Prisma migrations in AgentOps are strictly **forward-only**; down-migrations are not supported by the runtime engine.
+- Schema changes must remain backward-compatible (expand before contract) so older application code can operate alongside newly migrated database tables.
+- For destructive schema errors that have already committed data corruption, restore from the latest manual RDS snapshot (e.g., `agentops-prod-before-teardown-20261117`). Snapshot restoration is a last-resort disaster recovery operation that requires administrative authorization.

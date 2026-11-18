@@ -1,178 +1,345 @@
-# Operations Runbook
+# Operations and Incident Runbook
 
-Day-two operations for AgentOps: how to deploy, roll back, respond to alerts, and run common operational tasks. Use this with `docs/deployment.md` (pipeline layout) and `docs/local-runbook.md` (local setup).
+This runbook provides actionable procedures and diagnostic workflows for triaging alerts and resolving incidents in AgentOps. It is designed for engineers and on-call operators maintaining the platform in production (AWS EKS) and local environments.
 
-All Kubernetes commands run in namespace `agentops`.
+Related documentation:
+- [Production Runbook (AWS)](production-runbook-aws.md): Environment lifecycle, credentials, and verification.
+- [Deployment and CI/CD](deployment.md): Rollback execution and container lifecycle.
+- [Local Runbook](local-runbook.md): Local infrastructure and debugging commands.
 
-## Deploy
+---
 
-1. **Dev is automatic.** A merge to `main` triggers `deploy-dev.yml`, which builds and pushes commit-tagged images to `dev/<app>`, runs the migration Job, rolls out every Deployment, smoke tests `/health/ready` and `/health/live`, and rolls back automatically on failure.
-2. **Prod is a manual promotion with approval.** Dispatch `deploy-prod.yml` with a tag that is already tested in dev. The workflow pauses on the `production` environment's required reviewers before it proceeds.
-3. **Image promotion, no rebuild.** Prod promotes the same image tag that passed dev (the digests are re-tagged into `prod/<app>`); it does not build from source. The same tag that was smoke-tested is the tag that runs in production.
-4. **Migration Job first.** `scripts/k8s-deploy.sh` always applies and waits for the `agentops-db-migrate` Job to complete (`--timeout=300s`) before it touches the Deployments. If the Job fails, the script prints its logs and exits without rolling out any app.
+## 1. Observability and Triaging Framework
 
-Deploy by hand (only when a pipeline is unavailable):
+### Correlation Identifiers
+AgentOps propagates correlation metadata across synchronous HTTP calls and asynchronous Kafka events. Use these keys when searching logs, metrics, and distributed traces:
 
+| Identifier | Context / Scope | Where Found | Purpose |
+| --- | --- | --- | --- |
+| `requestId` | Single HTTP request | Response header `x-request-id`, API log entries | Isolates user-facing API failures |
+| `traceId` / `traceparent` | End-to-end W3C distributed trace | HTTP headers, Kafka event envelope, OpenTelemetry spans | Links API span across Kafka into worker execution in Tempo |
+| `workflowRunId` | One workflow execution instance | Database table `WorkflowRun.id`, Kafka message key | Follows an execution from trigger to terminal status |
+| `eventId` | Individual domain event | Database table `DomainEvent.id`, Kafka envelope | Identifies specific messages and dead-letter records |
+
+### Diagnostic Dashboards (Grafana)
+Access in-cluster Grafana via port-forward (`kubectl -n monitoring port-forward svc/grafana 3002:3000`):
+- **AgentOps - Overview**: Platform-level request rates, p95 latencies, 5xx error ratios, and active alerts.
+- **AgentOps - RED (API and Workers)**: Rate, Errors, and Duration for API endpoints and Kafka consumers.
+- **AgentOps - Kafka**: Consumer lag by consumer group and topic, outbox relay backlog, and dead-letter trends.
+- **AgentOps - AI**: Provider latency, JSON schema validation success rate, token consumption, and daily quota utilization.
+- **AgentOps - Lead Flow (Business)**: Lead scoring funnel, approval wait times, and sales task generation.
+
+---
+
+## 2. Prometheus Alert Rules Catalog
+
+Alert rules are defined in `infrastructure/observability/prometheus/rules/agentops-alerts.yml` (17 rules across 5 groups):
+
+| Group | Alert Name | Severity | Condition / Trigger Threshold |
+| --- | --- | --- | --- |
+| `agentops-api` | `AgentOpsApiDown` | Critical | `up{job="agentops-api"} == 0` for > 1m |
+| `agentops-api` | `AgentOpsApiHighErrorRate` | Warning | 5xx responses > 5% of API traffic over 5m |
+| `agentops-api` | `AgentOpsApiHighLatencyP95` | Warning | API p95 response time > 1.0s over 5m |
+| `agentops-api` | `AgentOpsApiProcessMemoryHigh`| Warning | Resident memory (RSS) > 400 MB for > 10m |
+| `agentops-alert-bot` | `AgentOpsAlertBotInactive` | Info | `agentops_alertmanager_notifications_total` metric absent for > 10m |
+| `agentops-workers` | `AgentOpsWorkerDown` | Warning | Worker `/metrics` scrape failure (`up == 0`) for > 2m |
+| `agentops-workers` | `AgentOpsWorkerErrors` | Warning | Kafka processing errors recorded (`rate > 0`) over 5m |
+| `agentops-workers` | `AgentOpsWorkerNoMessages` | Info | Consumer idle: no messages consumed from topic for > 15m |
+| `agentops-kafka` | `AgentOpsKafkaConsumerLagHigh`| Warning | Consumer group lag > 100 pending messages for > 5m |
+| `agentops-pipeline` | `AgentOpsWorkerErrorRateHigh` | Warning | Dead-lettered messages > 5% of consumer volume over 5m |
+| `agentops-pipeline` | `AgentOpsWorkerLatencyP95High`| Warning | Worker p95 message handling duration > 10s for > 10m |
+| `agentops-pipeline` | `AgentOpsKafkaLagGrowing` | Warning | Positive derivative (`deriv > 0`) and lag > 10 for > 10m |
+| `agentops-pipeline` | `AgentOpsDeadLettersIncreasing`| Warning | Any message routed to `dead-letter-events` within 10m |
+| `agentops-pipeline` | `AgentOpsAiQuotaExhausted` | Warning | AI calls rejected by `AI_DAILY_CALL_LIMIT` / token limits |
+| `agentops-pipeline` | `AgentOpsAiInvalidJsonHigh` | Warning | AI output JSON schema validation failure rate > 20% over 15m |
+| `agentops-pipeline` | `AgentOpsOutboxBacklog` | Warning | Unpublished domain events (`count > 0`) for > 5m |
+| `agentops-pipeline` | `AgentOpsApprovalsBacklog` | Info | More than 20 approval requests pending for > 30m |
+
+---
+
+## 3. Incident Playbooks
+
+### Playbook 1: API 5xx and High Error Rate (`AgentOpsApiHighErrorRate`, `AgentOpsApiDown`)
+
+#### Symptoms
+- Alert `AgentOpsApiHighErrorRate` or `AgentOpsApiDown` firing.
+- Ingress returning HTTP 502/503 or API responses returning 500.
+
+#### Immediate Triage Steps
 ```bash
-REGISTRY=<account>.dkr.ecr.<region>.amazonaws.com
-./scripts/k8s-deploy.sh prod <tag> "$REGISTRY" https://api.agentops.example
+# 1. Inspect API deployment pod status and restarts
+kubectl -n agentops get pods -l app=agentops-api -o wide
+
+# 2. Check recent application logs for unhandled exceptions or connection errors
+kubectl -n agentops logs -l app=agentops-api --tail=100 | grep -iE "error|exception|fatal"
+
+# 3. Check readiness probe dependencies (PostgreSQL, Redis, Kafka)
+kubectl -n agentops exec deploy/agentops-api -c agentops-api -- wget -qO- http://localhost:4000/health/ready
 ```
 
-## Rollback
+#### Common Causes and Mitigation
+1. **Database or Cache Saturation**:
+   - If `/health/ready` indicates PostgreSQL is down or connection pool exhausted:
+     ```bash
+     kubectl -n agentops logs -l app=agentops-api | grep "PrismaClientKnownRequestError"
+     ```
+   - Check RDS CPU and connection metrics in AWS Console. Restart API deployment to cycle connection pools:
+     ```bash
+     kubectl -n agentops rollout restart deploy/agentops-api
+     ```
+2. **Corrupted or Incompatible Deployment**:
+   - If errors correlate with a fresh image rollout, execute an immediate rollback:
+     ```bash
+     kubectl -n agentops rollout undo deploy/agentops-api
+     kubectl -n agentops rollout status deploy/agentops-api
+     ```
 
-- **Automatic.** `scripts/k8s-deploy.sh` records the images running before the rollout. If any `rollout status`, `/health/ready`, or `/health/live` check fails, it runs `kubectl -n agentops rollout undo deploy/<name>` for all six Deployments and exits non-zero with `ROLLED BACK`.
-- **Manual application rollback.** Undo a single Deployment, or re-run `deploy-prod.yml` with the previously known-good tag to move everything back together:
+---
 
-  ```bash
-  kubectl -n agentops rollout undo deploy/agentops-api
-  kubectl -n agentops rollout status deploy/agentops-api
-  ```
+### Playbook 2: Worker Consumer Lag & Backlog (`AgentOpsKafkaConsumerLagHigh`, `AgentOpsKafkaLagGrowing`)
 
-  Name each Deployment explicitly (`agentops-api`, `agentops-web`, `workflow-worker`, `ai-worker`, `tool-worker`, `notification-worker`) — the script rolls all of them back, a single `undo` only moves one.
-- **Database.** Migrations are **forward-only**; there is no down migration to run. For an additive/backward-compatible migration, rolling the code back is enough. Restore from the RDS snapshot **only** for a destructive migration that already ran, and treat that as a review-gated, last-resort action: the restore loses writes made after the snapshot, so get sign-off before starting it.
+#### Symptoms
+- Alert `AgentOpsKafkaConsumerLagHigh` (lag > 100) or `AgentOpsKafkaLagGrowing` firing.
+- Workflow runs remain in `PENDING` or steps do not advance to subsequent nodes.
 
-## Alerts
-
-Rules live in `infrastructure/observability/prometheus/rules/agentops-alerts.yml`. For every alert below: start on Grafana, then pivot to a Tempo trace by `workflowRunId`, then to logs by `requestId` / `workflowRunId` / `traceId` / `eventId`.
-
-Grafana dashboards referenced: **AgentOps - API and Workers (RED)** (API rate/errors/duration), **AgentOps - API and Workers (RED)** (worker throughput, errors, latency), **AgentOps - Kafka** (consumer lag, topics), **AgentOps - AI** (provider calls, quota, validation).
-
-Log correlation fields: `requestId` (HTTP request), `traceId` / `traceparent` (W3C trace), `workflowRunId` (one workflow execution), `eventId` (one Kafka message). In Tempo, search by `workflowRunId` to see the full run across api and worker spans.
-
-### AgentOpsApiDown (critical)
-
-- **Means:** Prometheus cannot scrape `agentops-api` `/metrics` for more than 1 minute (`up == 0`).
-- **First checks:** AgentOps - API and Workers (RED) dashboard; `kubectl -n agentops get pods -l app=agentops-api`; pod events and last logs; ingress reachability of `/metrics` and `/health/live`.
-- **Causes / action:** crash loop or OOM, failed rollout, or a network/Service change. If the pod is crash looping, check the last logs for a startup error (DB/Kafka connection, missing env). If it is a bad rollout, roll back: `kubectl -n agentops rollout undo deploy/agentops-api`.
-
-### AgentOpsApiHighErrorRate (warning)
-
-- **Means:** 5xx responses are above 5% of API requests for 5 minutes.
-- **First checks:** AgentOps - API and Workers (RED) dashboard; error responses carry `requestId` — grep api logs by `requestId`; Tempo trace by `traceId`/`requestId` for the failing span.
-- **Causes / action:** a dependency is failing (Postgres, Redis, Kafka) or a recent deploy regressed a handler. Check `/health/ready` for dependency state; if it tracks a fresh deploy, roll back; otherwise fix the failing dependency.
-
-### AgentOpsApiHighLatencyP95 (warning)
-
-- **Means:** API p95 latency is above 1s for 5 minutes.
-- **First checks:** AgentOps - API and Workers (RED) dashboard (which routes); slow spans in Tempo by `traceId`; Postgres/Redis latency; `/metrics` histograms.
-- **Causes / action:** slow queries, connection-pool saturation, or synchronous work that belongs in a worker. Add indexes / raise pool size, and keep real AI provider calls in the AI worker path, never in request handlers.
-
-### AgentOpsApiProcessMemoryHigh (warning)
-
-- **Means:** API resident memory is above 400 MB for 10 minutes.
-- **First checks:** AgentOps - API and Workers (RED) dashboard process memory; `kubectl -n agentops top pod -l app=agentops-api`; heap growth over time.
-- **Causes / action:** a leak or an unbounded in-memory cache. Confirm the container memory limit and restart the pod to clear the immediate pressure, then investigate the allocation path; if it correlates with a deploy, roll back.
-
-### AgentOpsAlertBotInactive (info)
-
-- **Means:** the alert bot metric `agentops_alertmanager_notifications_total` is absent — Alertmanager has not delivered anything yet, or delivery is misconfigured.
-- **First checks:** Alertmanager UI (`/api/v2/alerts`); API `/notifications/alertmanager` endpoint; `ALERT_BOT_WEBHOOK_URL`; AgentOps Overview dashboard for the notifications counter.
-- **Causes / action:** Alertmanager route/target misconfigured, or simply no alerts have fired yet. Send a test alert from Alertmanager and confirm the API increments `agentops_alertmanager_notifications_total`.
-
-### AgentOpsWorkerDown (warning)
-
-- **Means:** Prometheus cannot scrape a worker metrics endpoint for 2 minutes.
-- **First checks:** AgentOps - API and Workers (RED) dashboard; `kubectl -n agentops get pods` for the named worker; pod logs; metrics port (`4101`–`4104`).
-- **Causes / action:** crash, bad deploy, or unreachable metrics port. Check the last logs for a startup error, then restart or roll back that worker Deployment.
-
-### AgentOpsWorkerErrors (warning)
-
-- **Means:** a worker recorded Kafka processing errors in the last 5 minutes (`agentops_worker_errors_total`).
-- **First checks:** AgentOps - API and Workers (RED) dashboard per worker; worker logs by `workflowRunId` / `eventId`; Tempo consumer span.
-- **Causes / action:** a transient dependency error or a poison message. If it is a single `eventId`, inspect the payload and `dead-letter-events`; repeated errors point at the downstream dependency (DB, provider, Kafka).
-
-### AgentOpsWorkerNoMessages (info)
-
-- **Means:** a worker has not consumed from its topic for more than 15 minutes.
-- **First checks:** AgentOps - Kafka dashboard; `kubectl -n agentops get pods`; that the producer side is active; `agentops_worker_last_message_timestamp_seconds` for `topic`.
-- **Causes / action:** usually idle/low traffic (benign). If traffic is expected, the producer is stuck (often the API outbox — see `AgentOpsOutboxBacklog`) or the consumer is not subscribed. Check topic and consumer-group membership.
-
-### AgentOpsKafkaConsumerLagHigh (warning)
-
-- **Means:** a consumer group has more than 100 pending messages on a topic for 5 minutes.
-- **First checks:** AgentOps - Kafka dashboard by `group_id`/`topic`; AgentOps - API and Workers (RED) dashboard throughput; worker CPU.
-- **Causes / action:** burst of work or slow processing. Scale the affected worker (see `AgentOpsKafkaLagGrowing`); if a single partition is skewed, check the key distribution / hot lead.
-
-### AgentOpsWorkerErrorRateHigh (warning)
-
-- **Means:** more than 5% of a worker's messages are dead-lettered over 5 minutes (failed after 3 attempts).
-- **First checks:** AgentOps - API and Workers (RED) dashboard; `dead-letter-events`; worker logs by `eventId` / `workflowRunId`.
-- **Causes / action:** a bad payload or a broken dependency. Inspect the dead-letter event, fix the cause (code, config, or prompt), then re-trigger the affected workflow run.
-
-### AgentOpsWorkerLatencyP95High (warning)
-
-- **Means:** p95 message handling for a worker is above 10s for 10 minutes.
-- **First checks:** AgentOps - AI dashboard (provider latency); AgentOps - API and Workers (RED) dashboard; Tempo traces slow spans.
-- **Causes / action:** slow provider calls (AI/tool) or slow database writes. Check provider status and timeouts; verify the AI worker retry/`retryLimit` is not amplifying latency.
-
-### AgentOpsKafkaLagGrowing (warning)
-
-- **Means:** consumer lag is positive in derivative and above 10 for 10 minutes — consumers are falling behind.
-- **First checks:** AgentOps - Kafka dashboard (lag trend); AgentOps - API and Workers (RED) dashboard; partition count.
-- **Causes / action:** not enough consumers for the partitions. Scale the worker HPA up to the partition count (local topics default to 3 partitions, so 3 replicas max useful) before adding more; then check for a stuck partition / poison message.
-
-### AgentOpsDeadLettersIncreasing (warning)
-
-- **Means:** a message failed 3 attempts (or hit a non-retryable error) and was sent to `dead-letter-events`; its run is `FAILED`.
-- **First checks:** `dead-letter-events` topic (key by `workflowRunId` / `eventId`); worker logs; the run's step timeline via `GET /workflow-runs/:id/steps`.
-- **Causes / action:** inspect the dead-letter event payload and error, fix the root cause (validation, provider, or config), then re-trigger the run. Do not replay blindly — find the cause first.
-
-### AgentOpsAiQuotaExhausted (warning)
-
-- **Means:** AI calls are being rejected by `AI_DAILY_CALL_LIMIT` / `AI_DAILY_TOKEN_LIMIT`; new leads fail at the scoring step.
-- **First checks:** AgentOps - AI dashboard; `GET /ai/usage`; AI worker logs for `quota_exceeded`.
-- **Causes / action:** raise `AI_DAILY_CALL_LIMIT` and/or `AI_DAILY_TOKEN_LIMIT` for the workspace, or wait for the daily reset. Confirm the traffic is legitimate (not a runaway loop) before raising the limit.
-
-### AgentOpsAiInvalidJsonHigh (warning)
-
-- **Means:** more than 20% of AI outputs fail JSON Schema validation over 15 minutes.
-- **First checks:** AgentOps - AI dashboard (`agentops_ai_output_validation_total{result="invalid"}`); the failing outputs in AI worker logs by `workflowRunId`; the prompt and schema.
-- **Causes / action:** prompt/model drift or a schema change. Run the golden set (`POST /ai/evaluate-agent`, or `pnpm eval:leads`) to compare pass rate, then adjust the prompt or model and re-run before shipping.
-
-### AgentOpsOutboxBacklog (warning)
-
-- **Means:** the API has `agentops_domain_events_unpublished > 0` for 5 minutes — stored events could not be published to Kafka; the relay retries every 30s.
-- **First checks:** AgentOps - Kafka dashboard; API logs for relay/publish errors; `/health/ready` (Kafka); broker reachability from the API.
-- **Causes / action:** Kafka connectivity or auth problem. Check brokers, credentials, and the `domain_events` rows with a non-null `kafkaError`; once Kafka is reachable the 30s relay drains the backlog on its own.
-
-### AgentOpsApprovalsBacklog (info)
-
-- **Means:** more than 20 emails are waiting for a reviewer for 30 minutes.
-- **First checks:** `/approvals` page; `GET /workflow-runs/approvals?status=WAITING_APPROVAL`; AgentOps - Lead flow dashboard for pending approvals.
-- **Causes / action:** nobody is reviewing. Approve or reject the pending runs in `/approvals`; if the queue is expected, add reviewers.
-
-## 429 Too Many Requests
-
-Check whether one client or everyone is affected (API logs, client IPs). If everyone is limited, `API_TRUST_PROXY` is likely missing behind the ingress; set it to the proxy hop count (e.g. `1` behind ingress-nginx, never `true`). For load tests only, raise `API_RATE_LIMIT_PER_MINUTE` temporarily and restore it afterwards.
-
-## Common Tasks
-
-### Run the golden set after a prompt change
-
-Prompts live in `packages/shared/src/ai.ts`. After editing any prompt, run the labeled dataset and compare the pass rate before merging:
-
+#### Immediate Triage Steps
 ```bash
-pnpm eval:leads                       # labeled lead dataset
-# or, against a running API:
-curl -X POST http://localhost:4000/ai/evaluate-agent -H 'Content-Type: application/json' -d '{}'
+# 1. Check KEDA ScaledObject and HPA status for the affected worker
+kubectl -n agentops get scaledobjects
+kubectl -n agentops get hpa
+
+# 2. Check worker pod replica counts and CPU/memory utilization
+kubectl -n agentops get pods -l component=worker
+kubectl -n agentops top pods -l component=worker
+
+# 3. Inspect worker logs for consumer group rebalancing or processing stalls
+kubectl -n agentops logs deploy/workflow-worker --tail=100
 ```
 
-`POST /ai/evaluate-agent` with an empty body runs the 24-lead `leadEvaluationCases` set and returns `passRate` plus mismatches. Treat a lower pass rate as a regression.
+#### Common Causes and Mitigation
+1. **Surge in Inbound Leads**:
+   - Verify that KEDA has scaled replicas up toward the max limit (6).
+   - If replicas are capped at 3 due to topic partition constraints, check topic partition count:
+     ```bash
+     kubectl -n agentops exec deploy/agentops-api -- node -e "
+       const { Kafka } = require('kafkajs');
+       const k = new Kafka({ brokers: [process.env.KAFKA_BROKERS] });
+       k.admin().connect().then(a => a.fetchTopicMetadata({ topics: ['workflow-triggered'] })).then(console.log);
+     "
+     ```
+   - Expand topic partitions to 6 if needed (see SOP 3).
+2. **Poison Message / Consumer Rebalance Loop**:
+   - If consumer errors are repeated on a single `eventId`, inspect `dead-letter-events` to identify the failing payload:
+     ```bash
+     kubectl -n agentops logs deploy/workflow-worker | grep "dead_lettered"
+     ```
 
-### Rotate JWT secrets
+---
 
-1. Generate a new secret and write it to AWS Secrets Manager (the secret backing `JWT_ACCESS_SECRET` / refresh signing).
-2. Let External Secrets refresh the Kubernetes Secret (or force a reconcile) so `agentops-api` picks up the new value.
-3. Restart the API so the new secret is loaded: `kubectl -n agentops rollout restart deploy/agentops-api`.
-4. Existing access tokens expire naturally; users refresh with rotation. Keep the old secret until access tokens have aged out if you need overlap.
+### Playbook 3: AI Quota Exhaustion & Provider Outage (`AgentOpsAiQuotaExhausted`, `AgentOpsWorkerErrorRateHigh`)
 
-### Approve stuck emails
+#### Symptoms
+- Alert `AgentOpsAiQuotaExhausted` firing; new lead runs fail at step `ai-1` with `Daily AI quota reached`.
+- Or upstream AI provider (OpenAI) returns 500/503; worker retries 3 times before dead-lettering.
 
-Open `/approvals`, review the pending runs, and approve or reject. Each decision writes an `AuditLog` row; the first decision wins and later calls return `409`. Approving publishes `human-approval-decided`; rejecting fails the step and cancels the run.
+#### Immediate Triage Steps
+```bash
+# 1. Query current workspace AI usage
+kubectl -n agentops exec deploy/agentops-api -- node -e "
+  // Fetches current usage record from PostgreSQL
+"
 
-### Read a run end to end
+# 2. Inspect AI worker logs for quota or provider error codes
+kubectl -n agentops logs deploy/ai-worker --tail=100 | grep -E "quota_exceeded|OpenAI|rate_limit"
+```
 
-1. Find the `requestId` from the triggering HTTP response or API logs.
-2. Jump to the `workflowRunId` via `GET /workflow-runs/:id` and `GET /workflow-runs/:id/steps` (or the run page in the web app).
-3. In Grafana → Tempo, search traces by `workflowRunId` (or by `traceId`) to follow the api → Kafka → worker spans.
-4. In the log backend, filter by `requestId`, `workflowRunId`, `traceId`, and `eventId` to line up the HTTP request, published events, and each worker's handling.
+#### Common Causes and Mitigation
+1. **Daily Quota Reached**:
+   - Confirm if traffic is legitimate inbound volume or an automated loop.
+   - If legitimate, raise workspace limits via environment variables or Secrets Manager:
+     - `AI_DAILY_CALL_LIMIT` (e.g. increase from 100 to 500).
+     - `AI_DAILY_TOKEN_LIMIT` (e.g. increase from 200,000 to 1,000,000).
+   - Restart the API and AI worker to apply limits immediately:
+     ```bash
+     kubectl -n agentops rollout restart deploy/ai-worker deploy/agentops-api
+     ```
+2. **Upstream Provider Outage (OpenAI 5xx)**:
+   - For temporary testing or fallback, switch model provider to `mock` in workflow node configuration.
+   - Verified runs that fail after 3 retries transition to `FAILED` and record an `AuditLog` row.
+
+---
+
+### Playbook 4: Kafka Down & Outbox Backlog (`AgentOpsOutboxBacklog`)
+
+#### Symptoms
+- Alert `AgentOpsOutboxBacklog` firing (`agentops_domain_events_unpublished > 0` for > 5m).
+- Inbound API requests succeed, but downstream workflow steps never trigger.
+
+#### Immediate Triage Steps
+```bash
+# 1. Check Kafka broker connectivity from API
+kubectl -n agentops exec deploy/agentops-api -c agentops-api -- wget -qO- http://localhost:4000/health/ready
+
+# 2. Check unpublished events count in PostgreSQL
+kubectl -n agentops exec deploy/agentops-api -- node -e "
+  const { PrismaClient } = require('@agentops/database');
+  const prisma = new PrismaClient();
+  prisma.domainEvent.count({ where: { publishedToKafka: false } }).then(c => console.log('Unpublished events:', c));
+"
+
+# 3. Inspect API domain event outbox relay logs
+kubectl -n agentops logs -l app=agentops-api | grep "relay"
+```
+
+#### Common Causes and Mitigation
+1. **Broker Authentication / Network Disruption**:
+   - Check AWS MSK cluster status in AWS Console (`ap-southeast-1`).
+   - If brokers rotated or security group modified, verify `KAFKA_BROKERS` string in `agentops-config`.
+2. **Automatic Relay Recovery**:
+   - The API incorporates a background outbox relay running every 30 seconds. Once Kafka connectivity is restored, the relay automatically publishes pending rows in FIFO order. No manual SQL intervention is required.
+
+---
+
+### Playbook 5: Stuck Human Approvals (`AgentOpsApprovalsBacklog`)
+
+#### Symptoms
+- Alert `AgentOpsApprovalsBacklog` firing (more than 20 emails waiting for review for > 30m).
+- High-intent leads stalled at the `approval-1` workflow step.
+
+#### Immediate Triage Steps
+```bash
+# 1. Inspect pending approval count via API
+curl -s -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  "https://api.agentops.<host>/workflow-runs/approvals?status=WAITING_APPROVAL" | jq '. | length'
+
+# 2. Check for orphaned runs where approval step was skipped or mismatched
+kubectl -n agentops exec deploy/agentops-api -- node -e "
+  const { PrismaClient } = require('@agentops/database');
+  const prisma = new PrismaClient();
+  prisma.humanApproval.findMany({ where: { status: 'WAITING_APPROVAL' }, take: 5 }).then(console.log);
+"
+```
+
+#### Mitigation
+1. **Reviewer Team Notification**: Notify authorized reviewers (users with OWNER, ADMIN, or MEMBER roles in the workspace) to review pending drafts at `https://agentops.<host>/approvals`.
+2. **Programmatic Resolution (Batch Approval/Rejection)**:
+   - Reviewers can approve via REST API:
+     ```bash
+     curl -X POST "https://api.agentops.<host>/workflow-runs/<runId>/steps/<runId>_approval-1/approval" \
+       -H "Authorization: Bearer <TOKEN>" \
+       -H "Content-Type: application/json" \
+       -d '{"decision": "approve", "comment": "Batch approved by on-call operator"}'
+     ```
+   - Remember: The first decision wins. Duplicate decision attempts return `409 Conflict`.
+
+---
+
+### Playbook 6: Disabled Account and Security Lockout Response
+
+#### Context
+A platform administrator can disable any account via `/admin` (Accounts tab). Disabling an account sets `disabledAt` in the database, revokes all active refresh tokens, and causes the JWT authentication guard to reject subsequent requests with HTTP 403 immediately.
+
+#### Emergency Recovery / Lockout Resolution
+Admins cannot disable their own accounts in the UI (`TC-SEC-04`). If an admin account was disabled in error by another administrator:
+
+```bash
+# 1. Verify user status in database
+kubectl -n agentops exec deploy/agentops-api -- node -e "
+  const { PrismaClient } = require('@agentops/database');
+  const prisma = new PrismaClient();
+  prisma.user.findUnique({ where: { email: 'operator@agentops.local' } }).then(console.log);
+"
+
+# 2. Re-enable account directly via script if web admin console is inaccessible
+kubectl -n agentops exec deploy/agentops-api -- node -e "
+  const { PrismaClient } = require('@agentops/database');
+  const prisma = new PrismaClient();
+  prisma.user.update({
+    where: { email: 'operator@agentops.local' },
+    data: { disabledAt: null }
+  }).then(u => console.log('Account re-enabled:', u.email));
+"
+```
+
+---
+
+### Playbook 7: Alert Bot Silent (`AgentOpsAlertBotInactive`)
+
+#### Symptoms
+- Alert `AgentOpsAlertBotInactive` firing (info).
+- Alertmanager is not delivering alerts, or `POST /notifications/alertmanager` is rejecting deliveries.
+
+#### Immediate Triage Steps
+```bash
+# 1. Verify Alertmanager pod status in monitoring namespace
+kubectl -n monitoring get pods -l app=alertmanager
+
+# 2. Check Alertmanager webhook configuration
+kubectl -n monitoring exec deploy/alertmanager -- cat /etc/alertmanager/alertmanager.yml
+
+# 3. Trigger a synthetic test alert probe to verify the end-to-end webhook path
+kubectl -n monitoring exec deploy/alertmanager -- wget -qO- \
+  --header='Content-Type: application/json' \
+  --post-data='[{"labels":{"alertname":"AgentOpsManualProbe","severity":"info","service":"runbook"}}]' \
+  http://localhost:9093/api/v2/alerts
+
+# 4. Check API metrics to confirm counter increment
+kubectl -n agentops exec deploy/agentops-api -c agentops-api -- wget -qO- http://localhost:4000/metrics | grep agentops_alertmanager_notifications_total
+```
+
+#### Mitigation
+- If Alertmanager receives HTTP 401/403 from the API, ensure `ALERTMANAGER_WEBHOOK_TOKEN` in Kubernetes Secret `alertmanager-webhook` exactly matches the value in `agentops-secrets`.
+
+---
+
+## 4. Standard Operational Procedures (SOPs)
+
+### SOP 1: Running the Lead Evaluation Golden Set
+Execute the golden set evaluation after making any prompt adjustments or model configuration updates:
+
+```bash
+# Run locally against mock provider:
+pnpm eval:leads
+
+# Or invoke directly against running API endpoint:
+curl -X POST http://localhost:4000/ai/evaluate-agent \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+*Acceptance gate: Accuracy must be >= 0.90, hot-lead miss rate <= 0.10, schema validity = 1.0.*
+
+### SOP 2: Rotating JWT Signing Secrets
+1. Generate new 32-byte cryptographically secure random keys.
+2. Update `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in AWS Secrets Manager container `agentops/prod/app`.
+3. Force External Secrets Operator reconciliation:
+   ```bash
+   kubectl -n agentops annotate es agentops-secrets force-sync=$(date +%s) --overwrite
+   ```
+4. Perform rolling restart of the API deployment:
+   ```bash
+   kubectl -n agentops rollout restart deploy/agentops-api
+   ```
+   *Active access tokens (15m TTL) expire naturally; refreshed tokens re-sign against new secrets.*
+
+### SOP 3: Expanding Kafka Topic Partitions
+To permit increased consumer parallelism:
+
+```bash
+KAFKA_BROKERS=<msk-brokers> KAFKA_TOPIC_PARTITIONS=6 KAFKA_TOPIC_ALLOW_INCREASE=true pnpm kafka:bootstrap
+```
+
+### SOP 4: Investigating Dead-Letter Messages
+When `AgentOpsDeadLettersIncreasing` fires, query the `dead-letter-events` topic:
+
+```bash
+kubectl -n agentops exec deploy/workflow-worker -- node -e "
+  const { PrismaClient } = require('@agentops/database');
+  const prisma = new PrismaClient();
+  prisma.processedMessage.findMany({
+    where: { outcome: 'dead_lettered' },
+    orderBy: { createdAt: 'desc' },
+    take: 5
+  }).then(console.log);
+"
+```
+Fix underlying prompt or validation errors before re-submitting the workflow run.

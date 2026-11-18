@@ -1,90 +1,220 @@
-# AI Agent Integration
+# AI Agent Node Architecture
 
-AI is a workflow node, not a standalone chatbot. Every AI node must receive structured input and produce validated structured output.
+In AgentOps, AI agents operate as asynchronous graph nodes (`AI_AGENT`), rather than interactive chatbots. Nodes ingest structured inputs, perform prompt interpolation with automated data redaction, invoke language models, validate outputs against strict JSON Schemas, and emit typed events over Kafka.
 
-## AI Node Config
+```mermaid
+flowchart TD
+    subgraph Trigger["Workflow Engine"]
+        W[workflow-worker] -->|Kafka: agent-task-requested| Q[Kafka Queue]
+    end
 
-```txt
-modelProvider
-modelName
-systemPrompt
-userPromptTemplate
-inputMapping
-outputSchema
-temperature
-maxTokens
-retryLimit
-requireHumanApproval
-savePromptAndOutput
+    subgraph Worker["ai-worker"]
+        Q --> H[handleAgentTaskRequested]
+        H --> QG{Assert Quota}
+        QG -- Exceeded --> QErr[AiQuotaExceededError]
+        QG -- OK --> M[Redact PII & Interpolate Prompt]
+        M --> P{Select Provider}
+        P -- mock --> MP[Deterministic Mock Provider]
+        P -- openai --> OP[OpenAI gpt-4o-mini]
+        MP --> V{AJV JSON Schema Validation}
+        OP --> V
+        V -- Invalid & Retries Left --> P
+        V -- Invalid & Retries Exhausted --> DL[Kafka: dead-letter-events]
+        DL --> SF[Kafka: workflow-step-failed]
+        V -- Valid --> GR[applyLeadScoringGuardrail]
+        GR --> U[Record Token Usage]
+        U --> C[Kafka: agent-task-completed]
+    end
+
+    C --> W
+    SF --> W
 ```
 
-## Platform Layer
+---
 
-The AI platform layer includes:
+## 1. Execution Lifecycle
 
-- prompt template rendering with `{{variable}}` placeholders
-- input mapping from workflow payload paths into prompt variables
-- masking for emails, phone numbers, and secret-like keys
-- JSON Schema output validation
-- deterministic mock provider for local testing
-- OpenAI Responses provider path in the AI worker
-- prompt evaluation test cases before workflow publishing
+AI node execution is completely decoupled from HTTP request cycles:
 
-## Example Prompt
+1. **Request Ingestion:** When a workflow run advances to an `AI_AGENT` node, `workflow-worker` publishes an `agent-task-requested` event to Kafka carrying node configurations, inputs, and trace context.
+2. **Quota Assertion:** `ai-worker` verifies workspace quota limits via `PrismaAiUsageGuard.assertWithinQuota(workspaceId)`.
+3. **Data Sanitization:** Contact fields and credentials in the input payload are masked before entering the prompt template.
+4. **Model Execution:** The selected provider executes the rendered prompt.
+5. **Schema Validation:** The output is parsed and verified against the node's configured JSON Schema using AJV.
+6. **Retries & Error Handling:** Outputs failing schema validation are retried up to `retryLimit`. If retries are exhausted, the event is dead-lettered and `workflow-step-failed` is emitted.
+7. **Completion:** On success, token usage is recorded against workspace quotas and `agent-task-completed` is published to Kafka.
 
-```txt
-You are a sales operations assistant.
-Analyze the lead and return JSON with:
-- leadScore from 0 to 100
-- category
-- summary
-- recommendedAction
-- confidence
+---
+
+## 2. Model Providers
+
+AgentOps supports multiple model backends configured via `modelProvider`:
+
+| Provider | Model Identifier | Execution Mode | Network Access | Use Case |
+| --- | --- | --- | --- | --- |
+| `mock` (default) | `mock-lead-scorer` | In-process rule engine | None (offline) | Local testing, CI integration tests, deterministic golden-set verification. |
+| `openai` | `gpt-4o-mini` (or configurable) | OpenAI Responses API | Outbound HTTPS | Production lead scoring, email drafting, real LLM inference with strict JSON Schema. |
+| `gemini` | `gemini-1.5-flash` | Provider interface abstraction | Outbound HTTPS | Planned secondary multimodal/text provider. |
+
+### Provider Configuration
+To switch a workflow node to OpenAI:
+1. Ensure `OPENAI_API_KEY` is present in the environment (or AWS Secrets Manager).
+2. Configure the node JSON:
+   ```json
+   {
+     "modelProvider": "openai",
+     "modelName": "gpt-4o-mini",
+     "temperature": 0.2,
+     "maxTokens": 1000,
+     "retryLimit": 1
+   }
+   ```
+
+---
+
+## 3. Node Configuration Schema
+
+The node contract is defined in `packages/shared/src/ai.ts` by `aiAgentNodeConfigSchema`:
+
+```typescript
+export const aiAgentNodeConfigSchema = z.object({
+  modelProvider: z.enum(["openai", "gemini", "mock"]).default("mock"),
+  modelName: z.string().default("mock-lead-scorer"),
+  systemPrompt: z.string().min(1).default("You are an operations assistant."),
+  userPromptTemplate: z.string().min(1).default("Analyze this input and return structured JSON."),
+  inputMapping: z.record(z.string(), z.string()).default({}),
+  outputSchema: z.record(z.string(), z.unknown()).default(defaultLeadScoringOutputSchema),
+  temperature: z.number().min(0).max(2).default(0.2),
+  maxTokens: z.number().int().positive().max(8000).default(1000),
+  retryLimit: z.number().int().min(0).max(3).default(1),
+  requireHumanApproval: z.boolean().default(false),
+  savePromptAndOutput: z.boolean().default(false)
+});
 ```
 
-## Example Output
+---
 
-```json
-{
-  "leadScore": 87,
-  "category": "high-intent",
-  "summary": "The lead is interested in automating sales and support workflows.",
-  "recommendedAction": "Send a personalized follow-up email and create a sales task.",
-  "confidence": 0.91
-}
+## 4. Showcase Prompts & JSON Schemas
+
+The showcase lead qualification workflow utilizes two distinct AI nodes:
+
+### Node 1: Lead Qualification (`ai-1`)
+- **System Prompt:**
+  ```text
+  You are a sales operations assistant that qualifies inbound leads. Classify each lead into exactly one category: high-intent, low-intent, or spam. Use high-intent when the lead expresses a concrete need for automation, names a real company, and makes a specific request. Use low-intent when the message is vague, exploratory, or the sender is merely curious. Use spam when the message is irrelevant, gibberish, or purely promotional. Return only JSON that matches the provided output schema.
+  ```
+- **User Prompt Template:**
+  ```text
+  Qualify the following lead.
+  Name: {{name}}
+  Company: {{company}}
+  Email: {{email}}
+  Message: {{message}}
+  Source: {{source}}
+  Return a JSON object with leadScore (0-100), category (high-intent | low-intent | spam), summary, recommendedAction, and confidence (0-1).
+  ```
+- **Output Schema:**
+  ```json
+  {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["leadScore", "category", "summary", "recommendedAction", "confidence"],
+    "properties": {
+      "leadScore": { "type": "number", "minimum": 0, "maximum": 100 },
+      "category": { "type": "string", "enum": ["high-intent", "low-intent", "spam"] },
+      "summary": { "type": "string", "minLength": 1 },
+      "recommendedAction": { "type": "string", "minLength": 1 },
+      "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+    }
+  }
+  ```
+
+### Node 2: Follow-up Email Drafter (`ai-2`)
+- **System Prompt:**
+  ```text
+  You are a sales operations assistant that writes concise, personalized follow-up emails to inbound leads. Return only JSON that matches the provided output schema with a subject and a body. Keep the tone professional, specific, and focused on the recommended next action.
+  ```
+- **User Prompt Template:**
+  ```text
+  Write a follow-up email for the following lead.
+  Name: {{name}}
+  Company: {{company}}
+  Summary: {{summary}}
+  Recommended action: {{recommendedAction}}
+  Return a JSON object with subject and body.
+  ```
+- **Output Schema:**
+  ```json
+  {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["subject", "body"],
+    "properties": {
+      "subject": { "type": "string", "minLength": 1 },
+      "body": { "type": "string", "minLength": 1 }
+    }
+  }
+  ```
+
+---
+
+## 5. Input Sanitization & Guardrails
+
+### PII Redaction
+Before variables are interpolated into `{{variable}}` slots in prompt templates, sensitive data is masked:
+- **Email:** Masked to preserve domain context while hiding identity (`jane.doe@acme.com` -> `ja***@acme.com`).
+- **Phone Numbers:** Replaced with `[PHONE_REDACTED]`.
+- **API Keys / Tokens:** Patterns matching credentials (`sk_...`, `Bearer ...`) are replaced with `[REDACTED]`.
+
+### Prompt Injection Detection
+The engine applies `applyLeadScoringGuardrail` to inbound lead content. If adversarial attempts are identified (e.g., instructions attempting to ignore system boundaries or override score variables):
+- The injection marker is logged.
+- The lead category is forced to `spam` or penalized, preventing unearned progression into automated follow-up sequences.
+
+---
+
+## 6. Output Validation, Retries & Dead Letters
+
+1. **AJV Validation:** Outputs are verified with `additionalProperties: false`. If a model returns extra keys, malformed markdown fences, or missing attributes, validation fails.
+2. **Retries:** The node retries execution up to `retryLimit` times (default: 1; max: 3). Each attempt increments token counters.
+3. **Dead-Letter Handling:**
+   - If all retries fail, `ai-worker` throws `AiOutputValidationError`.
+   - The message outcome is recorded as `dead_lettered`.
+   - The event is forwarded to the `dead-letter-events` Kafka topic.
+   - An asynchronous `workflow-step-failed` event is emitted, allowing `workflow-worker` to terminate the run cleanly in `FAILED` status without deadlocking.
+
+---
+
+## 7. Daily Quota Enforcement
+
+Quotas are tracked per workspace in the `UsageRecord` database table:
+
+- **Limits:**
+  - `AI_DAILY_CALL_LIMIT`: Default 100 calls per 24-hour UTC window.
+  - `AI_DAILY_TOKEN_LIMIT`: Default 200,000 tokens (input + output) per 24-hour UTC window.
+- **Enforcement:**
+  - `PrismaAiUsageGuard.assertWithinQuota(workspaceId)` is invoked before invoking any model provider.
+  - If exceeded, execution raises `AiQuotaExceededError`.
+  - Emits Prometheus metric `agentops_ai_calls_total{status="quota_exceeded"}`.
+  - Sandbox endpoints (`POST /ai/test-agent`, `POST /ai/evaluate-agent`) return `429 Too Many Requests`.
+
+---
+
+## 8. Golden-Set Evaluation Suite
+
+AgentOps includes an automated evaluation harness to detect prompt drift, regression in classification accuracy, and token cost escalation:
+
+```bash
+pnpm eval:leads
 ```
 
-## API Testing Endpoints
-
-```txt
-GET  /ai/providers
-POST /ai/test-agent
-POST /ai/evaluate-agent
-GET  /ai/tasks/:id
-GET  /ai/usage
-```
-
-`/ai/test-agent` previews the rendered prompt, safe input, JSON Schema validation result, and token estimate. `/ai/evaluate-agent` runs multiple deterministic test cases and returns pass rate plus mismatches.
-
-The `/agents` frontend page reads `/ai/providers` and `/ai/usage`, then posts to `/ai/test-agent` through a small browser console. Keep this UI as a testing surface for prompt/config experiments until persisted agent configuration screens are implemented.
-
-## Lead Scoring Setup
-
-- Scoring output: `leadScore` (0-100), `category` (`high-intent` | `low-intent` | `spam`), `summary`, `recommendedAction`, `confidence`. The email step is a second AI node returning `subject` and `body`.
-- Prompts live in `packages/shared/src/ai.ts` (`leadScoringSystemPrompt`, `leadScoringUserPromptTemplate`, `leadEmail*`) and use `{{name}}`, `{{company}}`, `{{email}}`, `{{message}}`, `{{source}}`.
-- Providers: `mock` (default, deterministic, no network) or `openai` (Responses API with strict JSON Schema, called only from `ai-worker`). To switch, set `OPENAI_API_KEY` and set `modelProvider: "openai"`, `modelName: "gpt-4o-mini"` on the node; use a stronger `modelName` on the email node if writing quality needs it.
-- Retry: output that is not valid JSON or fails the schema is retried up to `retryLimit` extra times (token usage is summed); after that the step fails and the result is not used.
-- Privacy: email addresses become `an***@domain`, phone numbers become `[PHONE_REDACTED]`, secret-like keys become `[REDACTED]` before the prompt is built.
-- Quotas: `AI_DAILY_CALL_LIMIT` (default 100) and `AI_DAILY_TOKEN_LIMIT` (default 200000) per day; `/ai/test-agent` and `/ai/evaluate-agent` return HTTP 429 when exceeded and `/ai/usage` reports both limits.
-- Evaluation: `POST /ai/evaluate-agent` with an empty body runs the labeled dataset (`leadEvaluationCases`, 24 leads) and returns `passRate` plus mismatches. Run it after every prompt change and compare the pass rate.
-
-## Safety Rules
-
-- Validate AI output against the configured schema.
-- Retry invalid JSON only within the configured retry limit.
-- Store token usage and model metadata.
-- Do not trust AI decisions without validation.
-- Do not include secrets, env values, private keys, or unnecessary PII in prompts.
-- Allow privacy settings to disable prompt/output storage.
-- Enforce daily AI call and token quotas by workspace.
-- Do real provider calls in the AI worker path, not in request/response HTTP handlers.
+- **Harness File:** `apps/ai-worker/src/evaluate.ts`
+- **Dataset:** `leadEvaluationCases` in `packages/shared/src/ai.ts` containing 24 labeled inbound lead scenarios:
+  - 12 High-Intent leads (enterprise requests, explicit automation requirements).
+  - 8 Low-Intent leads (exploratory, student queries, vague interest).
+  - 4 Spam / Injection leads (cryptocurrency pitches, prompt override attempts).
+- **Report Metrics:**
+  - Overall accuracy (`passRate`).
+  - Hot-lead miss rate (false negatives where high-intent was classified as low-intent or spam).
+  - Total token consumption and estimated cost in USD via `estimateAiCostUsd`.
+- **CI Enforcement:** Executed automatically during PR checks (`ci.yml`); pull requests that regress golden-set accuracy fail build verification.

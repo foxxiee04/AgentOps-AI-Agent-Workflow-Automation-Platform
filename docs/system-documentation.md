@@ -1,388 +1,394 @@
 # AgentOps System Documentation
 
-AgentOps is an AI agent workflow automation platform. A workflow is a graph of nodes (trigger, AI agent, condition, human approval, email, notification). The API stores every run in PostgreSQL and publishes events to Kafka; four workers execute the nodes asynchronously; a Next.js web app shows the dashboard, the visual builder, the run timeline and the approval queue.
+AgentOps is an enterprise-grade AI agent workflow automation platform. Workflows are modeled as directed graphs of modular nodes (triggers, AI intent classification, conditional branching, human approval gates, automated follow-up emails, and sales notifications). 
 
-This document describes the system as it runs today, locally on Docker Compose and in production on AWS EKS. Screenshots were taken from the running system on 2026-11-17: application screens from the local stack, monitoring screens from the production cluster.
+The platform pairs a synchronous NestJS control plane with an asynchronous Kafka execution plane. Runs are persisted durably in PostgreSQL 16 before events are published to Kafka; four specialized worker services execute graph steps asynchronously; and a Next.js 16 web application delivers the visual builder, execution timeline, review queue, and workspace analytics.
 
-Related documents: [architecture.md](architecture.md) (design decisions), [api.md](api.md), [database.md](database.md), [kafka-topics.md](kafka-topics.md), [workflow-engine.md](workflow-engine.md), [security.md](security.md), [test-scenarios.md](test-scenarios.md), [production-runbook-aws.md](production-runbook-aws.md).
+This document describes the complete architecture, verified against the live system locally on Docker Compose and in production on AWS EKS as of **2026-11-18**.
 
-## 1. System at a glance
+**Related Technical Documentation:**
+- Architecture & Design: [architecture.md](architecture.md) · [technology-decisions.md](technology-decisions.md) · [PORTFOLIO.md](PORTFOLIO.md)
+- Specifications: [api.md](api.md) · [database.md](database.md) · [kafka-topics.md](kafka-topics.md) · [workflow-engine.md](workflow-engine.md) · [ai-agent.md](ai-agent.md)
+- Operations & Security: [security.md](security.md) · [observability.md](observability.md) · [production-runbook-aws.md](production-runbook-aws.md) · [test-scenarios.md](test-scenarios.md)
 
-| Area | Technology |
-| --- | --- |
-| Web | Next.js 16 (App Router), React 19, Tailwind CSS 4, Motion, React Flow, TanStack Query |
-| API | NestJS modular monolith, Prisma 7, argon2, JWT in HttpOnly cookies |
-| Workers | 4 Node.js services using kafkajs: workflow, AI, tool, notification |
-| Data | PostgreSQL 16, Redis 7, Kafka (14 topics) |
-| Observability | Prometheus, Alertmanager, Grafana (5 dashboards), Tempo, OpenTelemetry |
-| Infrastructure | Docker, Kubernetes (kustomize), Terraform, GitHub Actions |
-| Production | AWS EKS, RDS PostgreSQL, ElastiCache Redis, MSK Kafka, ECR, Secrets Manager |
+---
 
-Monorepo layout:
+## 1. System at a Glance
 
+| Subsystem | Technology | Current Version | Operational Role |
+| --- | --- | --- | --- |
+| **Web Frontend** | Next.js App Router, React, Tailwind CSS, Motion | Next 16.4.2, React 19.2.7, Tailwind 4.3.0, Motion 14.5.0 | SSR dashboard, React Flow canvas, SSE run streams, and responsive UI. |
+| **3D Visuals** | Three.js, React Three Fiber, drei | Three 0.164.0, R3F 9.0.0, Drei 10.0.0 | Client-only interactive WebGL hero sculpture on landing page. |
+| **Canvas Engine** | `@xyflow/react` | 12.11.0 | Drag-and-drop workflow builder with real-time edge and node validation. |
+| **Backend API** | NestJS Modular Monolith | 11.2.7 | Synchronous control plane, RBAC enforcement, auth sessions, and admin APIs. |
+| **ORM & DB** | Prisma ORM + `@prisma/adapter-pg` | 7.10.1, PostgreSQL 16 | Relational data persistence with strict driver adapter pooling. |
+| **Cache & Bus** | Redis, Apache Kafka, KafkaJS | Redis 7, Kafka 3.9, KafkaJS 2.2.4 | In-memory session checks and asynchronous event-driven worker orchestration. |
+| **Workers** | Node.js / TypeScript Services | 4 deployable consumers | `workflow-worker`, `ai-worker`, `tool-worker`, `notification-worker`. |
+| **AI Inference** | OpenAI SDK + Deterministic Mock | OpenAI 6.42.0, AJV 8.20.0 | Structured output inference (`gpt-4o-mini`) with schema validation. |
+| **Observability** | Prometheus, Alertmanager, Grafana, Tempo | OTel SDK 0.218.0 | 7 scrape targets, 17 alert rules, 5 dashboards, distributed OTLP traces. |
+| **Infrastructure** | Terraform, Kubernetes, Helm/Kustomize | AWS EKS 1.31, RDS, ElastiCache, MSK | 54 managed AWS resources, KEDA lag autoscaling, zero-key OIDC CI/CD. |
+
+### Monorepo Layout
 ```txt
 apps/
-  api/                  NestJS API (auth, workspaces, workflows, runs, AI, dashboard, webhooks)
-  web/                  Next.js web app
-  workflow-worker/      Orchestrates runs: walks the graph, evaluates conditions
-  ai-worker/            Executes AI_AGENT nodes (mock, OpenAI, Gemini providers)
-  tool-worker/          Executes tool nodes (webhook, HTTP request, mock email)
-  notification-worker/  Creates sales tasks and notifications
+  api/                  NestJS 11 API (auth, workspaces, workflows, runs, AI, dashboard, admin, webhooks)
+  web/                  Next.js 16 web app (Moss Atelier UI, React Flow builder, WebGL sculpture)
+  workflow-worker/      Graph orchestration worker: state machine evaluation, condition branching
+  ai-worker/            AI node execution worker: OpenAI gpt-4o-mini, mock provider, AJV validation
+  tool-worker/          External tool worker: webhook dispatches, HTTP calls, mock email integration
+  notification-worker/  Notification worker: sales tasks creation and operational alerting
 packages/
-  shared/               Workflow graph types, validation, AI helpers, view schemas
-  database/             Prisma schema, migrations, seeds
-  events/               Kafka topics, event envelope, consumer runtime
-  config/               Environment schema
-  ui/                   Shared UI primitives
+  shared/               Graph contracts, Zod schemas, AI prompts, view DTOs, and RBAC definitions
+  database/             Prisma schema, migrations, seed data, and PostgreSQL client adapter
+  events/               Kafka topic constants, event envelope schemas, consumer runtime, idempotency
+  config/               Environment variable parsing and validation via Zod
+  observability/        OpenTelemetry SDK setup, metric counters/gauges/histograms, trace propagation
+  ui/                   Shared UI components and icons
 infrastructure/
-  docker/               Dockerfiles (api, web, worker)
-  k8s/                  kustomize base, components, overlays, monitoring, migration job
-  terraform/            Modules and environments (bootstrap, dev, prod)
-  observability/        Prometheus rules, Grafana dashboards, Tempo and Alertmanager config
+  docker/               Multi-stage Dockerfiles stripped of npm/corepack CLIs
+  k8s/                  Kubernetes manifests (base, components, overlays, monitoring, migration job)
+  terraform/            Terraform modules and environments for AWS deployment (bootstrap, prod)
+  observability/        Alertmanager configs, Prometheus rules, and Grafana dashboard JSON models
 ```
 
-## 2. Architecture
+---
 
-### 2.1 Logical architecture
+## 2. Architecture & Execution Plane
+
+### 2.1 Logical Architecture
 
 ```mermaid
 flowchart LR
-  user([Operator / reviewer]) --> web[Web app<br/>Next.js]
-  lead([Lead form / webhook]) --> api
-  web -->|REST + SSE| api[API<br/>NestJS]
+    user([Operator / Reviewer]) --> web[Web App<br/>Next.js 16]
+    lead([Lead Ingest / Webhook]) --> api
+    web -->|REST + SSE| api[Control Plane API<br/>NestJS 11]
 
-  api -->|runs, steps, approvals| pg[(PostgreSQL)]
-  api -->|health, rate limits| redis[(Redis)]
-  api -->|domain events| kafka{{Kafka}}
+    api -->|runs, steps, approvals| pg[(PostgreSQL 16)]
+    api -->|health, cache| redis[(Redis 7)]
+    api -->|domain events| kafka{{Apache Kafka 3.9}}
 
-  kafka --> ww[workflow-worker]
-  kafka --> aw[ai-worker]
-  kafka --> tw[tool-worker]
-  kafka --> nw[notification-worker]
-  ww --> kafka
-  aw --> kafka
-  tw --> kafka
-  nw --> kafka
+    kafka --> ww[workflow-worker]
+    kafka --> aw[ai-worker]
+    kafka --> tw[tool-worker]
+    kafka --> nw[notification-worker]
 
-  ww --> pg
-  aw --> pg
-  tw --> pg
-  nw --> pg
-  aw -->|optional| llm[(OpenAI / Gemini)]
+    ww --> kafka
+    aw --> kafka
+    tw --> kafka
+    nw --> kafka
 
-  api -. metrics, traces .-> obs[Prometheus · Tempo · Grafana]
-  ww -. metrics, traces .-> obs
-  aw -. metrics, traces .-> obs
-  tw -. metrics, traces .-> obs
-  nw -. metrics, traces .-> obs
+    ww --> pg
+    aw --> pg
+    tw --> pg
+    nw --> pg
+    aw -->|HTTPS| llm[(OpenAI gpt-4o-mini)]
+
+    api -. metrics, traces .-> obs[Telemetry<br/>Prometheus · Tempo · Grafana]
+    ww -. metrics, traces .-> obs
+    aw -. metrics, traces .-> obs
+    tw -. metrics, traces .-> obs
+    nw -. metrics, traces .-> obs
 ```
 
-Why it is shaped this way:
+### 2.2 Showcase Lead Qualification Sequence
 
-- **Modular monolith API.** Users, workspaces, workflow versions, permissions, runs and audit logs share one set of rules, so they live in one NestJS application.
-- **Durable first.** The API writes the run, its steps and the domain event to PostgreSQL before publishing to Kafka. A relay re-publishes events that did not reach Kafka.
-- **Workers are stateless.** Each worker reads one or more topics, does one kind of work and publishes the result. Kafka delivery is at-least-once, so every handler is idempotent (`ProcessedMessage` records one row per consumer group and idempotency key).
-- **Failure is explicit.** A failing handler is retried up to 3 times; then the message goes to `dead-letter-events` and `workflow-step-failed` is published so the run ends as `FAILED` instead of hanging.
-
-### 2.2 Lead qualification flow
-
-The sample workflow `wf_lead_qualification` scores an inbound lead, branches on intent, drafts an email, waits for a human to approve it, sends it and creates a sales task.
+The core showcase workflow (`wf_lead_qualification`) scores inbound leads, branches conditionally based on intent, drafts follow-up emails, holds execution for human review, sends the approved email, and logs sales follow-up tasks:
 
 ```mermaid
 sequenceDiagram
-  autonumber
-  participant C as Client (web / webhook)
-  participant A as API
-  participant DB as PostgreSQL
-  participant K as Kafka
-  participant W as workflow-worker
-  participant AI as ai-worker
-  participant T as tool-worker
-  participant N as notification-worker
-  participant R as Reviewer
+    autonumber
+    participant C as Client (Web / Webhook)
+    participant A as API (Control Plane)
+    participant DB as PostgreSQL 16
+    participant K as Kafka Bus
+    participant W as workflow-worker
+    participant AI as ai-worker
+    participant T as tool-worker
+    participant N as notification-worker
+    participant R as Human Reviewer
 
-  C->>A: POST /workflows/:id/run (lead input)
-  A->>DB: insert run, steps, domain event
-  A->>K: workflow-triggered
-  K->>W: workflow-triggered
-  W->>K: agent-task-requested (ai-1: score lead)
-  K->>AI: agent-task-requested
-  AI->>DB: AiTaskResult, UsageRecord (quota check)
-  AI->>K: agent-task-completed (leadScore, category)
-  K->>W: agent-task-completed
-  alt leadScore > 80 (branch A)
-    W->>K: agent-task-requested (ai-2: write email)
-    AI->>K: agent-task-completed (subject, body)
-    W->>DB: HumanApproval WAITING_APPROVAL
-    W->>K: human-approval-requested
-    R->>A: POST /workflow-runs/:id/steps/approval-1/approval
-    A->>K: human-approval-decided
-    alt approved
-      W->>K: tool-call-requested (email-1)
-      T->>K: tool-call-completed
+    C->>A: POST /workflows/:id/run (lead payload)
+    A->>DB: Persist WorkflowRun, initial steps, DomainEvent
+    A->>K: Publish workflow-triggered
+    K->>W: Consume workflow-triggered
+    W->>K: Publish agent-task-requested (ai-1: score lead)
+    K->>AI: Consume agent-task-requested
+    AI->>DB: Check quota & record UsageRecord
+    AI->>K: Publish agent-task-completed (leadScore, category)
+    K->>W: Consume agent-task-completed
+    alt leadScore > 80 (Branch A: High Intent)
+        W->>K: Publish agent-task-requested (ai-2: draft email)
+        AI->>K: Publish agent-task-completed (subject, body)
+        W->>DB: Persist HumanApproval (WAITING_APPROVAL)
+        W->>K: Publish human-approval-requested
+        R->>A: POST /workflow-runs/:id/steps/approval-1/approval (decision)
+        A->>K: Publish human-approval-decided
+        alt Decision == Approve
+            W->>K: Publish tool-call-requested (email-1: send email)
+            T->>K: Publish tool-call-completed
+        end
+        W->>K: Publish notification-requested (notify-1: sales task)
+        N->>DB: Persist Notification (SALES_TASK)
+        N->>K: Publish workflow-step-completed
+    else Otherwise (Branch B: Low Intent / Spam)
+        Note over W: Advance directly to terminal end node
     end
-    W->>K: notification-requested (notify-1)
-    N->>DB: Notification SALES_TASK
-    N->>K: workflow-step-completed
-  else otherwise (branch B)
-    Note over W: goes straight to the end node
-  end
-  W->>DB: run COMPLETED
-  W->>K: workflow-completed
+    W->>DB: Mark WorkflowRun as COMPLETED
+    W->>K: Publish workflow-completed
 ```
 
-A rejected email is not sent, but the sales task is still created so a person follows up; the run then completes.
+### 2.3 Kafka Topics & Event Envelopes
 
-### 2.3 Kafka topics
+Every Kafka message adheres to the standardized `EventEnvelope` schema in `packages/events`:
+- Carries `eventId`, `type`, `workspaceId`, `workflowId`, `workflowRunId`, `timestamp`, `payload`, and W3C `traceparent`.
+- Consumer idempotency is guaranteed via the `ProcessedMessage` table (`consumerGroup` + `idempotencyKey`), preventing duplicate executions.
 
-| Topic | Producer | Consumer |
-| --- | --- | --- |
-| `workflow-triggered` | API | workflow-worker |
-| `workflow-step-started` / `-completed` / `-failed` | workers | workflow-worker, listeners |
-| `agent-task-requested` | workflow-worker | ai-worker |
-| `agent-task-completed` | ai-worker | workflow-worker |
-| `tool-call-requested` | workflow-worker | tool-worker |
-| `tool-call-completed` | tool-worker | workflow-worker |
-| `human-approval-requested` | workflow-worker | listeners |
-| `human-approval-decided` | API | workflow-worker |
-| `notification-requested` | API, workers | notification-worker |
-| `workflow-completed` / `workflow-failed` | workflow-worker | listeners |
-| `dead-letter-events` | any worker | operations tooling |
+| Topic Name | Producer Service | Consumer Service | Purpose |
+| --- | --- | --- | --- |
+| `workflow-triggered` | API | `workflow-worker` | Initiates new workflow run execution. |
+| `workflow-step-started` | Workers | `workflow-worker` | Signals that a worker started a step. |
+| `workflow-step-completed` | Workers | `workflow-worker` | Confirms step execution success. |
+| `workflow-step-failed` | Workers | `workflow-worker` | Reports step failure; triggers run termination. |
+| `agent-task-requested` | `workflow-worker` | `ai-worker` | Requests AI intent scoring or email generation. |
+| `agent-task-completed` | `ai-worker` | `workflow-worker` | Returns structured JSON AI output. |
+| `tool-call-requested` | `workflow-worker` | `tool-worker` | Requests tool invocation (email, CRM, webhook). |
+| `tool-call-completed` | `tool-worker` | `workflow-worker` | Reports tool execution result. |
+| `human-approval-requested` | `workflow-worker` | API / UI | Enqueues task in human review queue. |
+| `human-approval-decided` | API | `workflow-worker` | Transmits review decision (`approve` / `reject`). |
+| `notification-requested` | `workflow-worker` | `notification-worker` | Dispatches sales follow-up task creation. |
+| `workflow-completed` | `workflow-worker` | Telemetry / API | Signals successful workflow completion. |
+| `workflow-failed` | `workflow-worker` | Telemetry / API | Signals unrecoverable workflow failure. |
+| `dead-letter-events` | All Workers | Operations / Alerts | Retains exhausted failed messages for diagnosis. |
 
-Every event carries `eventId`, `type`, `workspaceId`, `workflowRunId`, `timestamp`, and a W3C `traceparent`, so one trace follows a run across the API and all workers.
-
-### 2.4 Data model
+### 2.4 Data Model
 
 ```mermaid
 erDiagram
-  User ||--o{ WorkspaceMember : joins
-  Workspace ||--o{ WorkspaceMember : has
-  Workspace ||--o{ Workflow : owns
-  Workflow ||--o{ WorkflowVersion : "published as"
-  Workflow ||--o{ WorkflowRun : runs
-  WorkflowVersion ||--o{ WorkflowRun : "executed by"
-  WorkflowRun ||--o{ WorkflowStepRun : steps
-  WorkflowRun ||--o{ AiTaskResult : "AI output"
-  WorkflowRun ||--o{ ToolCallResult : "tool output"
-  WorkflowRun ||--o{ HumanApproval : approvals
-  WorkflowRun ||--o{ DomainEvent : events
-  WorkflowRun ||--o{ UsageRecord : usage
-  Workspace ||--o{ Notification : "sales tasks"
-  Workspace ||--o{ AuditLog : audit
-  User ||--o{ HumanApproval : decides
+    User ||--o{ WorkspaceMember : joins
+    Workspace ||--o{ WorkspaceMember : contains
+    Workspace ||--o{ Workflow : owns
+    Workflow ||--o{ WorkflowVersion : "publishes immutable"
+    Workflow ||--o{ WorkflowRun : executes
+    WorkflowVersion ||--o{ WorkflowRun : defines
+    WorkflowRun ||--o{ WorkflowStepRun : logs
+    WorkflowRun ||--o{ AiTaskResult : captures
+    WorkflowRun ||--o{ ToolCallResult : captures
+    WorkflowRun ||--o{ HumanApproval : requires
+    WorkflowRun ||--o{ DomainEvent : triggers
+    Workspace ||--o{ UsageRecord : accumulates
+    Workspace ||--o{ Notification : logs
+    Workspace ||--o{ AuditLog : audits
+    User ||--o{ HumanApproval : decides
 ```
 
-- A run always points at an immutable `WorkflowVersion`, so editing a workflow never changes the history of earlier runs.
-- `WorkflowRun.contextJson` holds the trigger input and node outputs for the engine. It is never returned to clients unmasked; contact fields are masked in every view (`an***@shopabc.vn`).
-- `UsageRecord` drives the daily AI quota (`AI_DAILY_CALL_LIMIT`, `AI_DAILY_TOKEN_LIMIT`). When the quota is reached the AI step fails with a clear message and is not retried.
+---
 
-## 3. Web application
+## 3. Web Application & Screen Inventory
 
-The web app uses the **Moss Atelier** design direction (since 2026-11-17, replacing Lumen): a warm stone canvas with a soft mist wash, ink-green text, one moss accent, hairline grids, mono labels and glass surfaces. Display lines use Playfair Display (it has Vietnamese glyphs; Instrument Serif does not), body and UI use Inter Tight, and JetBrains Mono is kept for labels, ids and data. Lime is reserved for live/running states. Motion is short and purposeful (reveal on mount, count-up numbers, mask-line headlines, live chip pulse) and respects `prefers-reduced-motion`. The interface is available in English and Vietnamese. The tokens and component rules are in `apps/web/DESIGN.md`; the full brief is `design/design-brief.md`.
+The frontend implements the **Moss Atelier** visual design system: a warm stone canvas (`#F4F3EF`), ink-green typography (`#0F1A14`), moss accent elements (`#2F5D3A`), and live lime highlights (`#C6F35C`). Display typography utilizes **Playfair Display** (supporting Vietnamese diacritics), body copy uses **Inter Tight**, and data fields use **JetBrains Mono**.
 
-### 3.1 Landing page
+### 3.1 Landing Page & WebGL Sculpture
+The landing view incorporates a client-only Three.js / React Three Fiber interactive 3D sculpture. The animation automatically pauses when scrolled off-screen and provides a static SVG fallback when `prefers-reduced-motion` is detected.
 
 ![Landing page](images/app/01-landing.png)
 
-### 3.2 Login
-
-Sessions use HttpOnly access and refresh cookies. Local demo accounts under `@agentops.local` are created on first login when `DEMO_LOGIN_ENABLED` allows it; production has it disabled. Google sign-in uses the server authorization-code flow at `GET /auth/google` → `/auth/google/callback`; a first-time Google user gets a personal workspace with role `OWNER`. The account picker and OAuth URIs are configured per environment in Google Cloud Console.
+### 3.2 Authentication & Google Sign-In
+Supports password authentication via argon2 and Google OAuth 2.0. Sessions rely on HttpOnly `agentops_access` (15m) and `agentops_refresh` (30d) cookies. A first-time Google login automatically creates a personal workspace (`OWNER`) and grants read access to the demo workspace (`VIEWER`).
 
 ![Login](images/app/02-login.png)
 
-### 3.3 Dashboard
-
-Four headline metrics, run activity, run outcomes and lead quality charts, the scored-lead table (contact fields masked), the sales task list, recent runs, dependency readiness, AI providers and the live event stream. Every dashboard endpoint is scoped to one workspace through `?workspaceId=` and a `VIEWER` membership. The active workspace is resolved server-side from the `agentops_ws` cookie (falling back to the user's first workspace) and can be changed with the workspace switcher in the sidebar; `GET /auth/me` returns the caller's `workspaces` with their roles.
+### 3.3 Workspace-Isolated Dashboard
+Displays headline operational metrics, scored leads with masked contact details, pending sales tasks, dependency health, and recent run history. Every endpoint is partitioned by `?workspaceId=` and accessible via the sidebar switcher (`agentops_ws` cookie).
 
 ![Dashboard](images/app/03-dashboard.png)
 
-### 3.4 Workflows and the visual builder
-
-Workflows are listed with their status, node and edge counts. The builder renders the graph with React Flow, validates it (trigger, end node, edge references, AI and tool configuration) and offers **Publish** and **Run**.
+### 3.4 Workflows & React Flow Canvas
+Lists active and archived workflows. The canvas visualizer enables graph editing with custom node cards, branch condition labels, and publishing controls.
 
 ![Workflows](images/app/04-workflows.png)
 
 ![Workflow builder](images/app/05-builder.png)
 
-### 3.5 Runs and the run timeline
-
-The run list filters by status and workflow. The run page streams status over Server-Sent Events and shows each step with its input, output, token usage and errors.
+### 3.5 Run History & Live Step Timeline
+Displays execution history with status filters. The run detail view streams live step progression over Server-Sent Events (`GET /workflow-runs/:id/stream`), showing masked inputs, node outputs, execution duration, and token counts.
 
 ![Runs](images/app/06-runs.png)
 
 ![Run timeline](images/app/07-run-detail.png)
 
-### 3.6 Approval queue
-
-AI-drafted emails for hot leads wait here. A reviewer can edit the draft, add a note, then approve and send, or reject. The first decision wins; a second one gets HTTP 409.
+### 3.6 Human Approval Queue
+Centralized queue (`/approvals`) for human review of AI-drafted outreach. Reviewers can edit drafts and submit idempotent decisions (`approve` / `reject`).
 
 ![Approval queue](images/app/08-approvals.png)
 
-### 3.7 AI agents and settings
-
-The agents screen shows providers, today's calls and tokens against the quota, and a console to test the scoring agent. Settings shows the API boundary, dependency health and the production readiness checklist.
+### 3.7 AI Agent Sandbox & System Settings
+Interactive sandbox to test prompt rendering and JSON Schema validation against model providers, alongside dependency readiness checklists.
 
 ![AI agents](images/app/09-agents.png)
 
 ![Settings](images/app/10-settings.png)
 
-### 3.8 Mobile
-
-Below 1024 px the sidebar becomes a sheet and tables scroll inside their cards.
+### 3.8 Mobile Responsive Layout
+Responsive layout with collapsable sheet navigation and horizontally scrolling data cards on mobile viewports.
 
 <img src="images/app/11-mobile-dashboard.png" alt="Mobile dashboard" width="320" />
 
-## 4. Deployment
+---
 
-### 4.1 Local (Docker Compose)
+## 4. Production Deployment (AWS EKS)
 
-`pnpm local:docker` builds seven images and starts 14 containers: PostgreSQL, Redis, Kafka, Prometheus, Alertmanager, Grafana, Tempo, a one-shot `setup` container (migrations, seeds, Kafka topics), the API, the web app and four workers.
-
-| Service | Address |
-| --- | --- |
-| Web | http://localhost:3000 |
-| API | http://localhost:4000 |
-| Grafana | http://localhost:3001 |
-| Prometheus | http://localhost:9090 |
-| Alertmanager | http://localhost:9093 |
-| Tempo | http://localhost:3200 |
-| Worker metrics | http://localhost:4101 to 4104 |
-
-### 4.2 Production (AWS EKS)
+The production architecture is deployed in the AWS `ap-southeast-1` region using modular Terraform (54 managed resources):
 
 ```mermaid
 flowchart TB
-  internet([Internet]) -->|HTTPS 443| nlb[Network Load Balancer]
+    internet([Public Internet]) -->|HTTPS 443| nlb[AWS Network Load Balancer]
 
-  subgraph vpc[VPC 10.30.0.0/16 · ap-southeast-1]
-    subgraph public[Public subnets · 2 AZ]
-      nlb
-      nat[NAT gateway]
-    end
-    subgraph private[Private subnets · 2 AZ]
-      subgraph eks[EKS cluster agentops-prod · 2 x t3.medium]
-        ingress[ingress-nginx<br/>TLS by cert-manager + Let's Encrypt]
-        webp[agentops-web x2]
-        apip[agentops-api x2 · HPA 2-6]
-        wk[4 workers · KEDA scales on Kafka lag]
-        eso[External Secrets]
-        mon[monitoring: Prometheus · Alertmanager · Grafana · Tempo]
-      end
-      rds[(RDS PostgreSQL 16)]
-      redis[(ElastiCache Redis · TLS)]
-      msk{{MSK Kafka · 2 brokers}}
-    end
-  end
+    subgraph VPC["VPC 10.30.0.0/16 · ap-southeast-1"]
+        subgraph PublicSubnets["Public Subnets (2 AZs)"]
+            nlb
+            nat[NAT Gateway]
+        end
 
-  nlb --> ingress
-  ingress --> webp
-  ingress --> apip
-  webp --> apip
-  apip --> rds
-  apip --> redis
-  apip --> msk
-  wk --> msk
-  wk --> rds
-  eso -->|IRSA| sm[(Secrets Manager<br/>agentops/prod/app)]
-  ecr[(ECR · 7 repositories)] -. images .-> eks
+        subgraph PrivateSubnets["Private Subnets (2 AZs)"]
+            subgraph EKS["EKS Cluster: agentops-prod (2x t3.medium)"]
+                ingress[ingress-nginx<br/>cert-manager + Let's Encrypt]
+                webp[agentops-web Pods (2 replicas)]
+                apip[agentops-api Pods (HPA 2-6 replicas)]
+                wk[Kafka Workers<br/>KEDA Scaled 1-6 replicas]
+                eso[External Secrets Operator]
+                mon[Monitoring Namespace<br/>Prometheus · Alertmanager · Grafana · Tempo]
+            end
+
+            rds[(RDS PostgreSQL 16<br/>db.t4g.micro)]
+            redis[(ElastiCache Redis 7<br/>cache.t4g.micro · TLS)]
+            msk{{Amazon MSK Kafka<br/>2x t3.small brokers}}
+        end
+    end
+
+    nlb --> ingress
+    ingress --> webp
+    ingress --> apip
+    webp --> apip
+    apip --> rds
+    apip --> redis
+    apip --> msk
+    wk --> msk
+    wk --> rds
+    eso -->|IRSA| sm[(AWS Secrets Manager<br/>agentops/prod/app)]
+    ecr[(Amazon ECR · 7 Repositories)] -. Images .-> EKS
 ```
 
-- **Terraform** (`infrastructure/terraform/environments/prod`) creates the VPC, EKS, RDS, ElastiCache, MSK, ECR, the Secrets Manager container and the GitHub OIDC role: 54 resources.
-- **Kubernetes** (`infrastructure/k8s/overlays/prod`) deploys the six workloads with non-root, read-only-root-filesystem pods, probes, resource limits, PodDisruptionBudgets, zone spread, default-deny NetworkPolicies and an Ingress that never routes `/metrics`.
-- **Secrets** never enter Terraform state or Git: External Secrets reads `agentops/prod/app` from Secrets Manager through an IRSA role and creates the `agentops-secrets` Secret.
-- **Releases**: the migration Job (`infrastructure/k8s/jobs/db-migrate`) runs first, then the Deployments roll out; `scripts/k8s-deploy.sh` rolls back automatically if the rollout or the smoke test fails.
-
-The exact commands, the problems found during the first production bring-up and the teardown procedure are in [production-runbook-aws.md](production-runbook-aws.md).
+- **Autoscaling:** API pods scale between 2 and 6 replicas using Kubernetes HPA based on CPU/memory. Worker pods scale between 1 and 6 replicas using **KEDA** based on Kafka consumer group lag.
+- **Secrets Management:** Zero credentials exist in Git or Terraform state. Values in AWS Secrets Manager (`agentops/prod/app`) sync into cluster Secrets via External Secrets Operator and AWS IAM IRSA.
+- **CI/CD Pipeline:** GitHub Actions authenticates via AWS IAM OIDC (no static AWS keys). Deployment scripts execute database migrations via a Kubernetes Job before rolling out updated image digests with automatic rollback.
+- **Verification Status:** Verified on 2026-11-18 via `scripts/verify-prod.mjs` with **27/27 automated checks passing** ([docs/evidence/prod-verification.md](evidence/prod-verification.md)).
 
 ![Production landing page over HTTPS](images/prod/01-landing.png)
 
-## 5. Monitoring and observability
+---
 
-Every service exposes Prometheus metrics (`/metrics` on the API, port 9100 on workers) and exports OpenTelemetry traces to Tempo. In Kubernetes the stack lives in the `monitoring` namespace (`infrastructure/k8s/monitoring`); Prometheus discovers the pods of the `agentops` namespace and labels them with the same `service` names as the local stack, so the same rules and dashboards work in both environments. The screenshots below come from the production cluster after the showcase seed (44 lead runs).
+## 5. Monitoring & Observability
 
-### 5.1 Scrape targets
+The platform delivers end-to-end observability across metrics, alerts, dashboards, and distributed traces. For an exhaustive signal reference, consult [observability.md](observability.md).
 
-All seven targets are up: two API replicas, four workers and Prometheus itself.
+### 5.1 Prometheus Scrape Targets
+Prometheus discovers 7 scrape targets in steady state: 2-3 API replicas, 4 worker pods, and Prometheus itself:
 
 ![Prometheus targets](images/monitoring/prometheus-targets.png)
 
-### 5.2 Dashboards
-
-**Overview**: API request rate, p95 latency, 5xx ratio, workflow runs per hour, alert-bot notifications.
+### 5.2 Provisioned Grafana Dashboards
+Five dashboards are provisioned directly from repository JSON definitions:
+1. **Overview:** Request rate, p95 latency, 5xx error ratios, workflow runs per hour, active users, alert notifications.
+2. **API & Workers (RED):** Throughput, error rates, p50/p95/p99 duration percentiles, idempotency deduplication counts.
+3. **Kafka Pipeline:** Consumer lag by topic/group, partition assignment, outbox backlog, dead-letter message count.
+4. **AI Governance:** Calls by status, schema validation accuracy, token velocity, retries, and estimated spend.
+5. **Business Lead Flow:** Scored leads by category, branch conversion ratios, human approvals, and sales tasks.
 
 ![Grafana overview](images/monitoring/grafana-1-overview.png)
-
-**API and workers (RED)**: API and worker throughput, error ratios, latency percentiles, p95 by route, duplicates skipped by idempotency, process memory.
-
 ![Grafana RED](images/monitoring/grafana-2-red.png)
-
-**AI**: calls by status, valid-JSON ratio, tokens per minute by model, estimated cost, retries, call latency, quota rejections.
-
 ![Grafana AI](images/monitoring/grafana-3-ai.png)
-
-**Kafka**: consumer lag by group and topic, outbox backlog, dead letters, message outcomes.
-
 ![Grafana Kafka](images/monitoring/grafana-4-kafka.png)
-
-**Lead flow (business)**: leads scored, share of leads on the email path, approvals requested and decided, sales tasks, logins, cost per lead.
-
 ![Grafana lead flow](images/monitoring/grafana-5-business.png)
 
-### 5.3 Traces
-
-One trace covers a run from the HTTP request through every worker, because the `traceparent` travels in the event envelope.
+### 5.3 Distributed Tracing (Tempo)
+Distributed tracing propagates W3C `traceparent` headers across HTTP requests and Kafka event envelopes:
+- **Root Span Correction:** Direct incoming API calls initialize an OpenTelemetry SERVER span with `root: true`, eliminating phantom parent IDs and providing clean trace waterfalls in Tempo.
 
 ![Tempo traces in Grafana Explore](images/monitoring/grafana-6-tempo-traces.png)
 
-### 5.4 Alerts
-
-Seventeen rules in five groups (`infrastructure/observability/prometheus/rules/agentops-alerts.yml`) (`agentops-api`, `agentops-alert-bot`, `agentops-workers`, `agentops-kafka`, `agentops-pipeline`) cover the API, the workers, Kafka, the event pipeline and the alert bot itself. Alertmanager groups alerts by name, service and severity and posts them to `POST /notifications/alertmanager` with a Bearer token (`ALERTMANAGER_WEBHOOK_TOKEN`).
+### 5.4 Alerts & Alertmanager
+Prometheus evaluates 17 alert rules across 5 groups (`agentops-api`, `agentops-alert-bot`, `agentops-workers`, `agentops-kafka`, `agentops-pipeline`). Firing alerts route to Alertmanager, which delivers webhook payloads to `POST /notifications/alertmanager` verified with constant-time token comparison.
 
 ![Prometheus alert rules](images/monitoring/prometheus-alert-rules.png)
-
 ![Alertmanager](images/monitoring/alertmanager.png)
 
-## 6. Security
+---
 
-| Control | Implementation |
+## 6. Security Controls
+
+For the detailed threat model, authentication lifecycle, and known architectural gaps, refer to [security.md](security.md).
+
+| Control Area | Implementation Mechanism |
 | --- | --- |
-| Authentication | argon2 password hashes; short-lived JWT access token and rotating refresh token in HttpOnly, `Secure`, `SameSite=Lax` cookies; Google sign-in through a signed-state authorization-code flow |
-| Authorization | Workspace roles OWNER, ADMIN, MEMBER, VIEWER enforced by a guard on every workspace route; all `GET /dashboard/*` calls require `workspaceId` and filter by it |
-| Rate limiting | 120 requests per minute per client, 10 per minute on auth endpoints |
-| PII | Contact fields masked in every API view and in AI prompts |
-| AI safety | Prompt-injection detection, JSON Schema validation of AI output, daily call and token quotas |
-| Human in the loop | Emails are sent only after an approval; decisions are audited and final |
-| Transport | HTTPS at the ingress; TLS to RDS and ElastiCache |
-| Kubernetes | Non-root, read-only root filesystem, all capabilities dropped, default-deny ingress NetworkPolicies, no service account tokens mounted |
-| Secrets | AWS Secrets Manager through External Secrets and IRSA; nothing in Git or Terraform state |
-| CI/CD | GitHub OIDC (no static AWS keys); production promotion needs reviewer approval |
+| **Authentication** | Password hashing via argon2; HttpOnly `agentops_access` (15m) and `agentops_refresh` (30d) cookies; Google OAuth 2.0 with HMAC-signed state. |
+| **CSRF Defense** | Global `CsrfOriginGuard` rejecting state-changing cookie requests that do not originate from `WEB_APP_URL`. |
+| **Immediate Revocation** | Per-request database check on `User.disabledAt` instantly invalidating access tokens; refresh tokens revoked on deactivation. |
+| **Workspace RBAC** | `WorkspaceRoleGuard` enforcing `OWNER`, `ADMIN`, `MEMBER`, and `VIEWER` roles resolved directly from PostgreSQL. |
+| **Workspace Isolation** | All `/dashboard/*` routes enforce mandatory `?workspaceId=` query parameters and role checks. |
+| **Platform Admin** | `/admin/*` guarded by `PlatformAdminGuard`; bootstrapped via `PLATFORM_ADMIN_EMAILS`; self-modification blocked; audited in `AuditLog`. |
+| **AI Data Protection** | Pre-execution regex PII masking; `applyLeadScoringGuardrail` injection defense; AJV JSON Schema validation; daily workspace quotas. |
+| **Container Hardening** | Stripped bundled `npm`/`corepack` CLIs to eliminate CVEs; non-root user execution (`UID 10001`); read-only root filesystems. |
+| **Supply Chain Security** | GitHub Actions OIDC federation with AWS; automated `pnpm audit --prod`, `gitleaks`, and `Trivy` CRITICAL/HIGH build gates. |
 
-Details: [security.md](security.md).
+---
 
-## 7. Testing
+## 7. Testing & Quality Verification
 
-| Layer | Tooling | Scope |
-| --- | --- | --- |
-| Unit | Vitest | Graph validation, AI helpers, views, React components (106 web tests; 310 API, worker and package tests) |
-| Integration | Vitest + throwaway PostgreSQL and Kafka (`pnpm test:integration`) | API with real persistence and messaging |
-| End to end | Playwright, 12 scenarios | UI lead flow, navigation and auth gate, pipeline through the public API |
-| AI evaluation | Golden set (`pnpm eval:leads`) | Lead classification accuracy and hot-lead miss rate |
-| Load | k6 (`tests/load`) | API throughput |
-| Infrastructure | hadolint, kubeconform, `terraform validate`, tflint | Dockerfiles, manifests, Terraform |
+AgentOps maintains comprehensive automated test coverage across all architectural tiers:
 
-The scenarios and their latest results are in [test-scenarios.md](test-scenarios.md).
+| Testing Tier | Tooling & Harness | Test Count | Scope |
+| --- | --- | --- | --- |
+| **Web Unit Tests** | Vitest 4.1.8 | 117 tests | Component rendering, state hooks, view schemas, design token helpers. |
+| **API Unit Tests** | Vitest 4.1.8 | 208 tests | Admin service, RBAC guards, auth token rotation, disabled account checks, CSV generation, tracing middleware. |
+| **Workers & Packages** | Vitest 4.1.8 | 116 tests | Workflow graph evaluation, idempotency store, AI executor, AJV validation. |
+| **Integration Tests** | Vitest + Real Kafka & PostgreSQL | 10 scenarios | Real message consumption, database migrations, domain event relay outbox. |
+| **End-to-End Tests** | Playwright 1.60.0 | 24 scenarios | Complete UI lead flow, auth redirects, admin console, CSRF guards, workspace isolation, disabled account rejection. |
+| **AI Golden-Set Eval** | `pnpm eval:leads` | 24 labeled leads | Classification accuracy, hot-lead miss rate, token cost estimation. |
+| **Infrastructure Lint** | hadolint, kubeconform, terraform validate | Automated | Dockerfile linting, Kubernetes schema validation, Terraform syntax. |
+| **Production Verification** | `scripts/verify-prod.mjs` | 27 checks (27 passed) | Live cluster DNS, TLS, HPA, KEDA, Prometheus targets, alert rules, and webhook bot. |
 
-## 8. Operating the system
+Detailed test specifications and scenario walkthroughs are maintained in [test-scenarios.md](test-scenarios.md).
 
-| Task | Command |
-| --- | --- |
-| Start the local stack | `pnpm local:docker` |
-| Reset local data | `pnpm compose:apps:reset` |
-| Seed showcase data | `SEED_EMAIL=... SEED_PASSWORD=... node scripts/seed-showcase.mjs` |
-| Run unit tests | `pnpm test` |
-| Run end-to-end tests | `pnpm --filter @agentops/web test:e2e` |
-| Capture app screenshots | `cd apps/web && node e2e/capture-screens.mjs` |
-| Capture monitoring screenshots | `cd apps/web && node e2e/capture-monitoring.mjs` |
-| Validate infrastructure | `pnpm docker:lint`, `pnpm k8s:validate`, `pnpm tf:validate` |
+---
 
-`scripts/seed-showcase.mjs` does not write to the database. It logs in, creates three extra workflows and sends 44 curated leads (22 high intent, 14 low intent, 8 spam, including a prompt-injection attempt) through the real pipeline, then approves about 65% of the drafted emails, rejects about 15% and leaves the rest in the queue.
+## 8. Operating the System
+
+### Common Management Commands
+
+```bash
+# Start local multi-container stack
+pnpm local:docker
+
+# Reset local database and seed baseline data
+pnpm compose:apps:reset
+
+# Seed showcase workflow with 44 curated leads and approval flows
+SEED_EMAIL=admin@agentops.local SEED_PASSWORD=password123 node scripts/seed-showcase.mjs
+
+# Execute all unit test suites
+pnpm test
+
+# Run real Kafka and PostgreSQL integration tests
+pnpm test:integration
+
+# Run Playwright end-to-end browser tests
+pnpm --filter @agentops/web test:e2e
+
+# Run AI golden-set evaluation harness
+pnpm eval:leads
+
+# Validate infrastructure manifests
+pnpm docker:lint && pnpm k8s:validate && pnpm tf:validate
+```
+
+For a comprehensive portfolio narrative and executive technical overview, refer to [PORTFOLIO.md](PORTFOLIO.md).
