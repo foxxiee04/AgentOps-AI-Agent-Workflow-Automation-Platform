@@ -12,6 +12,7 @@ import { apiUrl } from "../lib/api";
 import { appCopy, type AppCopy, type Locale } from "../lib/i18n";
 import BrainCircuitIcon from "../icons/brain-circuit-icon";
 import CodeXmlIcon from "../icons/code-xml-icon";
+import EyeIcon from "../icons/eye-icon";
 import GearIcon from "../icons/gear-icon";
 import HistoryCircleIcon from "../icons/history-circle-icon";
 import LayoutDashboardIcon from "../icons/layout-dashboard-icon";
@@ -38,7 +39,8 @@ const navItems: NavItem[] = [
   { href: "/settings", key: "settings", Icon: GearIcon }
 ];
 
-const adminNavItem: NavItem = { href: "/admin", key: "admin", Icon: GearIcon };
+// Platform oversight: an eye, distinct from the settings gear.
+const adminNavItem: NavItem = { href: "/admin", key: "admin", Icon: EyeIcon };
 
 const NAV_SPRING = { type: "spring", visualDuration: 0.35, bounce: 0 } as const;
 const SHEET_DURATION = 0.4;
