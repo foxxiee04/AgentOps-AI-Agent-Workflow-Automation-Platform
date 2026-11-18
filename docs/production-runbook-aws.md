@@ -51,14 +51,17 @@ ephemeral                = true
 eks_public_access_cidrs  = ["0.0.0.0/0"]
 ```
 
-Apply the Terraform plan:
+State lives in the S3 backend created by `infrastructure/terraform/environments/bootstrap` (bucket
+`agentops-terraform-state-<account>-apse1`, lock table `agentops-terraform-locks`). Copy `backend.hcl.example` to
+`backend.hcl` (gitignored), set the bucket, then apply:
 
 ```bash
-terraform init
+terraform init -backend-config=backend.hcl
 terraform plan -out=tfplan
 terraform apply tfplan
 ```
-*Provisioning completes in ~35 minutes across 54 AWS resources.*
+*Provisioning completes in ~35 minutes. Besides the 54 core resources, the EKS module installs the `vpc-cni` add-on
+with NetworkPolicy enforcement and the `aws-ebs-csi-driver` add-on with its IRSA role.*
 
 ### Step 2: Configure EKS Cluster Access
 Update your local kubeconfig:
@@ -137,6 +140,9 @@ kubectl -n monitoring create secret generic alertmanager-webhook --from-literal=
 kubectl -n monitoring create secret generic grafana-admin --from-literal=user=admin --from-literal=password="<secure-password>"
 kubectl kustomize --load-restrictor LoadRestrictionsNone infrastructure/k8s/monitoring | kubectl apply --server-side -f -
 ```
+
+The manifest also creates the `gp3` StorageClass (encrypted, `reclaimPolicy: Delete`) and four PVCs (Prometheus 20Gi,
+Tempo 10Gi, Grafana 2Gi, Alertmanager 1Gi). Deleting the `monitoring` namespace during teardown deletes the EBS volumes.
 
 ---
 
@@ -269,8 +275,9 @@ aws elasticache describe-cache-clusters --region ap-southeast-1
 
 For continuous, 24/7 production operation, apply the following configuration changes:
 
-1. **State Storage**: Set `ephemeral = false` and configure the S3 remote backend with DynamoDB locking via `infrastructure/terraform/environments/bootstrap`.
+1. **State and deletion safety**: Set `ephemeral = false` (RDS deletion protection and final snapshot). Remote state in S3 with DynamoDB locking is already in place since 2026-11-18.
 2. **Domain & DNS**: Replace `sslip.io` with a custom domain hosted on AWS Route 53, using cert-manager with DNS-01 challenges or AWS ACM.
 3. **Database & Brokers**: Enable `rds_multi_az = true` and expand the MSK cluster to 3 brokers across 3 Availability Zones.
-4. **Persistent Volumes**: Install the AWS EBS CSI driver to provide durable storage for Prometheus TSDB, Grafana dashboards, and Tempo trace blocks (currently using `emptyDir`).
-5. **Network Policy Enforcement**: Enable Amazon VPC CNI network policy support (`enable_network_policy = true`) to enforce intra-cluster pod isolation rules.
+4. **Persistent volumes** (done 2026-11-18): monitoring data is on `gp3` EBS volumes; for a long-lived stack switch the StorageClass to `reclaimPolicy: Retain` and add EBS snapshots.
+5. **Network policy enforcement** (done 2026-11-18): `enable_network_policy = true` in the EKS module. Check: a pod in `default` cannot reach `agentops-api:4000`, a pod in `monitoring` can.
+6. **Human access**: stop using the root account's access keys; use IAM Identity Center or an admin role with MFA.
