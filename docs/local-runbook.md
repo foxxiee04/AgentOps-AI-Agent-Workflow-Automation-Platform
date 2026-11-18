@@ -1,355 +1,275 @@
-# Local Runbook
+# Local Operations Runbook
 
-File này là bản chạy local ngắn gọn cho AgentOps. Dùng PowerShell tại thư mục gốc repo:
+This guide provides instructions for configuring, running, testing, and troubleshooting AgentOps locally on developer workstations.
 
-```powershell
-cd "E:\AgentOps — AI Agent Workflow Automation Platform"
-```
+Related documentation:
+- [Deployment and CI/CD](deployment.md): Architecture overview and CI/CD automation.
+- [Operations Runbook](runbook.md): Production incident playbooks and operational procedures.
+- [Test Plan](test-plan.md): Quality gates and test execution strategies.
 
-## 1. Chạy lần đầu
+---
 
-Kiểm tra toolchain:
+## 1. Prerequisites and Toolchain Setup
 
-```powershell
-node --version
-pnpm --version
-docker --version
-```
+Ensure the host environment satisfies the following minimum requirements:
 
-Yêu cầu khuyến nghị:
+| Tool | Required Version | Verification Command |
+| --- | --- | --- |
+| **Node.js** | `>=22.0.0` | `node --version` |
+| **pnpm** | `11.5.2` (or `>=11.0.0`) | `pnpm --version` |
+| **Docker** | Docker Desktop or Docker Engine with Compose V2 | `docker --version` |
 
-| Tool    | Version                           |
-| ------- | --------------------------------- |
-| Node.js | `>=22.0.0`                        |
-| pnpm    | `>=11.0.0`                        |
-| Docker  | Docker Desktop hoặc Docker Engine |
+### Initial Repository Setup
+Run the following commands in the root of the repository:
 
-Cài dependency và tạo env local:
-
-```powershell
+```bash
+# 1. Install dependencies across monorepo workspaces
 pnpm install
-Copy-Item .env.example .env
+
+# 2. Initialize local environment file (if not already present)
+cp .env.example .env
 ```
 
-Nếu file `.env` đã tồn tại thì bỏ qua lệnh `Copy-Item`.
+---
 
-## 2. Start Docker Desktop trước
+## 2. Ports Allocation Reference
 
-Trước khi chạy bất kỳ lệnh Docker nào, mở Docker Desktop và đợi trạng thái `Running`.
+All local port bindings across developer tooling, backing infrastructure, and test profiles are mapped in the following table:
 
-Kiểm tra Docker daemon:
+| Service / Workload | Host Port | Container / Internal Port | Protocol | Purpose |
+| --- | --- | --- | --- | --- |
+| **Web App** | `3000` | `3000` | HTTP | Next.js 16 frontend and React Flow builder |
+| **API Server** | `4000` | `4000` | HTTP | NestJS API, Swagger docs, health endpoints |
+| **PostgreSQL (Dev)** | `55432` | `5432` | TCP | Local development database (`agentops`) |
+| **PostgreSQL (Test)** | `55433` | `5432` | TCP | Isolated database for integration tests (`profile: test`) |
+| **Redis** | `6379` | `6379` | TCP | Rate limiting and session caching |
+| **Kafka (Dev External)** | `9094` | `9094` | TCP | Host access for local development producers/consumers |
+| **Kafka (Dev Internal)** | — | `9092` | TCP | In-docker network communication between containers |
+| **Kafka (Test External)**| `9095` | `9095` | TCP | Isolated Kafka broker for integration tests (`profile: test`)|
+| **Prometheus** | `9090` | `9090` | HTTP | Local metrics collection and rule evaluation |
+| **Alertmanager** | `9093` | `9093` | HTTP | Local alert routing and webhook testing |
+| **Grafana** | `3001` | `3000` | HTTP | Provisioned dashboards (Credentials: `agentops` / `agentops`)|
+| **Tempo (HTTP / UI)** | `3200` | `3200` | HTTP | Tempo query interface |
+| **Tempo (OTLP gRPC)** | `4317` | `4317` | gRPC | OpenTelemetry trace export (gRPC) |
+| **Tempo (OTLP HTTP)** | `4318` | `4318` | HTTP | OpenTelemetry trace export (HTTP protobuf/JSON) |
+| **workflow-worker metrics**| `4101` | `9100` | HTTP | Prometheus metrics endpoint for workflow worker |
+| **ai-worker metrics** | `4102` | `9100` | HTTP | Prometheus metrics endpoint for AI worker |
+| **tool-worker metrics** | `4103` | `9100` | HTTP | Prometheus metrics endpoint for tool worker |
+| **notification-worker metrics**| `4104` | `9100` | HTTP | Prometheus metrics endpoint for notification worker |
 
-```powershell
-docker info
-```
+---
 
-Nếu gặp lỗi kiểu này:
+## 3. Running the Platform Locally
 
-```txt
-open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified
-```
+Developers can choose between two operational modes depending on whether they are developing application code (Mode A) or running the complete containerized stack (Mode B).
 
-thì Docker Desktop chưa chạy, Linux engine chưa sẵn sàng, hoặc Docker Desktop đang lỗi. Cách xử lý nhanh:
+### Mode A: Native Dev with Dockerized Infrastructure (Recommended for Coding)
 
-```powershell
-# 1. Mở Docker Desktop bằng Start Menu
-# 2. Đợi Docker báo Running
-docker info
-```
+In this mode, supporting data services (Postgres, Redis, Kafka, Observability) run in Docker, while Node.js applications run natively with fast hot reloading:
 
-Lỗi `unable to get image 'grafana/grafana:12.2.0'` kèm pipe `dockerDesktopLinuxEngine` không phải lỗi Grafana. Đây là lỗi Docker daemon chưa chạy.
-
-## 3. Start hạ tầng local
-
-Chạy PostgreSQL, Redis, Kafka, Prometheus, Grafana, Alertmanager, Tempo và chuẩn bị database/Kafka topics:
-
-```powershell
+```bash
+# 1. Start Docker backing services and run migrations, seeds, and topic bootstrap
 pnpm local:up
-```
 
-Lệnh trên tương đương:
-
-```powershell
-pnpm compose:up
-pnpm local:setup
-```
-
-Kiểm tra container:
-
-```powershell
-docker compose ps
-```
-
-Nếu chỉ muốn bật hạ tầng bắt buộc cho app:
-
-```powershell
-docker compose up -d postgres redis kafka
-pnpm local:setup
-```
-
-## 4. Start hệ thống
-
-Chạy toàn bộ app ở chế độ dev:
-
-```powershell
+# 2. Start all applications concurrently (web, api, workers)
 pnpm dev
 ```
 
-Lệnh này chạy frontend, backend, workers và các package shared ở watch mode.
+Alternatively, run specific components in dedicated terminal tabs:
 
-URL chính:
-
-| Mục         | URL                                  |
-| ----------- | ------------------------------------ |
-| Web app     | `http://localhost:3000`              |
-| API Swagger | `http://localhost:4000/docs`         |
-| API live    | `http://localhost:4000/health/live`  |
-| API ready   | `http://localhost:4000/health/ready` |
-| Grafana     | `http://localhost:3001`              |
-| Prometheus  | `http://localhost:9090`              |
-
-## 5. Start từng phần
-
-Mỗi lệnh dưới đây chạy ở một terminal riêng. Trước đó cần chạy `pnpm local:up` ít nhất một lần.
-
-Backend:
-
-```powershell
+```bash
+# Terminal 1: Backend API
 pnpm dev:api
-```
 
-Frontend:
-
-```powershell
+# Terminal 2: Frontend Web App
 pnpm dev:web
-```
 
-Workers:
-
-```powershell
+# Terminal 3: All 4 Background Workers
 pnpm dev:workers
-```
 
-Nếu cần chạy worker riêng:
-
-```powershell
+# (Optional) Individual worker filtering:
 pnpm --filter @agentops/workflow-worker dev
 pnpm --filter @agentops/ai-worker dev
 pnpm --filter @agentops/tool-worker dev
 pnpm --filter @agentops/notification-worker dev
 ```
 
-## 6. Test commands
+### Mode B: Full Container Stack (Docker Compose Apps)
 
-Kiểm tra type:
+Runs the entire product stack (including frontend, backend, and all four workers) in Docker containers, mirroring the production container topology:
 
-```powershell
-pnpm typecheck
+```bash
+# Build and run the complete containerized stack in the background
+pnpm local:docker
+
+# Stream logs from application containers
+pnpm compose:apps:logs
+
+# Stop application containers
+pnpm compose:apps:down
+
+# Reset database volumes and re-seed all containers
+pnpm compose:apps:reset
 ```
 
-Chạy toàn bộ unit tests:
+---
 
-```powershell
+## 4. Test Execution Commands
+
+Execute tests locally matching the CI/CD pipeline targets:
+
+```bash
+# 1. Run all monorepo unit tests
 pnpm test
-```
 
-Chạy test theo nhóm:
-
-```powershell
+# 2. Run unit tests by workspace filter
 pnpm test:api
 pnpm test:web
 pnpm test:workers
-```
 
-Chạy Playwright e2e cho frontend:
+# 3. Static typechecking and linting
+pnpm typecheck
+pnpm lint
 
-```powershell
+# 4. Run integration tests (automatically starts postgres-test and kafka-test)
+pnpm test:integration
+
+# 5. Run Playwright end-to-end tests against local running stack
 pnpm test:e2e
+
+# 6. Evaluate lead qualification golden set
+pnpm eval:leads
 ```
 
-Nếu Playwright chưa có browser binary:
+---
 
-```powershell
-pnpm exec playwright install
-```
+## 5. Local Smoke Test Verification
 
-## 7. Smoke test nhanh
+Execute this step-by-step verification checklist to confirm local platform health.
 
-### TC-01: Docker chạy được
-
-```powershell
-docker info
+### TC-01: Verify Docker Infrastructure Health
+```bash
 docker compose ps
 ```
+*Expected*: Containers `agentops-local-postgres`, `agentops-local-redis`, and `agentops-local-kafka` report `healthy` or `running`.
 
-Expected: không còn lỗi pipe `dockerDesktopLinuxEngine`; `postgres`, `redis`, `kafka` healthy hoặc running.
-
-### TC-02: API live
-
-```powershell
-Invoke-RestMethod http://localhost:4000/health/live
+### TC-02: Verify API Process Liveness
+```bash
+curl -s http://localhost:4000/health/live
+```
+*Expected Response*:
+```json
+{"status":"ok"}
 ```
 
-Expected:
-
+### TC-03: Verify API Dependency Readiness
+```bash
+curl -s http://localhost:4000/health/ready
+```
+*Expected Response*:
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "info": {
+    "postgres": {"status": "up"},
+    "redis": {"status": "up"},
+    "kafka": {"status": "up"}
+  }
 }
 ```
 
-### TC-03: API ready
-
-```powershell
-Invoke-RestMethod http://localhost:4000/health/ready
+### TC-04: Verify Web Application Access
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/en
 ```
+*Expected*: HTTP Status `200`.
 
-Expected: `postgres`, `redis`, `kafka` đều `up`.
-
-### TC-04: Frontend load được
-
-```powershell
-(Invoke-WebRequest -UseBasicParsing http://localhost:3000).StatusCode
+### TC-05: Register Local User Account
+```bash
+curl -s -X POST http://localhost:4000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"dev-user@example.com","password":"password123","name":"Local Developer"}'
 ```
+*Expected*: Returns JSON with `user`, `accessToken`, and `refreshToken`.
 
-Expected:
-
-```txt
-200
+### TC-06: Verify Authenticated Session
+```bash
+curl -s http://localhost:4000/auth/me \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
+*Expected*: Returns user object with email `dev-user@example.com` and associated workspace.
 
-### TC-05: Register user local
-
-```powershell
-$body = @{
-  email = "demo+local@agentops.local"
-  password = "password123"
-  name = "Local Demo"
-} | ConvertTo-Json
-
-$session = Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:4000/auth/register `
-  -ContentType "application/json" `
-  -Body $body
-
-$session
+### TC-07: List Workflows
+```bash
+curl -s http://localhost:4000/workflows \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
+*Expected*: Returns array containing demo workflow `wf_lead_qualification`.
 
-Expected: response có `user`, `accessToken`, `refreshToken`.
-
-### TC-06: Lấy current user
-
-```powershell
-Invoke-RestMethod `
-  -Uri http://localhost:4000/auth/me `
-  -Headers @{ Authorization = "Bearer $($session.accessToken)" }
-```
-
-Expected: email là `demo+local@agentops.local`.
-
-### TC-07: List workflows
-
-```powershell
-Invoke-RestMethod http://localhost:4000/workflows
-```
-
-Expected: có workflow demo `wf_lead_qualification`.
-
-### TC-08: Publish và run workflow demo
-
-```powershell
-$login = Invoke-RestMethod -Method Post -Uri http://localhost:4000/auth/login -ContentType "application/json" -Body (@{ email = "demo@agentops.local"; password = "<your-local-password>" } | ConvertTo-Json)
-$token = $login.accessToken
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:4000/workflows/wf_lead_qualification/publish `
-  -Headers @{ Authorization = "Bearer $token" }
-
-$runBody = @{
-  triggerType = "manual"
-  input = @{
-    lead = @{
-      name = "Nguyen Van A"
-      email = "a@example.com"
-      company = "Acme"
-      message = "Can tu van giai phap AI workflow"
+### TC-08: Trigger Workflow Execution
+```bash
+curl -s -X POST http://localhost:4000/workflows/wf_lead_qualification/run \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "triggerType": "manual",
+    "input": {
+      "lead": {
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "company": "Acme Corp",
+        "message": "Interested in evaluating enterprise AI workflow automation."
+      }
     }
-  }
-} | ConvertTo-Json -Depth 8
-
-$runResult = Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:4000/workflows/wf_lead_qualification/run `
-  -Headers @{ Authorization = "Bearer $token" } `
-  -ContentType "application/json" `
-  -Body $runBody
-
-$runResult
+  }'
 ```
+*Expected*: Returns run object with `status: "PENDING"` and emits event `workflow-triggered`.
 
-Expected: `run.status = PENDING` và event type là `workflow-triggered`. Roles come from workspace membership, not from a header; a VIEWER gets 403.
-
-### TC-09: Metrics
-
-```powershell
-(Invoke-WebRequest -UseBasicParsing http://localhost:4000/metrics).StatusCode
-(Invoke-WebRequest -UseBasicParsing http://localhost:4101/metrics).StatusCode
-(Invoke-WebRequest -UseBasicParsing http://localhost:4102/metrics).StatusCode
-(Invoke-WebRequest -UseBasicParsing http://localhost:4103/metrics).StatusCode
-(Invoke-WebRequest -UseBasicParsing http://localhost:4104/metrics).StatusCode
+### TC-09: Verify Scrape Metrics Endpoints
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4000/metrics
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4101/metrics
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4102/metrics
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4103/metrics
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4104/metrics
 ```
+*Expected*: All return HTTP `200`.
 
-Expected: tất cả trả `200` khi backend và workers đang chạy.
+---
 
-## 8. Stop hệ thống
+## 6. Local Troubleshooting Guide
 
-Stop dev process bằng `Ctrl+C` trong terminal đang chạy `pnpm dev`, `pnpm dev:api`, `pnpm dev:web`, hoặc `pnpm dev:workers`.
+### Port Collisions
+If ports 3000, 4000, or 55432 are already bound by orphan processes:
+```bash
+# On Linux / macOS:
+lsof -i :3000 -i :4000 -i :55432
 
-Stop Docker containers nhưng giữ data volumes:
-
-```powershell
-pnpm compose:down
+# On Windows PowerShell:
+Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 3000,4000,55432 }
 ```
+Terminate orphan node processes before re-running `pnpm dev`.
 
-Reset sạch local data:
-
-```powershell
-docker compose down -v
+### Docker Desktop Daemon Pipe Errors
+If encountering:
+```txt
+open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified
 ```
+Docker Desktop is not currently running. Start Docker Desktop from the system menu and wait until the daemon reports `Running` before executing Docker or Compose commands.
 
-Chỉ dùng `down -v` khi muốn xóa PostgreSQL, Kafka, Redis, Grafana, Prometheus local data.
-
-## 9. Troubleshooting nhanh
-
-Kiểm tra port app đang bị chiếm:
-
-```powershell
-Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-  Where-Object { $_.LocalPort -in 3000,4000,4101,4102,4103,4104 }
-```
-
-Nếu port đã có process cũ, stop terminal dev cũ bằng `Ctrl+C`.
-
-Nếu API readiness báo Kafka down:
-
-```powershell
-docker compose ps kafka
+### Kafka Bootstrap and Topic Initialization
+If the API fails readiness due to missing Kafka topics:
+```bash
 pnpm kafka:bootstrap
 ```
+*This command runs against `localhost:9094` and creates the required topics with 3 partitions and a replication factor of 1.*
 
-Nếu database lỗi connection:
+### Resetting Local State
+To completely flush local PostgreSQL tables, Kafka logs, and Redis cache:
+```bash
+# Stop containers and remove volumes
+pnpm compose:down -v
 
-```powershell
-docker compose ps postgres
-pnpm db:migrate:status
-pnpm db:migrate:deploy
-```
-
-Xem log Docker:
-
-```powershell
-docker compose logs -f postgres redis kafka
-docker compose logs -f prometheus grafana tempo alertmanager
+# Re-initialize clean environment
+pnpm local:up
 ```
