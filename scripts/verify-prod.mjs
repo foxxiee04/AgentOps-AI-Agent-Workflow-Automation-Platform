@@ -81,7 +81,8 @@ for (const hostname of [host, `api.${host}`]) {
 const deployments = kjson("-n", ns, "get", "deploy").items;
 for (const deployment of deployments) {
   const ready = deployment.status.readyReplicas ?? 0;
-  const image = deployment.spec.template.spec.containers[0].image.split("/").pop();
+  // Short commit tag: a full 40-character SHA in the report trips gitleaks' generic-api-key rule.
+  const image = deployment.spec.template.spec.containers[0].image.split("/").pop().replace(/:([0-9a-f]{12})[0-9a-f]{28}$/, ":$1");
   check("Workloads", deployment.metadata.name, ready >= 1 && ready === deployment.spec.replicas, `${ready}/${deployment.spec.replicas} ready, ${image}`);
 }
 const pods = kjson("-n", ns, "get", "pods").items.filter((pod) => pod.status.phase === "Running");
