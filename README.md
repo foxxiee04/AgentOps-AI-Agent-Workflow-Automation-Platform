@@ -1,209 +1,247 @@
-# AgentOps — AI Agent Workflow Automation Platform
+# AgentOps
 
-AgentOps is an AI-native SaaS platform for building, running, and monitoring automated workflows powered by AI agents. It is designed as a portfolio-grade system that combines a modern Next.js dashboard, a NestJS modular monolith, Kafka-based worker execution, PostgreSQL persistence, Redis state/cache, and cloud-ready infrastructure.
+**AI agent workflow automation platform.** Design a workflow graph, run it through Kafka workers, keep a human in the approval loop, and see every step of every run.
 
-## Product Vision
+AgentOps is a portfolio-grade system built as a pnpm monorepo: a Next.js 16 dashboard, a NestJS 11 modular-monolith API, four Kafka consumers, PostgreSQL 16, Redis, and a full AWS deployment (Terraform, EKS, RDS, ElastiCache, MSK, ECR) driven by GitHub Actions. The showcase workflow qualifies an inbound lead: an AI agent scores intent and drafts a follow-up email, a condition branches on the score, a reviewer approves or rejects the email, and the run finishes with a sales task.
 
-Users can design workflows with a visual builder:
+![AgentOps landing page](docs/images/app/01-landing.png)
 
-```txt
-New lead submitted
--> AI scores the lead
--> If score > 80
--> Generate a personalized email
--> Send a webhook/email mock
--> Create a follow-up task
--> Store run history and logs
+**Live demo (production stack):** [web](https://agentops.18-136-215-126.sslip.io) · [API health](https://api.agentops.18-136-215-126.sslip.io/health/ready)
+
+The hosts use [sslip.io](https://sslip.io), which encodes the AWS load-balancer IP in the name. They change after every stack rebuild; update the links from the production runbook when the stack is recreated.
+
+For the long-form system document (architecture, data model, every screen, monitoring, security, testing), read [docs/system-documentation.md](docs/system-documentation.md).
+
+## What it does
+
+The seeded `Lead qualification` workflow is the reference flow. A lead arrives manually, through the API, or through a webhook, then:
+
+1. **Score** — the `ai-worker` scores intent and assigns `high-intent`, `low-intent`, or `spam`.
+2. **Draft** — for a qualifying lead, the agent writes a follow-up email subject and body.
+3. **Branch** — a condition node routes on `leadScore > 80`; leads below the threshold skip the email.
+4. **Approve** — a human reviews the masked draft in the approval queue and approves or rejects it.
+5. **Finish** — the approved email is sent (mock) and a sales task is created. A rejected email is skipped, but the hot lead still gets the sales task; every step is recorded in the run timeline.
+
+Workflows are graphs edited in a React Flow builder, validated and versioned on publish, and executed asynchronously through Kafka.
+
+### Key features
+
+| Area                      | What is implemented                                                                                                                                                                                                                                                                |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workflow engine           | Versioned graph definitions, publish validation, manual/API/webhook triggers, condition branching, per-step run records, at-least-once Kafka delivery with `ProcessedMessage` idempotency and dead-letter handling.                                                                |
+| AI agent                  | OpenAI `gpt-4o-mini` or a deterministic mock provider, JSON-Schema-validated output, masked PII in prompts and responses, prompt-injection guardrail, per-workspace daily call and token quotas.                                                                                   |
+| Human in the loop         | Approval queue with masked payloads, approve/reject decisions, duplicate decisions return `409` (first decision wins), every decision audited.                                                                                                                                     |
+| Workspaces and RBAC       | `OWNER` / `ADMIN` / `MEMBER` / `VIEWER` per workspace, `?workspaceId=` scoping on dashboard routes, active-workspace cookie (`agentops_ws`) and sidebar switcher, Google sign-in, and a personal workspace for a first-time Google user.                                           |
+| Admin console and reports | Platform statistics (users, workspaces, runs, success rate, AI calls/tokens, approvals, lead categories, signup providers, daily series), account search/filter/disable/enable/grant admin, workspace list, platform audit log, CSV exports for users, workspaces, runs and usage. |
+| Observability             | OpenTelemetry traces to Tempo, Prometheus metrics from the API and all four workers, 17 alert rules in 5 groups, Alertmanager to an API webhook, five Grafana dashboards.                                                                                                          |
+| CI/CD and AWS             | PR checks (quality, integration, security, infra, images), image builds with Trivy gates, push-to-main CD to EKS with migration job, smoke test and automatic rollback, manual redeploy by image tag.                                                                              |
+| Design and motion         | Moss Atelier design system, WebGL hero sculpture, 3D tilt and pointer-spotlight cards, magnetic CTAs, scroll parallax and page transitions, all disabled for `prefers-reduced-motion` and touch devices. See [design/design-brief.md](design/design-brief.md).                     |
+
+## Architecture
+
+The backend is a modular monolith plus Kafka workers, not a fleet of microservices. Users, workspaces, workflow versions, permissions, runs and audit logs share one domain model and one database transaction boundary, so they stay in one NestJS application. Asynchronous work is split by execution domain so each worker can scale, retry and fail independently.
+
+```mermaid
+flowchart LR
+  U[Operator / reviewer] --> WEB[Web app<br/>Next.js 16]
+  LEAD[Lead: manual / API / webhook] --> API
+  WEB -->|REST| API[API<br/>NestJS 11]
+
+  API --> PG[(PostgreSQL 16)]
+  API --> REDIS[(Redis)]
+  API -->|domain events| KAFKA{{Kafka}}
+
+  KAFKA --> WW[workflow-worker]
+  KAFKA --> AW[ai-worker]
+  KAFKA --> TW[tool-worker]
+  KAFKA --> NW[notification-worker]
+
+  WW --> PG
+  AW --> PG
+  TW --> PG
+  NW --> PG
+
+  WW --> KAFKA
+  AW --> KAFKA
+  TW --> KAFKA
+  NW --> KAFKA
+
+  AW -->|gpt-4o-mini or mock| LLM[LLM provider]
+
+  API -. OTel traces .-> TEMPO[Tempo]
+  WW -. OTel traces .-> TEMPO
+  AW -. OTel traces .-> TEMPO
+  TW -. OTel traces .-> TEMPO
+  NW -. OTel traces .-> TEMPO
+
+  PROM[Prometheus] -->|scrape| API
+  PROM -->|scrape| WW
+  PROM -->|scrape| AW
+  PROM -->|scrape| TW
+  PROM -->|scrape| NW
+  PROM --> AM[Alertmanager]
+  AM -->|POST /notifications/alertmanager| API
+  GRAFANA[Grafana] --> PROM
 ```
 
-The architecture is intentionally **Modular Monolith + Kafka Workers**, not full microservices. Frontend and backend are already separate deployable apps (`apps/web` and `apps/api`), while core backend business logic stays in one well-structured NestJS API. Heavy asynchronous work runs through Kafka workers.
+| Service                                     | Responsibility                                                                                                                                                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`                                  | Next.js App Router UI: landing page, split-screen auth, workspace dashboard, workflow list and React Flow builder, run list and step timeline, approval queue, AI console, settings, `/admin` console.                                                        |
+| `apps/api`                                  | NestJS modular monolith: cookie JWT auth and refresh rotation, Google OAuth, workspaces and RBAC, workflow CRUD/versions/publish, run lifecycle, approvals, dashboard aggregates, admin module, CSV reports, webhook ingestion, domain-event outbox to Kafka. |
+| `apps/workflow-worker`                      | Walks the graph, evaluates conditions, requests AI and tool work, pauses at human approvals, and closes the run.                                                                                                                                              |
+| `apps/ai-worker`                            | Executes AI Agent nodes (lead scoring, email drafting), validates structured output, records token usage and enforces quotas, moves failed messages to the dead-letter topic.                                                                                 |
+| `apps/tool-worker`                          | Executes sales-task/CRM tools and mock outbound actions.                                                                                                                                                                                                      |
+| `apps/notification-worker`                  | Creates notifications and sends the mock email.                                                                                                                                                                                                               |
+| PostgreSQL                                  | System of record: users, workspaces, memberships, workflow versions, runs, steps, approvals, AI/tool results, usage, audit log, outbox events.                                                                                                                |
+| Redis                                       | Health/readiness and status/cache data for the API.                                                                                                                                                                                                           |
+| Kafka                                       | Event backbone for execution: `workflow-triggered`, `agent-task-requested`, `agent-task-completed`, `tool-call-requested`, `tool-call-completed`, `notification-requested`, `human-approval-decided`, plus step events and dead-letter handling.              |
+| Prometheus / Alertmanager / Grafana / Tempo | Metrics collection, alert routing to the API, dashboards and distributed traces.                                                                                                                                                                              |
 
-## MVP Scope
+## Screenshots
 
-- Landing page and SaaS dashboard
-- Auth, workspace, and role-based access control
-- Workflow list and visual workflow builder
-- Manual trigger, AI Agent node, Condition node, Webhook mock node, End node
-- Workflow run history and step logs
-- Kafka event pipeline for workflow execution
-- AI worker with structured JSON output validation
-- PostgreSQL persistence and Redis status/cache
-- Docker Compose for local infrastructure
-- Prometheus, Alertmanager, Grafana, and Tempo for local API/worker monitoring and traces
-- Kubernetes manifests, Terraform layout, and GitHub Actions plan
+| Dashboard                                      | Workflow builder                                    |
+| ---------------------------------------------- | --------------------------------------------------- |
+| ![Dashboard](docs/images/app/03-dashboard.png) | ![Workflow builder](docs/images/app/05-builder.png) |
 
-## Tech Stack
+| Approval queue                                 | Grafana overview                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------- |
+| ![Approvals](docs/images/app/08-approvals.png) | ![Grafana overview](docs/images/portfolio/grafana-5-overview.png) |
 
-| Area | Stack |
-| --- | --- |
-| Frontend | Next.js, React, TypeScript, Tailwind CSS, `apps/web/DESIGN.md` terminal-native UI rules, React Flow, Zustand, React Hook Form, Zod |
-| Backend | NestJS, TypeScript, Prisma, PostgreSQL, Redis, Kafka, JWT, Swagger/OpenAPI, Vitest |
-| AI | OpenAI Responses API path, mock provider, structured JSON output, prompt templates, JSON Schema validation, optional pgvector |
-| Infrastructure | Docker, Kubernetes, Terraform, AWS ECR, Nginx Ingress, GitHub Actions, Prometheus, Alertmanager, Grafana, Tempo, OpenTelemetry |
+More application screens are in `docs/images/app/`; production monitoring evidence is in `docs/images/portfolio/` and [docs/evidence/prod-verification.md](docs/evidence/prod-verification.md).
 
-The complete system document, with architecture diagrams and screenshots of the application and the monitoring stack, is [docs/system-documentation.md](docs/system-documentation.md). Test scenarios are in [docs/test-scenarios.md](docs/test-scenarios.md) and the AWS production runbook in [docs/production-runbook-aws.md](docs/production-runbook-aws.md).
+## Tech stack
 
-See [docs/technology-decisions.md](docs/technology-decisions.md) for current package choices, Prisma 7 notes, and recommended additions such as Playwright, OpenTelemetry, Prometheus, Testcontainers, and Sentry.
+| Layer                | Technology                                                                                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monorepo             | pnpm 11.5.2 workspaces, Turborepo, Node 22                                                                                                                                                                |
+| Web                  | Next.js 16.4 (App Router), React 19.2, Tailwind CSS 4.3, motion 14.5, three.js 0.164 + React Three Fiber 9 + drei 10, `@xyflow/react` 12, zod 4, Vitest 4, Playwright 1.60                                |
+| API                  | NestJS 11, Prisma 7.10, PostgreSQL 16, Redis (ioredis 5), Kafka (kafkajs 2.2.4), JWT in HttpOnly cookies with argon2 hashes, `@nestjs/throttler`, Prometheus metrics, OpenTelemetry SDK 0.218             |
+| Workers              | Four Node.js deployables, Kafka consumers, shared events/observability packages                                                                                                                           |
+| Shared packages      | `config` (zod env), `database` (Prisma schema, migrations, seeds), `events` (topics, envelopes, idempotency), `observability` (OTel, metrics), `shared` (contracts, RBAC), `ui`                           |
+| Local infrastructure | Docker Compose: PostgreSQL 16, Redis 7, Apache Kafka 4.3 (KRaft), Prometheus, Alertmanager, Grafana, Tempo                                                                                                |
+| Production           | Terraform, AWS VPC, EKS 1.31, RDS PostgreSQL, ElastiCache Redis, MSK Kafka 3.9.x, ECR, Secrets Manager, IAM with GitHub OIDC, Kubernetes (kustomize), KEDA, ingress-nginx, cert-manager, External Secrets |
 
-## Repository Map
+## Quick start
 
-```txt
-apps/
-  web/                  Next.js landing page and dashboard
-  api/                  NestJS modular monolith API
-  workflow-worker/      Executes workflow graphs and coordinates steps
-  ai-worker/            Executes AI Agent node tasks
-  tool-worker/          Executes webhook/http/email mock tool calls
-  notification-worker/  Creates in-app notifications and mock messages
-packages/
-  shared/               Shared types, constants, validation schemas
-  ui/                   Shared UI components for the web app
-  config/               Shared TypeScript, lint, env, and runtime config
-  database/             Prisma schema, migrations, seed plan
-  events/               Kafka event contracts and topic helpers
-  observability/        Prometheus metric helpers and trace correlation utilities
-infrastructure/
-  docker/               Local container notes and Dockerfile plan
-  k8s/                  Kubernetes manifests and environment overlays
-  terraform/            Cloud infrastructure modules and environments
-  observability/        Metrics, logging, dashboards, and tracing notes
-docs/                   Architecture, API, Kafka, database, AI, security, deployment docs
-agents/                 Human/Codex agent role descriptions
-  .codex/skills/          Project-local Codex skills
-```
+Prerequisites: Node.js 22, pnpm 11.5.2 (or another 11.x; the repo pins 11.5.2), Docker Desktop running, and ports 3000, 4000, 4101-4104, 55432, 6379, 9094, 9090, 9093, 3001, 3200 free.
 
-## Getting Started From Zero
-
-Prerequisites:
-
-- Node.js 22 (`>=22.0.0`)
-- pnpm 11 (`>=11.0.0`)
-- Docker Desktop, running
-
-Then, from the repository root:
-
-1. Install dependencies.
+1. Install dependencies and create the local env file.
 
    ```bash
    pnpm install
-   ```
-
-2. Create the local env file.
-
-   ```bash
    cp .env.example .env
    ```
 
-3. Start local infrastructure (PostgreSQL, Redis, Kafka, and observability).
+   On PowerShell: `Copy-Item .env.example .env`.
+
+2. Start the local infrastructure and prepare the database and Kafka.
 
    ```bash
-   pnpm compose:up
+   pnpm local:up
    ```
 
-4. Apply migrations, seed reference + demo data, and create Kafka topics.
+   This is `pnpm compose:up` followed by `pnpm local:setup` (Prisma migrations, required seed, demo seed, Kafka topic bootstrap). To start only the mandatory services: `docker compose up -d postgres redis kafka` and then `pnpm local:setup`.
 
-   ```bash
-   pnpm local:setup
-   ```
-
-5. Build the shared packages.
-
-   ```bash
-   pnpm build:packages
-   ```
-
-6. Run the apps in watch mode.
+3. Start the apps on the host.
 
    ```bash
    pnpm dev
    ```
 
-   Or run the whole product stack in containers instead:
+   `pnpm dev` builds the shared packages and runs web, API and all four workers in watch mode. Or run everything in containers with `pnpm local:docker` (builds seven images and runs the same migrations, seeds and topic bootstrap in a setup container); reset that stack with `pnpm compose:apps:reset`.
 
-   ```bash
-   pnpm local:docker
-   ```
+4. Open `http://localhost:3000`, sign in with any `@agentops.local` email (for example `operator@agentops.local`) and `password123`. Local demo login is enabled only when `APP_ENV=local` or `DEMO_LOGIN_ENABLED=true`; the account and workspace membership are created on first login. This is a local convenience, not a production login path.
 
-7. Open `http://localhost:3000` and log in with any `@agentops.local` email (local demo accounts are auto-created).
+5. Run the seeded `Lead qualification` workflow, then approve the drafted email in `/approvals`. The local operator account in the Docker stack is a platform admin, so `/admin` is available.
 
-8. Run the seeded `Lead qualification` workflow, then approve the drafted email in `/approvals`.
+| Item           | URL / value                                                               |
+| -------------- | ------------------------------------------------------------------------- |
+| Web            | `http://localhost:3000`                                                   |
+| API            | `http://localhost:4000`                                                   |
+| Swagger        | `http://localhost:4000/docs`                                              |
+| Health         | `http://localhost:4000/health/live`, `http://localhost:4000/health/ready` |
+| API metrics    | `http://localhost:4000/metrics`                                           |
+| Worker metrics | `http://localhost:4101/metrics` to `http://localhost:4104/metrics`        |
+| Grafana        | `http://localhost:3001` (`agentops` / `agentops`)                         |
+| Prometheus     | `http://localhost:9090`                                                   |
+| Alertmanager   | `http://localhost:9093`                                                   |
+| Tempo          | `http://localhost:3200`                                                   |
+| PostgreSQL     | `localhost:55432` (`agentops` / `agentops`, database `agentops`)          |
+| Redis          | `localhost:6379`                                                          |
+| Kafka          | `localhost:9094` (host listener)                                          |
 
-### Checks
+More commands and troubleshooting: [docs/local-runbook.md](docs/local-runbook.md).
 
-- `pnpm build && pnpm typecheck && pnpm test`
-- `pnpm test:integration`
-- `pnpm test:e2e`
-- `pnpm eval:leads`
-- `pnpm load:leads` then `pnpm load:report`
-- `pnpm docker:lint`
-- `pnpm k8s:validate`
-- `pnpm tf:validate`
-- `pnpm ci:lint`
+## Testing
 
-## Runtime Naming
+| Check                                 | Command                                                                     | Current result (2026-11-18)                             |
+| ------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| All unit tests                        | `pnpm test`                                                                 | Web 117, API 208, workers and packages 116              |
+| Integration (real Kafka + PostgreSQL) | `pnpm test:integration`                                                     | 10 / 10                                                 |
+| Playwright end-to-end                 | `pnpm test:e2e`                                                             | 24 scenarios                                            |
+| Lint / typecheck                      | `pnpm lint`, `pnpm typecheck`                                               | tsc-based lint and strict typecheck across the monorepo |
+| Lead golden set                       | `pnpm eval:leads`                                                           | Runs in PR checks                                       |
+| Infra checks                          | `pnpm docker:lint`, `pnpm k8s:validate`, `pnpm tf:validate`, `pnpm ci:lint` | Used by the Infra PR job                                |
 
-Use one naming style across local Docker, Kubernetes, and AWS:
+The e2e suite covers the lead flow, navigation/auth, pipeline creation through the API, the admin console, workspace isolation, and security cases (401s, CSRF Origin check, disabled accounts, self-change refused). Test scenarios and results are documented in [docs/test-scenarios.md](docs/test-scenarios.md).
 
-| Resource | Pattern | Example |
-| --- | --- | --- |
-| Local container | `agentops-local-<service>` | `agentops-local-postgres` |
-| Local volume | `agentops_local_<service>_data` | `agentops_local_postgres_data` |
-| Local network | `agentops_local_net` | `agentops_local_net` |
-| Local app image | `agentops/<app>:local` | `agentops/api:local` |
-| AWS ECR repository | `<env-name>/<app>` | `agentops-dev/api` |
-| Kubernetes namespace | `agentops` | `agentops` |
+## Deployment
 
-Useful commands:
+Production runs on AWS `ap-southeast-1`: Terraform creates 54 resources (VPC, EKS 1.31 with two `t3.medium` nodes, RDS PostgreSQL `db.t4g.micro`, ElastiCache Redis with TLS, MSK Kafka 3.9.x with two brokers, seven ECR repositories, Secrets Manager and IAM roles including the GitHub OIDC CI role). Cluster add-ons are ingress-nginx (NLB), cert-manager (Let's Encrypt), External Secrets, KEDA and metrics-server. The API autoscales 2-6 pods; each worker scales 1-6 on Kafka lag.
 
-```bash
-pnpm local:docker
-pnpm compose:apps:reset
-pnpm compose:up
-pnpm db:migrate:deploy
-pnpm db:seed
-pnpm db:seed:demo
-pnpm db:reset
-pnpm test:integration
-pnpm kafka:bootstrap
-pnpm docker:build:apps
+`.github/workflows/deploy-prod.yml` runs on push to `main`: it builds and pushes seven images tagged with the commit id, then `scripts/k8s-deploy.sh` runs the migration Job, rolls out every Deployment, smoke-tests `/health/ready` and `/health/live`, and rolls back on failure. The workflow uses the `production` environment, whose OIDC role is the only one it trusts. The stack is intentionally short-lived; each rebuild changes the sslip.io host and costs about USD 0.5/hour while running.
+
+Bring-up, teardown and the problems found on the way: [docs/production-runbook-aws.md](docs/production-runbook-aws.md). The production verification report (27/27 checks passed) is [docs/evidence/prod-verification.md](docs/evidence/prod-verification.md).
+
+## Documentation
+
+| Document                                                         | Contents                                                                                                 |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [docs/system-documentation.md](docs/system-documentation.md)     | Complete system reference: architecture, data model, screens, deployment, monitoring, security, testing. |
+| [docs/architecture.md](docs/architecture.md)                     | Design decisions and why the system is a modular monolith plus workers.                                  |
+| [docs/api.md](docs/api.md)                                       | REST API surface and auth/session behavior.                                                              |
+| [docs/database.md](docs/database.md)                             | Core data model and persistence rules.                                                                   |
+| [docs/kafka-topics.md](docs/kafka-topics.md)                     | Topics, event envelope and delivery constraints.                                                         |
+| [docs/workflow-engine.md](docs/workflow-engine.md)               | Graph rules, execution lifecycle, retries and idempotency.                                               |
+| [docs/ai-agent.md](docs/ai-agent.md)                             | AI Agent node behavior, prompts, schemas and safety.                                                     |
+| [docs/security.md](docs/security.md)                             | Implemented security controls and known gaps.                                                            |
+| [docs/local-runbook.md](docs/local-runbook.md)                   | Local setup, start commands, test commands and smoke tests.                                              |
+| [docs/production-runbook-aws.md](docs/production-runbook-aws.md) | AWS EKS bring-up, access, teardown and operational notes.                                                |
+| [docs/deployment.md](docs/deployment.md)                         | Docker, Kubernetes, Terraform and CI/CD plan.                                                            |
+| [docs/test-scenarios.md](docs/test-scenarios.md)                 | End-to-end scenarios and latest results.                                                                 |
+| [docs/technology-decisions.md](docs/technology-decisions.md)     | Confirmed stack, version notes and Prisma 7 specifics.                                                   |
+| [docs/roadmap.md](docs/roadmap.md)                               | Delivered scope and next phases.                                                                         |
+| [design/design-brief.md](design/design-brief.md)                 | Moss Atelier design direction, tokens, typography and motion.                                            |
+
+### Repository layout
+
+```txt
+apps/
+  web/                  Next.js landing page, dashboard, builder, approvals, admin
+  api/                  NestJS modular monolith
+  workflow-worker/      Graph execution and branching
+  ai-worker/            AI Agent nodes and structured output
+  tool-worker/          Sales task and CRM tools
+  notification-worker/  Notifications and mock email
+packages/
+  config/               Typed environment configuration
+  database/             Prisma schema, migrations, seeds
+  events/               Kafka topics, envelopes, idempotency
+  observability/        OpenTelemetry and metrics helpers
+  shared/               Contracts, workflow types, RBAC
+  ui/                   Shared UI primitives
+infrastructure/
+  docker/               Dockerfiles for api, web, tools and workers
+  k8s/                  Kustomize base, overlays, monitoring, migration job
+  terraform/            AWS modules and bootstrap/dev/prod environments
+  observability/        Prometheus rules, Grafana dashboards, Tempo, Alertmanager
+scripts/                Compose, deploy, load, verification and lint helpers
+docs/                   Product, architecture, operations and evidence
+design/                 Design brief, options page and template gallery
 ```
 
-`pnpm local:docker` starts the full local product stack: PostgreSQL, Redis, Kafka, observability, API, web, and all workers. It also applies the versioned Prisma migrations, the required and demo seeds, and Kafka topic bootstrap through the setup container. `pnpm compose:apps:reset` removes the local AgentOps Docker volumes and starts the full seeded stack again.
+## Project status and license
 
-## Workers And Monolith
+The product, the local stack, the test suites, the CI/CD pipeline and the AWS production deployment are in place. Remaining ideas live in [docs/roadmap.md](docs/roadmap.md): live run status over SSE/WebSocket, retry and dead-letter UI, audit-log UI, billing mock and a template marketplace.
 
-There are four workers because the MVP has four async execution domains:
-
-- `workflow-worker`: graph execution and run coordination.
-- `ai-worker`: prompt building, provider calls, structured output validation.
-- `tool-worker`: webhook/http/email mock action execution.
-- `notification-worker`: notification creation and mock delivery.
-
-Add more workers only when a new domain needs different scaling, retries, security, or runtime dependencies. The backend stays a modular monolith because auth, workspaces, workflow versions, RBAC, usage, and audit rules share the same domain model and database transactions.
-
-## Codex Usage
-
-Before asking Codex or another AI agent to implement features in this repo, start from [.codex/CODEX.md](.codex/CODEX.md). Root [CODEX.md](CODEX.md) is only a pointer.
-
-For UI work, also read [apps/web/DESIGN.md](apps/web/DESIGN.md). It was installed with:
-
-```bash
-npx getdesign@latest add opencode.ai
-```
-
-The current web app follows that design direction: mono typography, warm cream canvas, hairline borders, 4px-radius controls, ASCII markers, no gradients, and no card shadows. Server pages read live data from the NestJS API through `apps/web/src/lib/api.ts` and fall back to stable demo data only when the API is offline.
-
-## API Smoke Tests
-
-Postman files live in `postman/`:
-
-- `AgentOps.postman_collection.json`
-- `AgentOps.local.postman_environment.json`
-
-Import both files, select the `AgentOps Local` environment, start the API on `http://localhost:4000`, then run the collection in order.
-
-Manual end-to-end test instructions live in [test/manual-test-guide.md](test/manual-test-guide.md). The guide covers Docker startup, seeded data, browser flows, API smoke commands, and database reset/reseed.
-
-## External Structure References
-
-This scaffold follows current official guidance from Turborepo workspace structure, Next.js App Router project structure, NestJS workspace/module organization, Kafka delivery semantics, Kubernetes workload resources, Terraform module structure, and GitHub Actions workflow syntax.
+License: not specified yet. The owner has not chosen a license, so the repository is not licensed for reuse.
