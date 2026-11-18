@@ -1,6 +1,7 @@
 import {
   context,
   isSpanContextValid,
+  ROOT_CONTEXT,
   propagation,
   SpanKind,
   SpanStatusCode,
@@ -32,6 +33,12 @@ export type StartOtelSpanOptions = {
   kind?: SpanKind;
   traceparent?: string;
   attributes?: Attributes;
+  /**
+   * Start a new trace when `traceparent` is absent instead of nesting under whatever span is active. Inbound
+   * request spans need this: async context can leak across keep-alive requests on the same socket, which made a
+   * request span a child of an unrelated (and already finished) span.
+   */
+  root?: boolean;
 };
 
 let sdk: NodeSDK | undefined;
@@ -81,7 +88,8 @@ export function extractOtelContext(traceparent: string | undefined): Context {
 }
 
 export function startOtelSpan(name: string, options: StartOtelSpanOptions = {}) {
-  const parentContext = extractOtelContext(options.traceparent);
+  const parentContext =
+    options.root && !parseTraceparent(options.traceparent) ? ROOT_CONTEXT : extractOtelContext(options.traceparent);
   const span = trace.getTracer(options.tracerName ?? "agentops").startSpan(
     name,
     {
