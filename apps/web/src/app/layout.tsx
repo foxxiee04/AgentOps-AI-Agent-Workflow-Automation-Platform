@@ -1,31 +1,14 @@
 import type { Metadata } from "next";
-import { Inter_Tight, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import type { ReactNode } from "react";
 import { resolvePublicApiUrl, runtimeConfigScript } from "../lib/runtime-config";
+// Self-hosted fonts (all subsets incl. Vietnamese, served from the build): next/font/google downloads from Google
+// Fonts at build time and Turbopack failed builds on CI runners when that download did not succeed.
+import "@fontsource-variable/playfair-display";
+import "@fontsource-variable/playfair-display/wght-italic.css";
+import "@fontsource-variable/inter-tight";
+import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 import { Providers } from "./providers";
-
-const playfairDisplay = Playfair_Display({
-  subsets: ["latin", "latin-ext", "vietnamese"],
-  weight: ["400", "500"],
-  style: ["normal", "italic"],
-  display: "swap",
-  variable: "--font-display"
-});
-
-const interTight = Inter_Tight({
-  subsets: ["latin", "latin-ext", "vietnamese"],
-  weight: ["400", "500", "600"],
-  display: "swap",
-  variable: "--font-sans"
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin", "latin-ext", "vietnamese"],
-  weight: ["400", "500"],
-  display: "swap",
-  variable: "--font-mono"
-});
 
 export const metadata: Metadata = {
   title: "AgentOps",
@@ -37,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className={`${playfairDisplay.variable} ${interTight.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en">
       <head>
         <script dangerouslySetInnerHTML={{ __html: runtimeConfigScript({ apiUrl: resolvePublicApiUrl() }) }} />
       </head>
