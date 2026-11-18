@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, 
 import type { AuthenticatedCaller } from "../../common/auth/jwt-auth.guard";
 import { PrismaService } from "../../common/infrastructure/prisma.service";
 
-type RequestLike = { auth?: AuthenticatedCaller };
+export type RequestLike = { auth?: AuthenticatedCaller };
 
 /**
  * Allows only platform administrators. Runs after the global JwtAuthGuard (which sets `request.auth`
