@@ -86,7 +86,7 @@ spec:
                 name: agentops-api
                 port:
                   number: 4000
-          - path: /audit
+          - path: /audit-logs
             pathType: Prefix
             backend:
               service:

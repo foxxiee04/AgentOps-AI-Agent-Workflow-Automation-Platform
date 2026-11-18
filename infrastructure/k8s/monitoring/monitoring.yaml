@@ -104,7 +104,8 @@ spec:
           configMap:
             name: prometheus-rules
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: prometheus-data
 ---
 apiVersion: v1
 kind: Service
@@ -189,7 +190,8 @@ spec:
           secret:
             secretName: alertmanager-webhook
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: alertmanager-data
 ---
 apiVersion: v1
 kind: Service
@@ -271,7 +273,8 @@ spec:
           configMap:
             name: tempo-config
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: tempo-data
 ---
 apiVersion: v1
 kind: Service
@@ -374,7 +377,8 @@ spec:
           configMap:
             name: grafana-dashboards
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: grafana-data
 ---
 apiVersion: v1
 kind: Service
@@ -388,3 +392,78 @@ spec:
     - name: http
       port: 3000
       targetPort: http
+---
+# EBS gp3 storage (EBS CSI driver add-on, see infrastructure/terraform/modules/eks): monitoring data survives pod
+# restarts and node replacements.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+# Delete: tearing the stack down (namespace deletion) must not leave billable EBS volumes behind.
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-data
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tempo-data
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: tempo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 2Gi

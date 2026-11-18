@@ -65,3 +65,9 @@ variable "secrets_arn_prefix" {
   description = "Secrets Manager ARN prefix (e.g. the ARN of agentops/prod/) the External Secrets IRSA role may read."
   type        = string
 }
+
+variable "enable_network_policy" {
+  description = "Run the VPC CNI network policy agent so Kubernetes NetworkPolicies are enforced."
+  type        = bool
+  default     = true
+}
