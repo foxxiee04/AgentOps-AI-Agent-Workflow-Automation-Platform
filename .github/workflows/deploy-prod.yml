@@ -105,10 +105,10 @@ jobs:
             build-args: WORKER_PACKAGE=@agentops/notification-worker
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_CI_ROLE_ARN_PROD }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -131,11 +131,11 @@ jobs:
 
       - name: Set up Docker Buildx
         if: steps.existing.outputs.found != 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push
         if: steps.existing.outputs.found != 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -161,7 +161,7 @@ jobs:
       IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate image tag
         run: |
@@ -171,13 +171,13 @@ jobs:
           fi
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_CI_ROLE_ARN_PROD }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Install kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
         with:
           version: v1.31.0
 
