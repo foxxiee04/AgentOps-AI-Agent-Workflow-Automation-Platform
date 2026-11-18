@@ -181,4 +181,4 @@ Details: [test plan](test-plan.md) · [test scenarios and results](test-scenario
 
 Already done in the hardening round of 2026-11-18: signed webhook endpoints that start real runs, alerts stored in
 PostgreSQL, NetworkPolicy enforced on EKS, persistent EBS volumes for the monitoring stack, Terraform state in S3 with
-locking, production AI nodes on OpenAI, and the Playwright suite running on every pull request.
+locking, a deployment switch that runs AI nodes on OpenAI, and the Playwright suite running on every pull request.
