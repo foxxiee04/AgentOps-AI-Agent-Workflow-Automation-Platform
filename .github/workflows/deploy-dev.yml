@@ -85,7 +85,7 @@ jobs:
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/dev/${{ matrix.app }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max,ignore-error=true
 
   deploy:
     name: Deploy dev
