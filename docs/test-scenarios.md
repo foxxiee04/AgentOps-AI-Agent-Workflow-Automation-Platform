@@ -34,7 +34,19 @@ node scripts/verify-prod.mjs --host agentops.<lb-ip-dashed>.sslip.io
 
 ## 2. Test Execution Results History
 
-### Results — 2026-11-18 (Latest Benchmark)
+### Results — 2026-11-18, after the hardening round (Latest)
+
+| Test Suite | Total | Passed | Failed | Status | Notes |
+| --- | --- | --- | --- | --- | --- |
+| **API Monolith Unit Tests** | 237 | 237 | 0 | **PASS** | Adds webhooks, persistent notifications, audit log, AI task lookup |
+| **Workers & Packages Unit** | 121 | 121 | 0 | **PASS** | Adds the AI provider override |
+| **Playwright E2E in PR checks** | 24 | 24 | 0 | **PASS** | First run of the `e2e` CI job (PR #40), Docker Compose stack on `ubuntu-24.04` |
+| **Webhook run on production** | 1 | 1 | 0 | **PASS** | 401 / 202 / 404 as designed; first run exposed an expired OpenAI key, rerun completed on the mock provider |
+| **Production Verification** | 27 | 27 | 0 | **PASS** | [report](evidence/prod-verification.md), details in [hardening evidence](evidence/hardening-2026-11-18.md) |
+
+---
+
+### Results — 2026-11-18 (Before the hardening round)
 
 Executed on 2026-11-18 against the local stack and the active AWS EKS production cluster (`agentops.18-136-215-126.sslip.io`):
 

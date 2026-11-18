@@ -133,12 +133,12 @@ Details: [observability](observability.md).
 
 ![Deploy prod run](images/portfolio/github-actions-deploy-prod.png)
 
-| Pull request history | Workflows |
+| Pull request history | PR checks with the end-to-end job |
 | --- | --- |
-| ![Merged PRs](images/portfolio/github-merged-prs.png) | ![Actions](images/portfolio/github-actions-workflows.png) |
+| ![Merged PRs](images/portfolio/github-merged-prs.png) | ![PR checks with E2E](images/portfolio/github-actions-pr-checks-e2e.png) |
 
 - **PR checks**: lint, typecheck, unit tests, build, AI golden-set eval, integration tests on real Kafka + Postgres,
-  `pnpm audit`, gitleaks, actionlint, shellcheck, hadolint, kubeconform, terraform validate, and a Trivy
+  the 24 Playwright scenarios against the full Docker Compose stack, `pnpm audit`, gitleaks, actionlint, shellcheck, hadolint, kubeconform, terraform validate, and a Trivy
   CRITICAL/HIGH gate on six images (trivy-action pinned by commit SHA).
 - **Continuous delivery**: every merge to `main` builds seven images tagged with the commit id, pushes them to ECR,
   runs the database migration Job, rolls out, smoke-tests and rolls back automatically on failure. AWS access uses
@@ -159,7 +159,7 @@ Details: [deployment](deployment.md) · [AWS architecture](aws-kubernetes-deploy
 | Web unit tests (Vitest) | 117 / 117 |
 | API unit tests | 237 / 237 |
 | Integration tests (real Kafka + PostgreSQL) | 10 / 10 |
-| Playwright end-to-end scenarios | 24 / 24 |
+| Playwright end-to-end scenarios (local and in PR checks) | 24 / 24 |
 | Production checks (`scripts/verify-prod.mjs`) | 27 / 27 |
 
 The end-to-end suite covers the full lead flow through the UI, navigation and auth, the pipeline through the public
@@ -171,7 +171,9 @@ The production check script verifies endpoints and TLS, workloads and restarts, 
 Prometheus targets, rules and firing alerts, an end-to-end alert through Alertmanager to the API webhook, and a trace
 spanning several services in Tempo. Latest report: [evidence/prod-verification.md](evidence/prod-verification.md).
 
-Details: [test plan](test-plan.md) · [test scenarios and results](test-scenarios.md).
+Details: [test plan](test-plan.md) · [test scenarios and results](test-scenarios.md) ·
+[hardening round evidence](evidence/hardening-2026-11-18.md) (webhook run on prod, NetworkPolicy probe, EBS volumes,
+S3 state, the capacity incident and the expired OpenAI key).
 
 ## 7. What I would do next
 

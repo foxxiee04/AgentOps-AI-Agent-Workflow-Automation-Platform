@@ -191,7 +191,7 @@ Production runs on AWS `ap-southeast-1`: Terraform creates 54 resources (VPC, EK
 
 `.github/workflows/deploy-prod.yml` runs on push to `main`: it builds and pushes seven images tagged with the commit id, then `scripts/k8s-deploy.sh` runs the migration Job, rolls out every Deployment, smoke-tests `/health/ready` and `/health/live`, and rolls back on failure. The workflow uses the `production` environment, whose OIDC role is the only one it trusts. The stack is intentionally short-lived; each rebuild changes the sslip.io host and costs about USD 0.5/hour while running.
 
-Bring-up, teardown and the problems found on the way: [docs/production-runbook-aws.md](docs/production-runbook-aws.md). The production verification report (27/27 checks passed) is [docs/evidence/prod-verification.md](docs/evidence/prod-verification.md).
+Bring-up, teardown and the problems found on the way: [docs/production-runbook-aws.md](docs/production-runbook-aws.md). The production verification report (27/27 checks passed) is [docs/evidence/prod-verification.md](docs/evidence/prod-verification.md). Evidence for the 2026-11-18 hardening round (webhook run on prod, NetworkPolicy probe, EBS volumes, S3 state, capacity fix) is in [docs/evidence/hardening-2026-11-18.md](docs/evidence/hardening-2026-11-18.md).
 
 ## Documentation
 

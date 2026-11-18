@@ -25,12 +25,12 @@ Host: `agentops.18-136-215-126.sslip.io` - 27/27 checks passed.
 
 | Check | Result | Detail |
 | --- | --- | --- |
-| agentops-api | PASS | 2/2 ready, api:ab7599317ec538ecf59cc8c85603f6ef3bd033c1 |
-| agentops-web | PASS | 2/2 ready, web:ab7599317ec538ecf59cc8c85603f6ef3bd033c1 |
-| ai-worker | PASS | 1/1 ready, ai-worker:ab7599317ec538ecf59cc8c85603f6ef3bd033c1 |
-| notification-worker | PASS | 1/1 ready, notification-worker:ab7599317ec538ecf59cc8c85603f6ef3bd033c1 |
-| tool-worker | PASS | 1/1 ready, tool-worker:ab7599317ec538ecf59cc8c85603f6ef3bd033c1 |
-| workflow-worker | PASS | 1/1 ready, workflow-worker:ab7599317ec538ecf59cc8c85603f6ef3bd033c1 |
+| agentops-api | PASS | 2/2 ready, api:ab7599317ec5 |
+| agentops-web | PASS | 2/2 ready, web:ab7599317ec5 |
+| ai-worker | PASS | 1/1 ready, ai-worker:ab7599317ec5 |
+| notification-worker | PASS | 1/1 ready, notification-worker:ab7599317ec5 |
+| tool-worker | PASS | 1/1 ready, tool-worker:ab7599317ec5 |
+| workflow-worker | PASS | 1/1 ready, workflow-worker:ab7599317ec5 |
 | running pods and restarts | PASS | 8 running pods, 0 restarts in total |
 
 ## Autoscaling
