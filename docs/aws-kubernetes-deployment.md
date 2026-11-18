@@ -24,7 +24,7 @@ flowchart TB
     end
 
     subgraph private[Private Subnets · 2 AZs: 10.30.11.0/24, 10.30.12.0/24]
-      subgraph eks[EKS Cluster agentops-prod · Kubernetes 1.31 · 2 x t3.medium]
+      subgraph eks[EKS Cluster agentops-prod · Kubernetes 1.31 · 3 x t3.medium]
         ingress[Ingress-NGINX<br/>cert-manager + Let's Encrypt]
         webp[agentops-web x2<br/>Next.js 16 App Router]
         apip[agentops-api x2<br/>NestJS · HPA 2-6 replicas]
@@ -202,6 +202,6 @@ AgentOps completely avoids static, long-lived AWS IAM access keys in CI/CD:
 | Optimization | Implementation | Financial Impact |
 | --- | --- | --- |
 | **Ephemeral Profile** | `ephemeral = true` flag drops deletion protections and forces ECR cleanup on teardown | Reduces idle costs to $0 when the environment is terminated |
-| **Node Instance Class** | 2 x `t3.medium` burstable instances | Fits control plane add-ons and application pods within ~USD 0.50/hour total |
+| **Node Instance Class** | 3 x `t3.medium` burstable instances | t3.medium fits 17 pods per node; two nodes were full with add-ons and monitoring and left no room for rolling updates. About USD 0.55/hour total |
 | **Data Service Sizing** | `db.t4g.micro` (Postgres) and `cache.t4g.micro` (Redis) on Graviton ARM | Provides production-accurate TLS and managed stability at lowest tier |
 | **Kafka Sizing** | 2 x `kafka.t3.small` MSK brokers | Full managed Kafka functionality without enterprise multi-cluster overhead |
