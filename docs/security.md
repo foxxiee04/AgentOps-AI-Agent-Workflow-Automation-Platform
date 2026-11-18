@@ -119,17 +119,17 @@ AgentOps maintains an honest accounting of current architectural limitations and
 1. **Stateless Access JWT Expiration Window:**
    While account deactivation is checked immediately in the database, explicit user logout revokes only the refresh token and clears browser cookies. An access JWT copied prior to logout remains cryptographically valid until its 15-minute expiration time. There is currently no distributed token denylist in Redis.
 
-2. **Non-Workspace Scoped Endpoints:**
-   While `/dashboard/*` endpoints strictly require and enforce `?workspaceId=`, the `/ai/usage`, `/notifications`, and `/notifications/mark-all-read` routes require valid authentication but return unscoped or process-global data.
+2. **Non-Workspace Scoped AI Usage:**
+   `/dashboard/*`, `/audit-logs` and `/webhooks` require and enforce `?workspaceId=`, and `/notifications` is limited to platform admins, but `/ai/usage` still reports usage without a workspace filter.
 
-3. **In-Memory Notification Store:**
-   The `NotificationsService` maintains alert records in an in-memory process array rather than PostgreSQL. When multiple API pod replicas run behind the Service load balancer, notification state is partitioned across replicas.
+3. **Mock Email Delivery:**
+   The approved follow-up email is "sent" by the notification-worker's mock sender (recorded as a notification, no SMTP/SES call). No real email provider is wired in yet, so nothing leaves the platform.
 
-4. **NetworkPolicy Enforcement Disabled on EKS:**
-   Although Kubernetes `NetworkPolicy` manifests are defined in `infrastructure/k8s/base/network-policies.yaml`, packet filtering is not enforced on the AWS EKS cluster because the Amazon VPC CNI Network Policy agent (or Calico) has not been installed.
+4. **Root AWS Account for Operations:**
+   The production stack was created and is operated from the AWS account root user's access keys. CI uses OIDC roles, but day-to-day human access should move to an IAM Identity Center user or an admin role with MFA, and the root keys should be deleted.
 
-5. **Ephemeral Monitoring Storage (emptyDir):**
-   In-cluster Prometheus, Alertmanager, Grafana, and Tempo pods utilize Kubernetes `emptyDir` volumes rather than persistent AWS EBS volumes (`gp3`). Telemetry history, Prometheus metrics, and Tempo traces are lost if monitoring pods restart.
+5. **Short-Lived RDS Settings:**
+   RDS keeps 7 days of automated backups, but deletion protection and a final snapshot are off so the short-lived stack can be torn down in one step. A long-running deployment should turn both on.
 
 6. **In-Memory Rate Limiting:**
    The `@nestjs/throttler` storage provider operates in process memory rather than coordinating across replicas via Redis. Consequently, the effective cluster-wide rate limit is multiplied by the number of active API replicas (e.g., 2 to 6 replicas).
@@ -142,3 +142,11 @@ AgentOps maintains an honest accounting of current architectural limitations and
 
 9. **Broad Terraform Execution Permissions:**
    Infrastructure automation roles currently use `AdministratorAccess` without fine-grained IAM permission boundaries.
+
+### Resolved in the 2026-11-18 hardening round
+
+- Alertmanager notifications are stored in PostgreSQL (`Notification` rows with no workspace), so every API replica serves the same list and restarts keep it.
+- NetworkPolicy is enforced on EKS: the `vpc-cni` add-on runs with `enableNetworkPolicy=true` (Terraform `enable_network_policy`). Verified by a pod in `default` timing out against the API while a pod in `monitoring` gets HTTP 200.
+- Prometheus, Alertmanager, Tempo and Grafana use encrypted `gp3` EBS volumes (EBS CSI driver add-on with an IRSA role) instead of `emptyDir`.
+- Inbound webhooks are real: per-workflow endpoints with a `whsec_` secret shown once and stored only as a salted SHA-256 hash, constant-time comparison, 404 for unknown or disabled endpoints, audit row per call.
+- Terraform state for prod lives in an encrypted, versioned S3 bucket with a DynamoDB lock table (bootstrap stack) instead of a local file.

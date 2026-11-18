@@ -20,7 +20,7 @@ The seeded `Lead qualification` workflow is the reference flow. A lead arrives m
 2. **Draft** — for a qualifying lead, the agent writes a follow-up email subject and body.
 3. **Branch** — a condition node routes on `leadScore > 80`; leads below the threshold skip the email.
 4. **Approve** — a human reviews the masked draft in the approval queue and approves or rejects it.
-5. **Finish** — the approved email is sent (mock) and a sales task is created. A rejected email is skipped, but the hot lead still gets the sales task; every step is recorded in the run timeline.
+5. **Finish** — the approved email is handed to the mock sender (no real email provider is connected yet; the "sent" email is recorded as a notification) and a sales task is created. A rejected email is skipped, but the hot lead still gets the sales task; every step is recorded in the run timeline.
 
 Workflows are graphs edited in a React Flow builder, validated and versioned on publish, and executed asynchronously through Kafka.
 
@@ -29,11 +29,11 @@ Workflows are graphs edited in a React Flow builder, validated and versioned on 
 | Area                      | What is implemented                                                                                                                                                                                                                                                                |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Workflow engine           | Versioned graph definitions, publish validation, manual/API/webhook triggers, condition branching, per-step run records, at-least-once Kafka delivery with `ProcessedMessage` idempotency and dead-letter handling.                                                                |
-| AI agent                  | OpenAI `gpt-4o-mini` or a deterministic mock provider, JSON-Schema-validated output, masked PII in prompts and responses, prompt-injection guardrail, per-workspace daily call and token quotas.                                                                                   |
+| AI agent                  | OpenAI `gpt-4o-mini` (production runs mock-configured nodes on OpenAI via `AI_PROVIDER_OVERRIDE`) or a deterministic mock provider for local runs and tests, JSON-Schema-validated output, masked PII in prompts and responses, prompt-injection guardrail, per-workspace daily call and token quotas.                                                                                   |
 | Human in the loop         | Approval queue with masked payloads, approve/reject decisions, duplicate decisions return `409` (first decision wins), every decision audited.                                                                                                                                     |
 | Workspaces and RBAC       | `OWNER` / `ADMIN` / `MEMBER` / `VIEWER` per workspace, `?workspaceId=` scoping on dashboard routes, active-workspace cookie (`agentops_ws`) and sidebar switcher, Google sign-in, and a personal workspace for a first-time Google user.                                           |
 | Admin console and reports | Platform statistics (users, workspaces, runs, success rate, AI calls/tokens, approvals, lead categories, signup providers, daily series), account search/filter/disable/enable/grant admin, workspace list, platform audit log, CSV exports for users, workspaces, runs and usage. |
-| Observability             | OpenTelemetry traces to Tempo, Prometheus metrics from the API and all four workers, 17 alert rules in 5 groups, Alertmanager to an API webhook, five Grafana dashboards.                                                                                                          |
+| Observability             | OpenTelemetry traces to Tempo, Prometheus metrics from the API and all four workers, 17 alert rules in 5 groups, Alertmanager to an API webhook that stores alerts in PostgreSQL, five Grafana dashboards; in production the monitoring stack keeps its data on encrypted `gp3` EBS volumes.                                                                                                          |
 | CI/CD and AWS             | PR checks (quality, integration, security, infra, images), image builds with Trivy gates, push-to-main CD to EKS with migration job, smoke test and automatic rollback, manual redeploy by image tag.                                                                              |
 | Design and motion         | Moss Atelier design system, WebGL hero sculpture, 3D tilt and pointer-spotlight cards, magnetic CTAs, scroll parallax and page transitions, all disabled for `prefers-reduced-motion` and touch devices. See [design/design-brief.md](design/design-brief.md).                     |
 
@@ -87,7 +87,7 @@ flowchart LR
 | Service                                     | Responsibility                                                                                                                                                                                                                                                |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/web`                                  | Next.js App Router UI: landing page, split-screen auth, workspace dashboard, workflow list and React Flow builder, run list and step timeline, approval queue, AI console, settings, `/admin` console.                                                        |
-| `apps/api`                                  | NestJS modular monolith: cookie JWT auth and refresh rotation, Google OAuth, workspaces and RBAC, workflow CRUD/versions/publish, run lifecycle, approvals, dashboard aggregates, admin module, CSV reports, webhook ingestion, domain-event outbox to Kafka. |
+| `apps/api`                                  | NestJS modular monolith: cookie JWT auth and refresh rotation, Google OAuth, workspaces and RBAC, workflow CRUD/versions/publish, run lifecycle, approvals, dashboard aggregates, admin module, CSV reports, signed webhook endpoints that start runs, workspace audit log, domain-event outbox to Kafka. |
 | `apps/workflow-worker`                      | Walks the graph, evaluates conditions, requests AI and tool work, pauses at human approvals, and closes the run.                                                                                                                                              |
 | `apps/ai-worker`                            | Executes AI Agent nodes (lead scoring, email drafting), validates structured output, records token usage and enforces quotas, moves failed messages to the dead-letter topic.                                                                                 |
 | `apps/tool-worker`                          | Executes sales-task/CRM tools and mock outbound actions.                                                                                                                                                                                                      |
@@ -176,9 +176,9 @@ More commands and troubleshooting: [docs/local-runbook.md](docs/local-runbook.md
 
 | Check                                 | Command                                                                     | Current result (2026-11-18)                             |
 | ------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| All unit tests                        | `pnpm test`                                                                 | Web 117, API 208, workers and packages 116              |
+| All unit tests                        | `pnpm test`                                                                 | Web 117, API 237, workers and packages 121              |
 | Integration (real Kafka + PostgreSQL) | `pnpm test:integration`                                                     | 10 / 10                                                 |
-| Playwright end-to-end                 | `pnpm test:e2e`                                                             | 24 scenarios                                            |
+| Playwright end-to-end                 | `pnpm test:e2e`                                                             | 24 scenarios, also run by the `e2e` PR job              |
 | Lint / typecheck                      | `pnpm lint`, `pnpm typecheck`                                               | tsc-based lint and strict typecheck across the monorepo |
 | Lead golden set                       | `pnpm eval:leads`                                                           | Runs in PR checks                                       |
 | Infra checks                          | `pnpm docker:lint`, `pnpm k8s:validate`, `pnpm tf:validate`, `pnpm ci:lint` | Used by the Infra PR job                                |
@@ -187,7 +187,7 @@ The e2e suite covers the lead flow, navigation/auth, pipeline creation through t
 
 ## Deployment
 
-Production runs on AWS `ap-southeast-1`: Terraform creates 54 resources (VPC, EKS 1.31 with two `t3.medium` nodes, RDS PostgreSQL `db.t4g.micro`, ElastiCache Redis with TLS, MSK Kafka 3.9.x with two brokers, seven ECR repositories, Secrets Manager and IAM roles including the GitHub OIDC CI role). Cluster add-ons are ingress-nginx (NLB), cert-manager (Let's Encrypt), External Secrets, KEDA and metrics-server. The API autoscales 2-6 pods; each worker scales 1-6 on Kafka lag.
+Production runs on AWS `ap-southeast-1`: Terraform creates 54 resources (VPC, EKS 1.31 with two `t3.medium` nodes, RDS PostgreSQL `db.t4g.micro`, ElastiCache Redis with TLS, MSK Kafka 3.9.x with two brokers, seven ECR repositories, Secrets Manager and IAM roles including the GitHub OIDC CI role). Cluster add-ons are ingress-nginx (NLB), cert-manager (Let's Encrypt), External Secrets, KEDA and metrics-server. The VPC CNI runs with NetworkPolicy enforcement on, the EBS CSI driver provides persistent volumes for monitoring, and Terraform state lives in an encrypted S3 bucket with a DynamoDB lock table. The API autoscales 2-6 pods; each worker scales 1-6 on Kafka lag.
 
 `.github/workflows/deploy-prod.yml` runs on push to `main`: it builds and pushes seven images tagged with the commit id, then `scripts/k8s-deploy.sh` runs the migration Job, rolls out every Deployment, smoke-tests `/health/ready` and `/health/live`, and rolls back on failure. The workflow uses the `production` environment, whose OIDC role is the only one it trusts. The stack is intentionally short-lived; each rebuild changes the sslip.io host and costs about USD 0.5/hour while running.
 
@@ -244,4 +244,6 @@ design/                 Design brief, options page and template gallery
 
 The product, the local stack, the test suites, the CI/CD pipeline and the AWS production deployment are in place. Remaining ideas live in [docs/roadmap.md](docs/roadmap.md): live run status over SSE/WebSocket, retry and dead-letter UI, audit-log UI, billing mock and a template marketplace.
 
-License: not specified yet. The owner has not chosen a license, so the repository is not licensed for reuse.
+Known limitations (email delivery is a mock, no custom domain, short-lived AWS stack) are listed in [docs/security.md](docs/security.md#known-architectural-gaps).
+
+License: [MIT](LICENSE).

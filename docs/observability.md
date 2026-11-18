@@ -189,7 +189,7 @@ sequenceDiagram
     A->>A: group, wait 15s, inhibit warning
     A->>API: POST /notifications/alertmanager (Bearer token)
     API->>API: timingSafeEqual(token)
-    API->>API: create in-app notification + increment metric
+    API->>API: store Notification row + increment metric
     API-->>A: 200 { received, created }
     UI->>API: GET /notifications
     API-->>UI: notification list
@@ -204,7 +204,9 @@ Token handling:
 - Locally, the container posts to `http://host.docker.internal:4000/notifications/alertmanager` with no token. The API accepts a missing token only when `APP_ENV=local`; any other environment returns `401`.
 - Comparison uses `crypto.timingSafeEqual` on equal-length buffers.
 
-The in-app notification store is an in-process array (`NotificationsService`). It is not persisted to PostgreSQL, and it starts with one demo notification per process. With multiple API replicas behind the Service, a `GET /notifications` request may be served by a replica that did not receive the webhook. Treat the endpoint as a local demo surface, not a durable inbox; the durable record of an alert is in Alertmanager and the Prometheus rule state.
+Each alert in the webhook payload is stored as a `Notification` row (type `ALERT`, no workspace; the row `status` is the read state and the alert state, severity, labels, annotations and fingerprint are in `metadataJson`). Every API replica therefore serves the same list, and it survives restarts. `GET /notifications` and `POST /notifications/mark-all-read` are limited to platform admins.
+
+In production the monitoring Deployments keep their data on encrypted `gp3` EBS volumes (PVCs `prometheus-data` 20Gi, `tempo-data` 10Gi, `grafana-data` 2Gi, `alertmanager-data` 1Gi), so metrics history, traces and Grafana state survive pod restarts and node replacement.
 
 The production alert bot endpoint and a delivered alert:
 

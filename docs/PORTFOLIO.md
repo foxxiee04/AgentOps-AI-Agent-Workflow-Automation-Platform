@@ -13,7 +13,7 @@ it was verified. Every screenshot below was taken from the running system on 202
 | Role | Solo build: product, design system, frontend, backend, AI integration, infrastructure, CI/CD, testing, docs |
 | Stack | Next.js 16 · React 19 · NestJS 11 · Prisma 7 · PostgreSQL 16 · Kafka · Redis · OpenAI · three.js · Terraform · EKS · GitHub Actions · Prometheus · Grafana · Tempo |
 | Scale of the work | 129 commits in 26 merged pull requests, 7 deployable images, 54 Terraform-managed AWS resources |
-| Quality gates | 117 web + 208 API unit tests, 10 integration tests, 24 Playwright end-to-end scenarios, Trivy/gitleaks/audit in CI, 27/27 production checks |
+| Quality gates | 117 web + 237 API unit tests, 10 integration tests, 24 Playwright end-to-end scenarios (run in CI), Trivy/gitleaks/audit in CI, 27/27 production checks |
 
 ## 1. The product
 
@@ -157,7 +157,7 @@ Details: [deployment](deployment.md) · [AWS architecture](aws-kubernetes-deploy
 | Suite | Result (2026-11-18) |
 | --- | --- |
 | Web unit tests (Vitest) | 117 / 117 |
-| API unit tests | 208 / 208 |
+| API unit tests | 237 / 237 |
 | Integration tests (real Kafka + PostgreSQL) | 10 / 10 |
 | Playwright end-to-end scenarios | 24 / 24 |
 | Production checks (`scripts/verify-prod.mjs`) | 27 / 27 |
@@ -175,7 +175,10 @@ Details: [test plan](test-plan.md) · [test scenarios and results](test-scenario
 
 ## 7. What I would do next
 
-- A real email provider and a custom domain instead of sslip.io.
-- Persistent volumes for Prometheus, Grafana and Tempo, and NetworkPolicy enforcement on EKS.
-- Workspace-scoped AI usage and notification endpoints (today they are platform-level), and billing on top of the
-  usage records.
+- A real email provider (SES) instead of the mock sender, and a custom domain instead of sslip.io.
+- Workspace-scoped AI usage, billing on top of the usage records, and a UI for webhook endpoints.
+- Move human AWS access off the root account, add WAF in front of the NLB and TLS to MSK.
+
+Already done in the hardening round of 2026-11-18: signed webhook endpoints that start real runs, alerts stored in
+PostgreSQL, NetworkPolicy enforced on EKS, persistent EBS volumes for the monitoring stack, Terraform state in S3 with
+locking, production AI nodes on OpenAI, and the Playwright suite running on every pull request.
