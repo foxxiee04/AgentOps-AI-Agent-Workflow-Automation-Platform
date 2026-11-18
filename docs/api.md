@@ -222,28 +222,28 @@ Every route under `/admin` is guarded by `PlatformAdminGuard`, checking `User.is
 | `POST` | `/ai/test-agent` | Authenticated | Default | Sandbox execution testing prompt rendering, PII masking, and validation. |
 | `POST` | `/ai/evaluate-agent` | Authenticated | Default | Execute deterministic evaluation against the 24-lead golden set. |
 | `GET` | `/ai/providers` | Authenticated | Default | Return available model providers (`mock`, `openai`, `gemini`). |
-| `GET` | `/ai/tasks/:id` | Authenticated | Default | Inspect status of an asynchronous AI task. |
+| `GET` | `/ai/tasks/:id` | Authenticated, `VIEWER` of the task's workspace | Default | Stored `AiTaskResult`: provider, model, tokens, output or error (404 unknown, 403 not a member). |
 | `GET` | `/ai/usage` | Authenticated | Default | Global AI consumption totals (calls, tokens, limits). |
 
 ### 9. Webhooks & Ingest
 
 | Method | Path | Auth / Role | Rate Limit | Purpose |
 | --- | --- | --- | --- | --- |
-| `POST` | `/webhooks/:workflowId` | Public | Default | Public ingest endpoint to trigger workflows from external webhook payloads. |
-| `GET` | `/webhooks` | Authenticated | Default | List registered webhook endpoints. |
-| `POST` | `/webhooks` | Authenticated | Default | Register a new webhook endpoint. |
-| `DELETE` | `/webhooks/:id` | Authenticated | Default | Remove a registered webhook endpoint. |
+| `POST` | `/webhooks/:id` | Public (`x-agentops-webhook-secret`) | Default | Trigger the endpoint's workflow with the JSON body (`202 { runId, status }`). |
+| `GET` | `/webhooks?workspaceId=` | Authenticated, `VIEWER` | Default | List endpoints of the workspace without secrets. |
+| `POST` | `/webhooks` | Authenticated, `ADMIN` of the workflow's workspace | Default | Register an endpoint for `{ workflowId }`; the secret is returned once. |
+| `DELETE` | `/webhooks/:id` | Authenticated, `ADMIN` of the endpoint's workspace | Default | Deactivate a webhook endpoint. |
 
 ### 10. Notifications & Alert Bot
 
 | Method | Path | Auth / Role | Rate Limit | Purpose |
 | --- | --- | --- | --- | --- |
-| `GET` | `/notifications` | Authenticated | Default | Retrieve in-app notifications and alerts. |
-| `POST` | `/notifications/mark-all-read` | Authenticated | Default | Mark all in-app notifications as read. |
+| `GET` | `/notifications` | Platform admin | Default | Latest 100 platform notifications (stored Alertmanager alerts), newest first. |
+| `POST` | `/notifications/mark-all-read` | Platform admin | Default | Mark unread platform notifications as read. |
 | `POST` | `/notifications/alertmanager` | Public (Token) | Default | Webhook receiver for Prometheus Alertmanager; verifies `ALERTMANAGER_WEBHOOK_TOKEN`. |
 
 ### 11. Platform Audit
 
 | Method | Path | Auth / Role | Rate Limit | Purpose |
 | --- | --- | --- | --- | --- |
-| `GET` | `/audit-logs` | Authenticated | Default | Inspect platform activity and workflow lifecycle audit events. |
+| `GET` | `/audit-logs?workspaceId=&page=&pageSize=&action=` | Authenticated, `ADMIN` | Default | Workspace audit trail, newest first, paged (max 100), with actor email. |
