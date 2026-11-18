@@ -7,6 +7,7 @@ import { PlatformAdminGuard } from "./platform-admin.guard";
 @Module({
   imports: [InfrastructureModule],
   controllers: [AdminController],
-  providers: [AdminService, PlatformAdminGuard]
+  providers: [AdminService, PlatformAdminGuard],
+  exports: [PlatformAdminGuard]
 })
 export class AdminModule {}

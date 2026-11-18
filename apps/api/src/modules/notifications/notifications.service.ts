@@ -1,16 +1,7 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import type { Prisma } from "@agentops/database";
+import { PrismaService } from "../../common/infrastructure/prisma.service";
 import { alertNotificationsTotal } from "../../common/metrics/api-metrics";
-
-type NotificationView = {
-  id: string;
-  title: string;
-  body: string;
-  status: "UNREAD" | "READ";
-  severity?: string;
-  source?: string;
-  createdAt?: string;
-};
 
 type AlertmanagerAlert = {
   status?: string;
@@ -19,6 +10,7 @@ type AlertmanagerAlert = {
   startsAt?: string;
   endsAt?: string;
   generatorURL?: string;
+  fingerprint?: string;
 };
 
 type AlertmanagerWebhook = {
@@ -34,24 +26,22 @@ type AlertmanagerWebhook = {
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private readonly notifications: NotificationView[] = [
-    {
-      id: "notif_demo",
-      title: "Workflow ready",
-      body: "Your Lead qualification workflow is ready to publish.",
-      status: "UNREAD",
-      source: "demo"
-    }
-  ];
 
-  findAll() {
-    return [...this.notifications].reverse();
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async findAll() {
+    return this.prisma.client.notification.findMany({
+      where: { workspaceId: null },
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
   }
 
-  markAllRead() {
-    for (const notification of this.notifications) {
-      notification.status = "READ";
-    }
+  async markAllRead() {
+    await this.prisma.client.notification.updateMany({
+      where: { workspaceId: null, status: "UNREAD" },
+      data: { status: "READ" }
+    });
 
     return { success: true };
   }
@@ -59,25 +49,57 @@ export class NotificationsService {
   async ingestAlertmanagerWebhook(rawPayload: unknown) {
     const payload = this.normalizeAlertmanagerPayload(rawPayload);
     const alerts = payload.alerts ?? [];
-    const created: NotificationView[] = alerts.map((alert) => this.createAlertNotification(alert, payload));
+    const createdNotifications: Array<{ title: string; body: string }> = [];
 
-    this.notifications.push(...created);
-    for (const notification of created) {
-      alertNotificationsTotal.inc({
-        status: payload.status ?? "unknown",
-        severity: notification.severity ?? "unknown"
+    for (const alert of alerts) {
+      const labels = { ...payload.commonLabels, ...alert.labels };
+      const annotations = { ...payload.commonAnnotations, ...alert.annotations };
+      const alertName = alert.labels?.alertname ?? labels.alertname ?? "AgentOps alert";
+      const severity = alert.labels?.severity ?? labels.severity ?? "warning";
+      const summary = alert.annotations?.summary ?? annotations.summary;
+      const description = alert.annotations?.description ?? annotations.description;
+      const body = summary ?? description ?? "Alertmanager delivered an alert to AgentOps.";
+      const status = alert.status ?? payload.status ?? "firing";
+
+      // `status` on the row is the read state (UNREAD/READ); the alert state lives in the metadata.
+      const metadataJson = {
+        alertStatus: status,
+        severity,
+        labels,
+        annotations,
+        fingerprint: alert.fingerprint ?? null,
+        startsAt: alert.startsAt ?? null,
+        endsAt: alert.endsAt ?? null
+      };
+
+      await this.prisma.client.notification.create({
+        data: {
+          type: "ALERT",
+          workspaceId: null,
+          title: alertName,
+          body,
+          status: "UNREAD",
+          metadataJson: metadataJson as Prisma.InputJsonValue
+        }
       });
+
+      alertNotificationsTotal.inc({
+        status: payload.status ?? alert.status ?? "unknown",
+        severity
+      });
+
+      createdNotifications.push({ title: alertName, body });
     }
 
-    if (created.length > 0) {
-      await this.forwardToExternalBot(payload, created);
+    if (createdNotifications.length > 0) {
+      await this.forwardToExternalBot(payload, createdNotifications);
     }
 
     return {
       success: true,
       receiver: payload.receiver ?? "unknown",
       received: alerts.length,
-      created: created.length
+      created: createdNotifications.length
     };
   }
 
@@ -89,30 +111,13 @@ export class NotificationsService {
     const payload = rawPayload as AlertmanagerWebhook;
     return {
       ...payload,
-      alerts: Array.isArray(payload.alerts) ? payload.alerts : []
+      alerts: Array.isArray(payload.alerts)
+        ? payload.alerts.filter((alert): alert is AlertmanagerAlert => alert !== null && typeof alert === "object")
+        : []
     };
   }
 
-  private createAlertNotification(alert: AlertmanagerAlert, payload: AlertmanagerWebhook): NotificationView {
-    const labels = { ...payload.commonLabels, ...alert.labels };
-    const annotations = { ...payload.commonAnnotations, ...alert.annotations };
-    const alertName = labels.alertname ?? "AgentOps alert";
-    const severity = labels.severity ?? "warning";
-    const summary = annotations.summary ?? alertName;
-    const description = annotations.description ?? "Alertmanager delivered an alert to AgentOps.";
-
-    return {
-      id: `notif_alert_${randomUUID()}`,
-      title: `[${severity}] ${summary}`,
-      body: `${description} status=${alert.status ?? payload.status ?? "unknown"}`,
-      status: "UNREAD",
-      severity,
-      source: "alertmanager",
-      createdAt: new Date().toISOString()
-    };
-  }
-
-  private async forwardToExternalBot(payload: AlertmanagerWebhook, notifications: NotificationView[]) {
+  private async forwardToExternalBot(payload: AlertmanagerWebhook, notifications: Array<{ title: string; body: string }>) {
     const webhookUrl = process.env.ALERT_BOT_WEBHOOK_URL;
     if (!webhookUrl) {
       return;

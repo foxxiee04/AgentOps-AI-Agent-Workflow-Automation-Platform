@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Headers, Inject, Post, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Inject, Post, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Public } from "../../common/auth/public.decorator";
+import { PlatformAdminGuard } from "../admin/platform-admin.guard";
 import { isAlertmanagerRequestAllowed } from "./alertmanager-token";
 import { NotificationsService } from "./notifications.service";
 
@@ -10,11 +11,13 @@ export class NotificationsController {
   constructor(@Inject(NotificationsService) private readonly notificationsService: NotificationsService) {}
 
   @Get()
+  @UseGuards(PlatformAdminGuard)
   findAll() {
     return this.notificationsService.findAll();
   }
 
   @Post("mark-all-read")
+  @UseGuards(PlatformAdminGuard)
   markAllRead() {
     return this.notificationsService.markAllRead();
   }
